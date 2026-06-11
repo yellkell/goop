@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@iwsdk/core": "0.4.2",
+    "firebase": "^12.14.0",
     "three": "0.184.0"
   },
   "devDependencies": {

@@ -47,19 +47,27 @@ offer. On desktop, the IWSDK dev plugin provides a WebXR emulator
 
 ### Online play
 
-The relay (`server/index.mjs`, ~100 lines, zero game logic) pairs the two
-longest-waiting players and forwards messages verbatim. Host it anywhere Node
-runs, then point clients at it:
+Two transports, one protocol — `src/net/` picks automatically:
 
-```
-https://your-game-url/?server=wss://your-relay-host:8787
-```
+1. **Serverless (default)** — Firebase Firestore handles matchmaking + WebRTC
+   signaling (the repurposed `arfi-b68f9` project, see
+   `src/net/firebaseConfig.ts`), then ALL game traffic flows **peer-to-peer
+   over RTCDataChannels**: poses on an unordered/no-retransmit channel,
+   events on a reliable one. Firebase never sees a pose packet — that's the
+   latency upgrade over relaying game state through a realtime database.
+   One-time setup in the [Firebase console](https://console.firebase.google.com/project/arfi-b68f9):
+   enable **Cloud Firestore** and allow read/write on the `lobbies`
+   collection (rules sketch in `firebaseConfig.ts`).
+2. **WebSocket relay** — `npm run server` (~100 lines, zero game logic) and
+   point clients at it with `?server=wss://your-relay-host:8787`. Lowest
+   latency when hosted near both players; also the LAN/dev fallback.
 
-Netcode design: each client is **authoritative for hits against itself**
-(dodge-fair under latency), the host client owns match state and echoes it,
-poses stream at 20 Hz with exponential smoothing, and all coordinates are
-mirrored across the arena (`(x,y,z) → (-x, y, -z-3.4)`, 180° yaw) so both
-players stand at their own world origin.
+`?net=p2p` / `?net=ws` force a transport. Netcode in both cases: each client
+is **authoritative for hits against itself** (dodge-fair under latency), the
+host client owns match state and echoes it, poses stream at 20 Hz with
+exponential smoothing, and all coordinates are mirrored across the arena
+(`(x,y,z) → (-x, y, -z-3.4)`, 180° yaw) so both players stand at their own
+world origin.
 
 ## Controls
 
