@@ -1,0 +1,25 @@
+{
+  "name": "iron-balls-boxing",
+  "version": "0.1.0",
+  "description": "Iron Balls Boxing — a WebXR fireball duel: two flaming iron balls orbit your fists, you punch them at your opponent and recall them with the trigger. Blaston-style play space, competitive 1v1 multiplayer. Built on the Immersive Web SDK.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "server": "node server/index.mjs"
+  },
+  "dependencies": {
+    "@iwsdk/core": "0.4.2",
+    "three": "0.184.0"
+  },
+  "devDependencies": {
+    "@iwsdk/vite-plugin-dev": "0.4.2",
+    "@types/three": "0.184.0",
+    "typescript": "^5.6.0",
+    "vite": "^7.0.0",
+    "ws": "^8.18.0"
+  }
+}
