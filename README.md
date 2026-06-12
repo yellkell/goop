@@ -131,9 +131,28 @@ and three things to actually do:
   grabbable), regulation scoring off the board texture's UVs, score popups,
   and a server-owned leaderboard.
 - **IRON SNAKE** — an arcade cabinet in the corner. One player at a time
-  (trigger to claim, thumbstick to steer; arrows/Enter on desktop), everyone
-  sees the screen live, and the high score is persisted by the server in
+  (trigger to claim, then steer with the cabinet's own joystick — put your
+  hand on the red ball and push; arrows/Enter on desktop), everyone sees the
+  screen live, and the high score is persisted by the server in
   `server/pub-data.json`.
+- **The fight hall** — through the door in the west wall: the full FIRE
+  FIGHT duel on display. Both arena platforms (ember vs blue corners), claim
+  consoles (pull the trigger at one to take that platform — you're planted
+  on it facing your opponent), and when both corners fill the server counts
+  down and the bout runs on the arena's own fireball mechanics: orbit on
+  trigger, punch to throw, trigger to recall, parries, victim-ruled hits,
+  100 hp at 20 a hit. Everyone in the social space can gather round the
+  hazard line and watch (both fighters stream their fireballs live) or
+  wander back to the pub. The invisible cage is pulled in to FIVE yards from
+  the platform rims (the arena uses ten) so the duel fits indoors. Leaving
+  your platform mid-bout forfeits.
+
+Movement is **teleport only**: deflect either thumbstick and a ballistic arc
+curves from that controller to the floor, ending in an octagonal marker with
+an arrow inside it. Move the controller to move the landing spot, roll the
+thumbstick to spin the arrow — that's the way you'll be facing when you
+arrive — and release to go. Landing is restricted to real floor (pub,
+doorway, fight hall); the marker burns red anywhere else.
 
 ```
 npm run dev          # open http://localhost:5173/pub.html

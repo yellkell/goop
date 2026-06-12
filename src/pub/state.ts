@@ -6,7 +6,7 @@
 
 import type { Group, Mesh, Object3D } from 'three';
 import type { BoxerRig } from '../avatar/boxer.js';
-import type { BoardRow, PoseTuple, PropNet, PubEvent, SnakeHi } from './protocol.js';
+import type { BoardRow, FightNet, PoseTuple, PropNet, PubEvent, SnakeHi } from './protocol.js';
 import type { Panel } from './panel.js';
 
 export interface RemotePunter {
@@ -34,6 +34,12 @@ export interface PubRefs {
   arcadeScreen: Mesh;
   arcadePos: [number, number, number];
   hiScorePanel: Panel;
+  /** The cabinet root + its joystick stick (pivot at the deck). */
+  arcadeCabinet: Group;
+  snakeStick: Group;
+  /** Fight hall: claim console panels (side 0, side 1) + the big display. */
+  consolePanels: [Panel, Panel];
+  fightDisplay: Panel;
 }
 
 interface Events {
@@ -51,6 +57,8 @@ interface Events {
   gameEvent: { from: string; ev: PubEvent };
   /** Local dart stuck in the board — DartsSystem scores it. */
   dartScored: { segment: string; score: number };
+  /** Fight lifecycle/hp pushed from the server. */
+  fight: FightNet;
 }
 
 type Handler<T> = (payload: T) => void;
@@ -83,5 +91,6 @@ export const pub = {
   board: [] as BoardRow[],
   snakeHi: { name: '—', score: 0 } as SnakeHi,
   snakePlayer: null as string | null,
+  fight: { phase: 'idle', sides: [null, null], hp: [100, 100], winner: null } as FightNet,
   refs: null as PubRefs | null,
 };

@@ -64,6 +64,73 @@ let snakePlayer = null;
 let nextId = 1;
 let joinCount = 0;
 
+// --- fight hall lifecycle -------------------------------------------------------
+// idle → (both corners claimed) starting → (3s) fighting → (KO/forfeit) over
+// → (6s) idle. Fighters report their own hp (victim-authoritative, like the
+// arena); the server rules on the lifecycle and the winner.
+const HP_MAX = 100;
+const fight = {
+  phase: 'idle',
+  sides: [null, null],
+  hp: [HP_MAX, HP_MAX],
+  winner: null,
+};
+let fightTimer = null;
+
+function fightNet() {
+  return { phase: fight.phase, sides: fight.sides, hp: fight.hp, winner: fight.winner };
+}
+
+function broadcastFight() {
+  broadcast({ t: 'fight', fight: fightNet() });
+}
+
+function resetFight() {
+  clearTimeout(fightTimer);
+  fightTimer = null;
+  fight.phase = 'idle';
+  fight.sides = [null, null];
+  fight.hp = [HP_MAX, HP_MAX];
+  fight.winner = null;
+}
+
+function startFightCountdown() {
+  fight.phase = 'starting';
+  fight.hp = [HP_MAX, HP_MAX];
+  fight.winner = null;
+  broadcastFight();
+  clearTimeout(fightTimer);
+  fightTimer = setTimeout(() => {
+    if (fight.phase === 'starting' && fight.sides[0] && fight.sides[1]) {
+      fight.phase = 'fighting';
+      broadcastFight();
+    }
+  }, 3000);
+}
+
+function endFight(winnerId) {
+  fight.phase = 'over';
+  fight.winner = winnerId;
+  broadcastFight();
+  clearTimeout(fightTimer);
+  fightTimer = setTimeout(() => {
+    resetFight();
+    broadcastFight();
+  }, 6000);
+}
+
+function leaveFight(id) {
+  const side = fight.sides.indexOf(id);
+  if (side === -1) return;
+  if (fight.phase === 'fighting' || fight.phase === 'starting') {
+    // Walked off / disconnected mid-bout: the other corner takes it.
+    endFight(fight.sides[side === 0 ? 1 : 0]);
+  } else if (fight.phase === 'idle') {
+    fight.sides[side] = null;
+    broadcastFight();
+  }
+}
+
 const ZERO_POSE = [0, 0, 0, 0, 0, 0, 1];
 
 function send(ws, msg) {
@@ -112,6 +179,18 @@ function handleEvent(senderId, ev) {
       broadcast({ t: 'ev', from: senderId, ev });
       broadcast({ t: 'board', rows: [] });
       break;
+    case 'FIGHT_HP': {
+      const side = fight.sides.indexOf(senderId);
+      if (side !== -1 && fight.phase === 'fighting') {
+        fight.hp[side] = ev.hp;
+        if (ev.hp <= 0) {
+          endFight(fight.sides[side === 0 ? 1 : 0]);
+        } else {
+          broadcastFight();
+        }
+      }
+      break;
+    }
     case 'SNAKE_OVER': {
       if (ev.score > data.snakeHi.score) {
         data.snakeHi = { name: players.get(senderId)?.name ?? '???', score: ev.score };
@@ -184,6 +263,7 @@ wss.on('connection', (ws) => {
         board: boardRows(),
         snakeHi: data.snakeHi,
         snakePlayer,
+        fight: fightNet(),
       });
       broadcast({ t: 'join', player: playerNet(myId) }, myId);
       console.log(`[iron-tankard] ${myId} (${players.get(myId).name}) in — ${players.size}/${MAX_PLAYERS}`);
@@ -252,6 +332,20 @@ wss.on('connection', (ws) => {
       case 'leave-snake':
         releaseSnake(myId);
         break;
+      case 'claim-fight': {
+        const side = msg.side === 1 ? 1 : 0;
+        if (fight.phase === 'idle' && fight.sides[side] === null && !fight.sides.includes(myId)) {
+          fight.sides[side] = myId;
+          if (fight.sides[0] && fight.sides[1]) startFightCountdown();
+          else broadcastFight();
+        } else {
+          send(ws, { t: 'fight', fight: fightNet() });
+        }
+        break;
+      }
+      case 'leave-fight':
+        leaveFight(myId);
+        break;
       case 'ev':
         handleEvent(myId, msg.ev);
         break;
@@ -262,6 +356,7 @@ wss.on('connection', (ws) => {
     if (!myId) return;
     players.delete(myId);
     releaseSnake(myId);
+    leaveFight(myId);
     // Drop anything they were holding or had in the air where it was last
     // seen — someone else can pick it up.
     for (const prop of props.values()) {
@@ -275,6 +370,7 @@ wss.on('connection', (ws) => {
     // Last one out: wipe the session chalkboard (the snake hi-score stays).
     if (players.size === 0) {
       board.clear();
+      resetFight();
       for (const prop of props.values()) {
         prop.holder = null;
         prop.mode = 'rest';

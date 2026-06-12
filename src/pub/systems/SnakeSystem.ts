@@ -3,10 +3,13 @@
  *
  * One punter plays at a time (the server brokers the claim); everyone else
  * sees the same screen live, because the player streams the grid state every
- * tick. Walk up to the cabinet and pull the trigger to put your coin in;
- * steer with the thumbstick (arrow keys work on desktop). The high score is
- * the server's — it survives restarts in server/pub-data.json. Offline you
- * still get the game, with the high score kept in localStorage.
+ * tick. Walk up to the cabinet and pull the trigger to put your coin in,
+ * then steer with the CABINET'S OWN JOYSTICK — put your hand on the red
+ * ball and push it around; the stick tilts under your palm. (Arrow keys
+ * still work on desktop. The thumbstick is reserved for teleporting.)
+ * The high score is the server's — it survives restarts in
+ * server/pub-data.json. Offline you still get the game, with the high score
+ * kept in localStorage.
  */
 
 import { createSystem, InputComponent } from '@iwsdk/core';
@@ -24,12 +27,17 @@ const H = HEADER + ROWS * CELL; // 256
 
 const TICK = 0.16; // seconds per snake step
 const REACH = 1.6; // how close you must stand to play
+const STICK_GRIP_RADIUS = 0.16; // hand within this of the joystick ball steers
+const STICK_DEADZONE = 0.025; // metres of push before it counts
+const STICK_TILT = 4.5; // push → visual tilt factor
+const STICK_TILT_MAX = 0.45; // radians
 
 type Phase = 'attract' | 'playing' | 'dead' | 'watching';
 type Cell = [number, number];
 
 const _cab = new Vector3();
 const _head = new Vector3();
+const _hand = new Vector3();
 
 export class SnakeSystem extends createSystem({}) {
   private canvas!: HTMLCanvasElement;
@@ -92,6 +100,13 @@ export class SnakeSystem extends createSystem({}) {
   }
 
   update(delta: number): void {
+    // Spring the joystick back upright whenever nobody is playing.
+    if (this.phase !== 'playing') {
+      const stick = pub.refs!.snakeStick;
+      const k = 1 - Math.exp(-10 * delta);
+      stick.rotation.x -= stick.rotation.x * k;
+      stick.rotation.z -= stick.rotation.z * k;
+    }
     switch (this.phase) {
       case 'attract': {
         this.attractTimer += delta;
@@ -103,7 +118,7 @@ export class SnakeSystem extends createSystem({}) {
         break;
       }
       case 'playing': {
-        this.readSteering();
+        this.readSteering(delta);
         this.tickTimer += delta;
         if (this.tickTimer >= TICK) {
           this.tickTimer = 0;
@@ -171,22 +186,52 @@ export class SnakeSystem extends createSystem({}) {
 
   // --- the game ----------------------------------------------------------------
 
-  private readSteering(): void {
-    let dx = 0;
-    let dy = 0;
+  /**
+   * The cabinet's joystick: find a hand on the stick ball, read its push in
+   * CABINET-LOCAL space (so it works whatever way the cabinet faces), tilt
+   * the stick mesh under the palm, and turn the dominant axis into a snake
+   * direction. Pushing toward the screen is up; cabinet-right is right.
+   */
+  private readSteering(delta: number): void {
+    const refs = pub.refs!;
+    const stick = refs.snakeStick;
+
+    let pushX = 0; // cabinet-local right
+    let pushZ = 0; // cabinet-local toward player (+) / screen (−)
     for (const hand of ['left', 'right'] as const) {
-      const axes = this.input.xr.gamepads[hand]?.getAxesValues(InputComponent.Thumbstick);
-      if (axes && Math.hypot(axes.x, axes.y) > 0.5) {
-        dx = axes.x;
-        dy = axes.y;
+      const grip = this.player.gripSpaces[hand];
+      if (!grip) continue;
+      grip.getWorldPosition(_hand);
+      refs.arcadeCabinet.worldToLocal(_hand);
+      const ox = _hand.x - stick.position.x;
+      const oy = _hand.y - (stick.position.y + 0.1); // the ball at the top
+      const oz = _hand.z - stick.position.z;
+      if (ox * ox + oy * oy + oz * oz <= STICK_GRIP_RADIUS * STICK_GRIP_RADIUS) {
+        pushX = ox;
+        pushZ = oz;
+        break;
       }
     }
+
+    // Stick visual: tilt toward the push, spring back when untouched.
+    const tiltX = Math.max(-STICK_TILT_MAX, Math.min(STICK_TILT_MAX, pushZ * STICK_TILT));
+    const tiltZ = Math.max(-STICK_TILT_MAX, Math.min(STICK_TILT_MAX, -pushX * STICK_TILT));
+    const k = 1 - Math.exp(-18 * delta);
+    stick.rotation.x += (tiltX - stick.rotation.x) * k;
+    stick.rotation.z += (tiltZ - stick.rotation.z) * k;
+
+    let want: Cell | null = null;
+    if (Math.abs(pushX) > STICK_DEADZONE || Math.abs(pushZ) > STICK_DEADZONE) {
+      want =
+        Math.abs(pushX) > Math.abs(pushZ)
+          ? [Math.sign(pushX), 0]
+          : [0, pushZ < 0 ? -1 : 1]; // toward the screen = up
+    }
     if (this.keyDir) {
-      [dx, dy] = this.keyDir;
+      want = this.keyDir;
       this.keyDir = null;
     }
-    if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return;
-    const want: Cell = Math.abs(dx) > Math.abs(dy) ? [Math.sign(dx), 0] : [0, Math.sign(dy)];
+    if (!want) return;
     // No reversing into yourself.
     if (want[0] === -this.dir[0] && want[1] === -this.dir[1]) return;
     this.nextDir = want;
@@ -294,7 +339,7 @@ export class SnakeSystem extends createSystem({}) {
       ctx.fillText(occupied ? 'MACHINE IN USE' : 'PULL TRIGGER TO PLAY', W / 2, 170);
     }
     ctx.fillStyle = '#3a7a4a';
-    ctx.fillText('THUMBSTICK STEERS', W / 2, 210);
+    ctx.fillText('JOYSTICK STEERS', W / 2, 210);
     this.texture.needsUpdate = true;
   }
 

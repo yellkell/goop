@@ -65,11 +65,13 @@ function handle(msg: PubServerMsg): void {
       pub.board = msg.board;
       pub.snakeHi = msg.snakeHi;
       pub.snakePlayer = msg.snakePlayer;
+      pub.fight = msg.fight;
       for (const prop of msg.props) pub.props.set(prop.id, prop);
       for (const p of msg.players) if (p.id !== msg.id) spawnHook?.(p);
       bus.emit('connected', undefined);
       bus.emit('board', msg.board);
       bus.emit('snakeHi', msg.snakeHi);
+      bus.emit('fight', msg.fight);
       break;
     case 'full':
       console.warn('[pub] room is full (12 punters max)');
@@ -129,6 +131,10 @@ function handle(msg: PubServerMsg): void {
     case 'snake-hi':
       pub.snakeHi = msg.hi;
       bus.emit('snakeHi', msg.hi);
+      break;
+    case 'fight':
+      pub.fight = msg.fight;
+      bus.emit('fight', msg.fight);
       break;
     case 'ev':
       bus.emit('gameEvent', { from: msg.from, ev: msg.ev });

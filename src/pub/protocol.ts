@@ -58,10 +58,35 @@ export interface SnakeHi {
   score: number;
 }
 
+/** Fight-hall match lifecycle (server-driven). */
+export type FightPhase = 'idle' | 'starting' | 'fighting' | 'over';
+
+export interface FightNet {
+  phase: FightPhase;
+  /** Player ids holding side 0 (south platform) and side 1 (north). */
+  sides: [string | null, string | null];
+  hp: [number, number];
+  winner: string | null;
+}
+
+/**
+ * A fighter's fireball on the wire: position + state index
+ * (0 hover, 1 orbit, 2 flying, 3 returning, 4 dead).
+ */
+export type FireballNet = [number, number, number, number];
+
 /** Fan-out game events (relayed verbatim; some also mutate server state). */
 export type PubEvent =
   | { e: 'DART_HIT'; segment: string; score: number }
   | { e: 'DARTS_RESET' }
+  /** Fighter streaming both fireballs (~20 Hz) so the crowd sees the duel. */
+  | { e: 'FIGHT_FB'; balls: [FireballNet, FireballNet] }
+  /** Victim-authoritative: YOUR ball `ball` hit me — it's spent. */
+  | { e: 'FIGHT_HIT'; ball: 0 | 1 }
+  /** I parried your ball `ball` out of the air. */
+  | { e: 'FIGHT_DEFLECT'; ball: 0 | 1 }
+  /** Fighter reporting their own hp after taking a hit. */
+  | { e: 'FIGHT_HP'; hp: number }
   /** Streamed by the player at the arcade machine so spectators see the screen. */
   | {
       e: 'SNAKE_STATE';
@@ -85,6 +110,10 @@ export type PubClientMsg =
   | { t: 'settle'; id: number; pos: Vec3T; quat: QuatT }
   | { t: 'claim-snake' }
   | { t: 'leave-snake' }
+  /** Take a corner in the fight hall (side 0 south, 1 north). */
+  | { t: 'claim-fight'; side: 0 | 1 }
+  /** Step down / forfeit. */
+  | { t: 'leave-fight' }
   | { t: 'ev'; ev: PubEvent };
 
 export type PubServerMsg =
@@ -97,6 +126,7 @@ export type PubServerMsg =
       board: BoardRow[];
       snakeHi: SnakeHi;
       snakePlayer: string | null;
+      fight: FightNet;
     }
   | { t: 'full' }
   | { t: 'join'; player: PubPlayerNet }
@@ -114,6 +144,8 @@ export type PubServerMsg =
   | { t: 'board'; rows: BoardRow[] }
   | { t: 'snake-player'; id: string | null }
   | { t: 'snake-hi'; hi: SnakeHi }
+  /** Full fight state — sent on every lifecycle change and hp update. */
+  | { t: 'fight'; fight: FightNet }
   | { t: 'ev'; from: string; ev: PubEvent };
 
 export const PUB_MAX_PLAYERS = 12;

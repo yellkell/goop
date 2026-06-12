@@ -16,7 +16,7 @@
 import { PALETTE } from '../config.js';
 
 export const PUB = {
-  // Room shell.
+  // Room shell (the pub proper; the fight hall hangs off its west wall).
   halfWidth: 4.5, // x extent
   halfDepth: 3.0, // z extent
   ceiling: 2.45, // proper low pub ceiling — mind your head
@@ -46,6 +46,66 @@ export const PUB = {
 
   glassCount: 8,
 } as const;
+
+/**
+ * The FIGHT HALL — a second room through the door in the pub's west wall,
+ * with the full FIRE FIGHT duel on display: the two octagonal platforms from
+ * the main game, claim consoles, and room for the whole pub to gather round.
+ *
+ * The invisible cage is pulled in to FIVE yards from each platform rim
+ * (the arena uses ten) so the duel fits indoors.
+ */
+const CAGE_YARDS = 4.572; // 5 yards in metres
+const HALL_CX = -10.25; // duel centreline (x)
+const PLATFORM_HALF_W = 0.86; // OCTAGON_HALF_WIDTH
+const PLATFORM_HALF_D = 0.75; // OCTAGON_HALF_DEPTH
+
+export const FIGHT = {
+  centerX: HALL_CX,
+  /** Platforms at z = ±platformZ — same 3.0 m gap as the arena. */
+  platformZ: 1.5,
+  platformThickness: 0.14,
+  /** Ball-killing cage, 5 yards out from each platform rim. */
+  cage: {
+    minX: HALL_CX - PLATFORM_HALF_W - CAGE_YARDS,
+    maxX: HALL_CX + PLATFORM_HALF_W + CAGE_YARDS,
+    minZ: -1.5 - PLATFORM_HALF_D - CAGE_YARDS,
+    maxZ: 1.5 + PLATFORM_HALF_D + CAGE_YARDS,
+    ceiling: 4.2,
+  },
+  /** The hall shell, wrapped just outside the cage. */
+  hall: { minX: -16, maxX: -PUB.halfWidth, minZ: -7, maxZ: 7, height: 4.6 },
+  /** Doorway in the shared wall (x = -4.5). */
+  door: { z0: 0.4, z1: 1.8, height: 2.1 },
+  /** Side claim consoles (side 0 south/+z, side 1 north/−z), facing the door. */
+  consoles: [
+    [-6.6, 0, 2.9],
+    [-6.6, 0, -2.9],
+  ] as [number, number, number][],
+  /** How far a fighter's head may stray from their platform centre. */
+  forfeitRadius: 1.35,
+  startCountdown: 3, // seconds between both corners claimed and FIGHT
+  hpMax: 100,
+} as const;
+
+/** Where you may land a teleport (floor rectangles, walls implied between). */
+export const TELEPORT_AREAS = [
+  // Pub floor, this side of the bar.
+  { minX: -4.3, maxX: 4.3, minZ: -2.25, maxZ: 2.8 },
+  // The doorway strip.
+  { minX: -4.65, maxX: -4.2, minZ: FIGHT.door.z0, maxZ: FIGHT.door.z1 },
+  // The fight hall.
+  { minX: FIGHT.hall.minX + 0.3, maxX: FIGHT.hall.maxX, minZ: FIGHT.hall.minZ + 0.3, maxZ: FIGHT.hall.maxZ - 0.3 },
+];
+
+export const TELEPORT = {
+  engage: 0.5, // thumbstick magnitude that starts aiming
+  release: 0.35, // …and below this on the way back, you go
+  launchSpeed: 7.5, // m/s along the controller ray
+  gravity: 9.8,
+  arcPoints: 48,
+  arcStep: 0.035, // seconds of simulated flight per arc sample
+};
 
 /** Pint glass dimensions — used by the mesh, stacking and physics alike. */
 export const GLASS = {
