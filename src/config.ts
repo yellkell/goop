@@ -16,11 +16,12 @@ import type { Vector2Tuple } from 'three';
 export const GAME_TITLE = 'FIRE FIGHT';
 
 /**
- * Where the IRON BALLS PUB social area lives (it ships from its own branch
- * as a separate deployment). Override with ?pub=<url> for testing.
+ * Where the IRON BALLS PUB social area lives. It builds side by side with
+ * the arena in this same app (see vite.config.ts rollup inputs: pub.html),
+ * so the lobby button is one page hop away. Override with ?pub=<url>.
  */
 export function pubUrl(): string {
-  return new URLSearchParams(location.search).get('pub') ?? '/iron-balls-pub/';
+  return new URLSearchParams(location.search).get('pub') ?? 'pub.html';
 }
 
 /**

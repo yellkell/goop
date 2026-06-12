@@ -158,6 +158,31 @@ function makePlatform(color: number): Group {
   group.add(makeHazardBand());
   group.add(makeCornerBolts());
   group.add(makeNeonRim(color));
+
+  // --- Per-skin ornaments (hidden; applyPlatformSkin shows one set) ---
+  // AZURE: a second, inset neon ring — clean concentric tech.
+  const inner = makeNeonRim(color);
+  inner.scale.setScalar(0.82);
+  inner.userData.skinTag = 'azure';
+  inner.visible = false;
+  group.add(inner);
+
+  // INFERNO: upright glowing blade fins at every rim vertex.
+  const fins = new Group();
+  fins.name = 'vertex-fins';
+  const finMat = new MeshBasicMaterial({ color: new Color(color).lerp(new Color(0xffffff), 0.45) });
+  finMat.userData.role = 'neon-core';
+  for (const [x, z] of OCTAGON_VERTICES) {
+    const fin = new Mesh(new BoxGeometry(0.018, 0.085, 0.05), finMat);
+    fin.position.set(x * 1.02, 0.045, z * 1.02);
+    fin.rotation.y = Math.atan2(x, z); // blade faces outward, radially
+    fins.add(fin);
+  }
+  fins.userData.skinTag = 'inferno';
+  fins.visible = false;
+  group.add(fins);
+
+  // EMBER: the classic look — banding + bolts, no extra furniture.
   return group;
 }
 

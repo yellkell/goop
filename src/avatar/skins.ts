@@ -35,9 +35,9 @@ export interface PlatformSkin {
 }
 
 export const AVATAR_SKINS: AvatarSkin[] = [
-  { id: 'cobalt', name: 'COBALT', chassis: 0x141d2c, trim: 0x0c1018, accent: 0x4fb7ff },
-  { id: 'crimson', name: 'CRIMSON', chassis: 0x271114, trim: 0x14090b, accent: 0xff3b4e },
-  { id: 'valkyrie', name: 'VALKYRIE', chassis: 0x211a29, trim: 0x100d15, accent: 0xff9ad5, slim: true },
+  { id: 'cobalt', name: 'COBALT', chassis: 0x122039, trim: 0x0a111e, accent: 0x4fb7ff },
+  { id: 'crimson', name: 'CRIMSON', chassis: 0x2e1013, trim: 0x170809, accent: 0xff3b4e },
+  { id: 'valkyrie', name: 'VALKYRIE', chassis: 0x261b33, trim: 0x120d1a, accent: 0xff9ad5, slim: true },
   { id: 'soon-av', name: 'SOON', locked: true, chassis: 0, trim: 0, accent: 0 },
 ];
 
@@ -76,6 +76,9 @@ const _white = new Color(0xffffff);
 export function applyAvatarSkin(root: Object3D, skin: AvatarSkin): void {
   if (skin.locked) return;
   root.traverse((o) => {
+    // Per-skin ornament geometry (antennas, horns, plumes, winglets…):
+    // each piece carries the id of the ONE skin it belongs to.
+    if (o.userData?.skinTag) o.visible = o.userData.skinTag === skin.id;
     const m = (o as Mesh).material as MeshStandardMaterial | undefined;
     if (!m || Array.isArray(m) || !m.userData?.role) return;
     switch (m.userData.role) {
@@ -106,6 +109,7 @@ export function applyAvatarSkin(root: Object3D, skin: AvatarSkin): void {
 export function applyPlatformSkin(root: Object3D, skin: PlatformSkin): void {
   if (skin.locked) return;
   root.traverse((o) => {
+    if (o.userData?.skinTag) o.visible = o.userData.skinTag === skin.id;
     const m = (o as Mesh).material as MeshStandardMaterial | undefined;
     if (!m || Array.isArray(m) || !m.userData?.role) return;
     switch (m.userData.role) {
