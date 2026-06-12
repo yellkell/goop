@@ -1,0 +1,40 @@
+name: Deploy to Firebase Hosting
+
+# Builds FIRE FIGHT and publishes dist/ to Firebase Hosting (project
+# arfi-b68f9 → https://arfi-b68f9.web.app). Pushes to main go LIVE; pull
+# requests get an ephemeral preview channel so you can test before merging.
+#
+# One-time setup: add a repo secret named FIREBASE_SERVICE_ACCOUNT containing
+# the JSON key of a service account with the "Firebase Hosting Admin" role
+# (Firebase console → Project settings → Service accounts → Generate new
+# private key, then paste the whole JSON into the secret).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+
+      # Pushes to main → live channel; PRs → a temporary preview URL.
+      - uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: arfi-b68f9
+          channelId: ${{ github.ref == 'refs/heads/main' && 'live' || '' }}
