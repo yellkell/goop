@@ -113,3 +113,33 @@ server/index.mjs       the relay
 Lineage: forked gameplay skeleton from `yellkell/glasston` (Blaston-style
 play space, IK body hitboxes, match flow) and the fire rendering from
 `yellkell/flamethrowerxr`, rebuilt into one game.
+
+## The Iron Tankard (pub social scene — `/pub.html`)
+
+A separate 10–12 player social hangout that ships alongside the arena: an
+English pub done in the same gritty diamond-plate / gunmetal / hazard-amber
+language, with the SAME iron-boxer avatars (each punter gets their own accent
+tint). Low steel ceiling with I-beams, a bar with taps, booths and stools,
+and three things to actually do:
+
+- **Pints** — 8 glasses on the bar. Grab, drink, stack them, or throw one
+  across the room; everything is networked with single-owner simulation, so
+  every punter sees the same glass in the same place — and a thrown glass
+  (or dart) can be CAUGHT mid-air by anyone, transferring ownership.
+- **House darts** — communal board (ported from the old vrstreet project and
+  fixed: the meshes now carry fat invisible grab proxies so they are actually
+  grabbable), regulation scoring off the board texture's UVs, score popups,
+  and a server-owned leaderboard.
+- **IRON SNAKE** — an arcade cabinet in the corner. One player at a time
+  (trigger to claim, thumbstick to steer; arrows/Enter on desktop), everyone
+  sees the screen live, and the high score is persisted by the server in
+  `server/pub-data.json`.
+
+```
+npm run dev          # open http://localhost:5173/pub.html
+npm run server:pub   # the pub room server on :8788 (?server=wss://… to point elsewhere)
+```
+
+`?name=CALLSIGN` sets your name tag. The main game is untouched — the pub is
+its own entry point (`src/pub/`), its own server, its own protocol
+(`src/pub/protocol.ts`).

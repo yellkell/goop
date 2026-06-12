@@ -1,0 +1,120 @@
+/**
+ * Wire protocol for THE IRON TANKARD — the pub social scene. JSON over a
+ * WebSocket to server/pub.mjs: one shared room, up to 12 punters.
+ *
+ * Unlike the 1v1 bout relay, the pub server holds real state:
+ *   - who is in the room and their latest pose (snapshotted to everyone at 20 Hz);
+ *   - who OWNS each shared prop (pint glasses, darts) — the owner's client
+ *     simulates it and streams its transform, everyone else interpolates;
+ *   - the darts leaderboard (session) and the snake high score (persisted).
+ *
+ * All coordinates are plain pub world space — everyone stands in the same
+ * room, so no mirroring (unlike the arena protocol).
+ */
+
+/** [x, y, z, qx, qy, qz, qw] */
+export type PoseTuple = [number, number, number, number, number, number, number];
+export type Vec3T = [number, number, number];
+export type QuatT = [number, number, number, number];
+
+export type PropKind = 'glass' | 'dart';
+
+/**
+ * A shared prop as the server sees it. `pos`/`quat` are the last known
+ * transform (`null` until someone first moves it — clients then place the
+ * prop at its built-in home slot, so the layout never has to live on the
+ * server).
+ */
+export interface PropNet {
+  id: number;
+  kind: PropKind;
+  /** Player simulating it (held in hand OR mid-flight after a throw). */
+  holder: string | null;
+  mode: 'rest' | 'held' | 'flight';
+  pos: Vec3T | null;
+  quat: QuatT | null;
+}
+
+export interface PubPlayerNet {
+  id: string;
+  name: string;
+  /** Accent colour (0xRRGGBB) assigned by join order — tints the boxer rig. */
+  accent: number;
+  head: PoseTuple;
+  left: PoseTuple;
+  right: PoseTuple;
+}
+
+export interface BoardRow {
+  id: string;
+  name: string;
+  accent: number;
+  score: number;
+  darts: number;
+}
+
+export interface SnakeHi {
+  name: string;
+  score: number;
+}
+
+/** Fan-out game events (relayed verbatim; some also mutate server state). */
+export type PubEvent =
+  | { e: 'DART_HIT'; segment: string; score: number }
+  | { e: 'DARTS_RESET' }
+  /** Streamed by the player at the arcade machine so spectators see the screen. */
+  | {
+      e: 'SNAKE_STATE';
+      cells: [number, number][];
+      food: [number, number];
+      score: number;
+      dead: boolean;
+    }
+  | { e: 'SNAKE_OVER'; score: number };
+
+export type PubClientMsg =
+  | { t: 'hello'; name: string }
+  | { t: 'pose'; head: PoseTuple; left: PoseTuple; right: PoseTuple }
+  /** I want to hold prop `id` (fresh grab or a mid-air catch). */
+  | { t: 'grab'; id: number }
+  /** I let go of prop `id` — it is now in flight, still mine to simulate. */
+  | { t: 'release'; id: number }
+  /** Owner streaming a held/flying prop's transform (~20 Hz). */
+  | { t: 'prop'; id: number; pos: Vec3T; quat: QuatT }
+  /** My prop came to rest here — anyone may pick it up now. */
+  | { t: 'settle'; id: number; pos: Vec3T; quat: QuatT }
+  | { t: 'claim-snake' }
+  | { t: 'leave-snake' }
+  | { t: 'ev'; ev: PubEvent };
+
+export type PubServerMsg =
+  | {
+      t: 'welcome';
+      id: string;
+      accent: number;
+      players: PubPlayerNet[];
+      props: PropNet[];
+      board: BoardRow[];
+      snakeHi: SnakeHi;
+      snakePlayer: string | null;
+    }
+  | { t: 'full' }
+  | { t: 'join'; player: PubPlayerNet }
+  | { t: 'leave'; id: string }
+  /** 20 Hz pose snapshot for every player except the recipient. */
+  | { t: 'snap'; poses: [string, PoseTuple, PoseTuple, PoseTuple][] }
+  /**
+   * Prop `id` is now held by `holder`. Sent to everyone on a granted grab —
+   * if you asked and the holder isn't you, your grab lost the race: yield.
+   */
+  | { t: 'grabbed'; id: number; holder: string }
+  | { t: 'released'; id: number; holder: string }
+  | { t: 'prop'; id: number; pos: Vec3T; quat: QuatT }
+  | { t: 'settled'; id: number; pos: Vec3T; quat: QuatT }
+  | { t: 'board'; rows: BoardRow[] }
+  | { t: 'snake-player'; id: string | null }
+  | { t: 'snake-hi'; hi: SnakeHi }
+  | { t: 'ev'; from: string; ev: PubEvent };
+
+export const PUB_MAX_PLAYERS = 12;
+export const PUB_TICK_MS = 50; // 20 Hz pose snapshots
