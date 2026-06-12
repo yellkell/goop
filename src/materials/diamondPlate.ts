@@ -56,34 +56,34 @@ export interface DiamondPlateMaps {
 
 /** Build the tile once; set `repeat` on both maps to scale the treads. */
 export function diamondPlateTextures(): DiamondPlateMaps {
-  // --- colour map: worn mill steel with shaded treads ---
+  // --- colour map: dark worn mill steel with shaded treads ---
   const c = makeCanvas();
-  c.fillStyle = '#43464d';
+  c.fillStyle = '#26282d';
   c.fillRect(0, 0, S, S);
   // Subtle wear speckle so the flats aren't dead-flat.
   for (let i = 0; i < 220; i++) {
-    c.fillStyle = Math.random() < 0.5 ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.05)';
+    c.fillStyle = Math.random() < 0.5 ? 'rgba(255,255,255,0.035)' : 'rgba(0,0,0,0.06)';
     c.fillRect(Math.random() * S, Math.random() * S, 1.5, 1.5);
   }
   forEachTread(c, (ctx, halfL, halfW) => {
     // Drop shadow under the lozenge.
-    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
     ctx.beginPath();
     ctx.ellipse(2, 3, halfL, halfW, 0, 0, Math.PI * 2);
     ctx.fill();
-    // Body: lit top edge rolling down to a dark underside.
+    // Body: lit top edge rolling down to a near-black underside.
     const grad = ctx.createLinearGradient(0, -halfW, 0, halfW);
-    grad.addColorStop(0, '#9aa0ab');
-    grad.addColorStop(0.5, '#6d727b');
-    grad.addColorStop(1, '#33363c');
+    grad.addColorStop(0, '#7e848f');
+    grad.addColorStop(0.5, '#484c54');
+    grad.addColorStop(1, '#16181c');
     ctx.fillStyle = grad;
     ctx.beginPath();
     ctx.ellipse(0, 0, halfL, halfW, 0, 0, Math.PI * 2);
     ctx.fill();
-    // Specular sliver along the crown.
-    ctx.fillStyle = 'rgba(228,234,244,0.5)';
+    // Hard specular sliver along the crown — the wet-metal glint.
+    ctx.fillStyle = 'rgba(235,241,250,0.65)';
     ctx.beginPath();
-    ctx.ellipse(-halfL * 0.1, -halfW * 0.3, halfL * 0.62, halfW * 0.3, 0, 0, Math.PI * 2);
+    ctx.ellipse(-halfL * 0.1, -halfW * 0.3, halfL * 0.62, halfW * 0.26, 0, 0, Math.PI * 2);
     ctx.fill();
   });
 

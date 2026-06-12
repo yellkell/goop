@@ -38,20 +38,21 @@ export interface BoxerRig {
 }
 
 function chassisMat(emissive = 0, intensity = 0): MeshStandardMaterial {
+  // Near-black mirror steel: the RoomEnvironment reflections do the reading.
   return new MeshStandardMaterial({
-    color: PALETTE.gunmetal,
+    color: 0x1c1f25,
     emissive,
     emissiveIntensity: intensity,
-    metalness: 0.92,
-    roughness: 0.3,
+    metalness: 0.96,
+    roughness: 0.2,
   });
 }
 
 function darkMat(): MeshStandardMaterial {
   return new MeshStandardMaterial({
-    color: PALETTE.gunmetalDark,
-    metalness: 0.85,
-    roughness: 0.45,
+    color: 0x121419,
+    metalness: 0.9,
+    roughness: 0.3,
   });
 }
 

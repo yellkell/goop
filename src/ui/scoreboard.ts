@@ -77,10 +77,13 @@ function header(ctx: CanvasRenderingContext2D, title: string, neon: string): voi
   ctx.fillText(title, 116, 54);
   ctx.strokeStyle = neon;
   ctx.lineWidth = 3;
+  ctx.shadowColor = neon;
+  ctx.shadowBlur = 12;
   ctx.beginPath();
   ctx.moveTo(32, 96);
   ctx.lineTo(W - 32, 96);
   ctx.stroke();
+  ctx.shadowBlur = 0;
 }
 
 /** Round-win pips: chamfered studs, lit per round taken. */
