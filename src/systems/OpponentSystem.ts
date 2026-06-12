@@ -10,6 +10,7 @@ import { createSystem, Vector3, type Entity } from '@iwsdk/core';
 import { Object3D } from 'three';
 import { buildBoxer, setGloveLit, solveTorso, type BoxerRig } from '../avatar/boxer.js';
 import { Combatant } from '../components/Combatant.js';
+import { BallState, Fireball } from '../components/Fireball.js';
 import { Health } from '../components/Health.js';
 import { Hitbox } from '../components/Hitbox.js';
 import { opponent } from '../combat/opponentBus.js';
@@ -21,10 +22,25 @@ const _pelvis = new Vector3();
 
 export class OpponentSystem extends createSystem({
   combatants: { required: [Combatant, Health] },
+  balls: { required: [Fireball] },
 }) {
   private rig?: BoxerRig;
   private hitboxes: { head?: Entity; chest?: Entity; pelvis?: Entity } = {};
   private built = false;
+
+  /** True while the opponent's bound ball for this hand is homing back. */
+  private ballReturning(hand: 0 | 1): boolean {
+    for (const e of this.queries.balls.entities) {
+      if (
+        (e.getValue(Fireball, 'owner') ?? 0) === 1 &&
+        (e.getValue(Fireball, 'hand') ?? 0) === hand &&
+        (e.getValue(Fireball, 'transient') ?? 0) === 0
+      ) {
+        return (e.getValue(Fireball, 'state') ?? 0) === BallState.Returning;
+      }
+    }
+    return false;
+  }
 
   init(): void {
     this.rig = buildBoxer(1);
@@ -55,8 +71,9 @@ export class OpponentSystem extends createSystem({
       rig.gloves[hand].position.copy(opponent.handPos[hand]);
       rig.gloves[hand].quaternion.copy(opponent.handQuat[hand]);
       // Their squeeze flares their LEDs — the tell that fire is winding up,
-      // even when they're lining up a behind-the-back lob.
-      setGloveLit(rig.gloves[hand], opponent.orbiting[hand], delta);
+      // even when they're lining up a behind-the-back lob — and the hand
+      // stays hot through a recall until the ball is back in it.
+      setGloveLit(rig.gloves[hand], opponent.orbiting[hand] || this.ballReturning(hand), delta);
     }
 
     this.hitboxes.head?.object3D?.position.copy(opponent.headPos);
