@@ -39,31 +39,37 @@ export interface BoxerRig {
 
 function chassisMat(emissive = 0, intensity = 0): MeshStandardMaterial {
   // Near-black mirror steel: the RoomEnvironment reflections do the reading.
-  return new MeshStandardMaterial({
+  const m = new MeshStandardMaterial({
     color: 0x1c1f25,
     emissive,
     emissiveIntensity: intensity,
     metalness: 0.96,
     roughness: 0.2,
   });
+  m.userData.role = 'chassis'; // skin recolour target (avatar/skins.ts)
+  return m;
 }
 
 function darkMat(): MeshStandardMaterial {
-  return new MeshStandardMaterial({
+  const m = new MeshStandardMaterial({
     color: 0x121419,
     metalness: 0.9,
     roughness: 0.3,
   });
+  m.userData.role = 'trim';
+  return m;
 }
 
 function glowMat(color: number, intensity = 1.4): MeshStandardMaterial {
-  return new MeshStandardMaterial({
+  const m = new MeshStandardMaterial({
     color,
     emissive: color,
     emissiveIntensity: intensity,
     metalness: 0.2,
     roughness: 0.3,
   });
+  m.userData.role = 'glow';
+  return m;
 }
 
 /**

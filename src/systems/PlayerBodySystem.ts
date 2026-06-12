@@ -15,8 +15,10 @@
 
 import { createSystem, Quaternion, Vector3 } from '@iwsdk/core';
 import { buildBoxer, solveTorso, type BoxerRig } from '../avatar/boxer.js';
+import { applyAvatarSkin, avatarSkin } from '../avatar/skins.js';
 import { BodyPart, PlayerBodyPart } from '../components/PlayerBodyPart.js';
 import { app } from '../menu/appState.js';
+import { customization } from '../menu/customization.js';
 
 const _head = new Vector3();
 const _headQ = new Quaternion();
@@ -35,6 +37,7 @@ export class PlayerBodySystem extends createSystem({
     this.rig = buildBoxer(0);
     this.rig.torso.name = 'player-torso';
     this.rig.torso.visible = false;
+    applyAvatarSkin(this.rig.torso, avatarSkin(customization.avatar));
     this.scene.add(this.rig.torso);
   }
 

@@ -46,6 +46,7 @@ function makeNeonRim(color: number): Group {
   const rim = new Group();
   rim.name = 'rim-ring';
   const core = new MeshBasicMaterial({ color: new Color(color).lerp(new Color(0xffffff), 0.45) });
+  core.userData.role = 'neon-core'; // skin recolour target (avatar/skins.ts)
   const halo = new MeshBasicMaterial({
     color: new Color(color),
     transparent: true,
@@ -53,6 +54,7 @@ function makeNeonRim(color: number): Group {
     blending: AdditiveBlending,
     depthWrite: false,
   });
+  halo.userData.role = 'neon-halo';
   const n = OCTAGON_VERTICES.length;
   for (let i = 0; i < n; i++) {
     const [ax, az] = OCTAGON_VERTICES[i];
@@ -137,19 +139,18 @@ function makePlatform(color: number): Group {
   // ExtrudeGeometry UVs are in shape units (metres): repeat = tiles per metre.
   plateMaps.map.repeat.set(5, 5);
   plateMaps.bumpMap.repeat.set(5, 5);
-  const slab = new Mesh(
-    octagonSlab(OCTAGON_VERTICES, PLATFORM.thickness),
-    new MeshStandardMaterial({
-      color: 0x9aa0ab, // tint over the baked dark-steel tones in the map
-      map: plateMaps.map,
-      bumpMap: plateMaps.bumpMap,
-      bumpScale: 1.1,
-      emissive: color,
-      emissiveIntensity: 0.08,
-      metalness: 0.92, // glistens off scene.environment (RoomEnvironment)
-      roughness: 0.28,
-    }),
-  );
+  const slabMat = new MeshStandardMaterial({
+    color: 0x9aa0ab, // tint over the baked dark-steel tones in the map
+    map: plateMaps.map,
+    bumpMap: plateMaps.bumpMap,
+    bumpScale: 1.1,
+    emissive: color,
+    emissiveIntensity: 0.08,
+    metalness: 0.92, // glistens off scene.environment (RoomEnvironment)
+    roughness: 0.28,
+  });
+  slabMat.userData.role = 'slab';
+  const slab = new Mesh(octagonSlab(OCTAGON_VERTICES, PLATFORM.thickness), slabMat);
   // Top face at y=0 (the real floor), body glowing faintly below.
   slab.position.y = -PLATFORM.thickness;
   group.add(slab);

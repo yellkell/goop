@@ -27,6 +27,7 @@ import { match } from '../combat/matchState.js';
 import { app, saveStats } from '../menu/appState.js';
 import { mirrorPos, mirrorQuat, mirrorVel, net, packPose } from '../net/client.js';
 import { myElo, myName, reportResult, rival } from '../net/leaderboard.js';
+import { customization } from '../menu/customization.js';
 import { setSpeakerPosition, updateListener } from '../net/voice.js';
 import type { PeerMessage, PoseTuple } from '../net/protocol.js';
 import { spawnDamagePopup, spawnFireImpact } from '../fx/effects.js';
@@ -74,11 +75,17 @@ export class NetworkSystem extends createSystem({
       return;
     }
 
-    // Introduce myself once per bout: callsign + hidden ELO, so whoever
-    // wins can weight their leaderboard score by rival quality.
+    // Introduce myself once per bout: callsign + hidden ELO (so whoever
+    // wins can weight their leaderboard score by rival quality) + my skins.
     if (!this.sentIam) {
       this.sentIam = true;
-      net.send({ k: 'iam', name: myName(), elo: myElo() });
+      net.send({
+        k: 'iam',
+        name: myName(),
+        elo: myElo(),
+        av: customization.avatar,
+        pf: customization.platform,
+      });
     }
 
     if (match.resetCount !== this.lastReset) {
@@ -208,6 +215,8 @@ export class NetworkSystem extends createSystem({
       case 'iam':
         rival.name = msg.name;
         rival.elo = msg.elo;
+        rival.avatarSkin = msg.av ?? '';
+        rival.platformSkin = msg.pf ?? '';
         break;
       case 'state':
         if (app.side === 1) this.applyHostState(msg);
