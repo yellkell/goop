@@ -1,7 +1,7 @@
 /**
  * Builds the static arena for FIRE FIGHT, styled like a 90s UK robot-wars
- * pit: gunmetal pedestal slabs with hazard-amber kick-bands, bolted corner
- * studs and a thin team-colour rim glow. The environment is intentionally
+ * pit: diamond-plate pedestal slabs with hazard-amber kick-bands, bolted
+ * corner studs and a thin team-colour rim glow. The environment is intentionally
  * just the two platforms floating in your passthrough room:
  *  - a slab pedestal beneath YOU (ember rim) — underfoot, Blaston-style,
  *  - a matching pedestal across the gap for the opponent (blue rim),
@@ -32,8 +32,12 @@ import {
 import type { World } from '@iwsdk/core';
 import { ARENA_GAP, OCTAGON_VERTICES, PALETTE, PLATFORM } from '../config.js';
 import { hazardTexture } from '../materials/hazard.js';
+import { diamondPlateTextures, type DiamondPlateMaps } from '../materials/diamondPlate.js';
 import { octagonSlab } from './octagon.js';
 import { createTitleBanner } from './banner.js';
+
+/** Shared diamond-plate maps, built lazily (both pedestals reuse them). */
+let plateMaps: DiamondPlateMaps | undefined;
 
 /** A glowing outline of the platform rim, just above the floor line. */
 function makeRimRing(color: number): Line {
@@ -98,21 +102,28 @@ function makeCornerBolts(): Group {
 }
 
 /**
- * One boxer's pedestal: a gunmetal slab sunk so its top face sits at floor
- * level (your real floor IS the platform top), hazard banding and corner
- * bolts around the rim, and a thin team-colour glow line marking the edge.
+ * One boxer's pedestal: a diamond-plate steel slab sunk so its top face sits
+ * at floor level (your real floor IS the platform top), hazard banding and
+ * corner bolts around the rim, and a thin team-colour glow line on the edge.
  */
 function makePlatform(color: number): Group {
   const group = new Group();
 
+  plateMaps ??= diamondPlateTextures();
+  // ExtrudeGeometry UVs are in shape units (metres): repeat = tiles per metre.
+  plateMaps.map.repeat.set(5, 5);
+  plateMaps.bumpMap.repeat.set(5, 5);
   const slab = new Mesh(
     octagonSlab(OCTAGON_VERTICES, PLATFORM.thickness),
     new MeshStandardMaterial({
-      color: PALETTE.gunmetalDark,
+      color: 0xb6bcc7, // tint over the baked steel tones in the map
+      map: plateMaps.map,
+      bumpMap: plateMaps.bumpMap,
+      bumpScale: 0.9,
       emissive: color,
-      emissiveIntensity: 0.22,
-      metalness: 0.88,
-      roughness: 0.38,
+      emissiveIntensity: 0.16,
+      metalness: 0.65,
+      roughness: 0.5,
     }),
   );
   // Top face at y=0 (the real floor), body glowing faintly below.

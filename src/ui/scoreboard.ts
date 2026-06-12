@@ -4,9 +4,7 @@
  * they're smoked glass, not opaque hoardings: a stencilled name strip, a
  * chunky segmented health readout, chamfered round pips and the timer, with
  * your real room visible through everything. A centre strip appears for
- * headline messages (ROUND WON, etc.), and a stats plate hangs BEHIND you
- * (curveball-style: always there, unclickable, turn around to read it
- * mid-bout).
+ * headline messages (ROUND WON, etc.).
  *
  * In Aim Training the left board becomes your score/streak readout and the
  * right board shows accuracy + time.
@@ -21,7 +19,7 @@ import {
   PlaneGeometry,
   type Scene,
 } from 'three';
-import { ARENA_GAP, GAME_TITLE, MATCH } from '../config.js';
+import { ARENA_GAP, MATCH } from '../config.js';
 import type { MatchState } from '../combat/matchState.js';
 import { app, training } from '../menu/appState.js';
 import { UI, hazardStrip, plate, segmentBar, stencilFont } from './industrial.js';
@@ -126,28 +124,8 @@ export function createScoreboard(scene: Scene): Scoreboard {
   const centre = makeBoard(1.9, 0.5);
   centre.mesh.position.set(0, 2.45, -ARENA_GAP * 0.55);
 
-  // Stats plate behind you — unclickable, curveball-style.
-  const back = makeBoard(1.5, 0.72);
-  back.mesh.position.set(0, 1.7, 1.6);
-  back.mesh.rotation.y = Math.PI;
-
-  group.add(left.mesh, right.mesh, centre.mesh, back.mesh);
+  group.add(left.mesh, right.mesh, centre.mesh);
   scene.add(group);
-
-  const drawBack = (lines: string[]): void => {
-    const { ctx, tex } = back;
-    ctx.clearRect(0, 0, W, H);
-    plate(ctx, 16, 16, W - 32, H - 32, { cut: 28 });
-    hazardStrip(ctx, 56, 44, W - 112, 16, UI.amber);
-    ctx.textAlign = 'center';
-    ctx.font = stencilFont(52);
-    ctx.fillStyle = UI.emberBright;
-    ctx.fillText(GAME_TITLE, W / 2, 110);
-    ctx.font = '600 38px system-ui, sans-serif';
-    ctx.fillStyle = UI.textDim;
-    lines.forEach((line, i) => ctx.fillText(line, W / 2, 184 + i * 62));
-    tex.needsUpdate = true;
-  };
 
   const drawSide = (
     board: Board,
@@ -200,16 +178,10 @@ export function createScoreboard(scene: Scene): Scoreboard {
       drawSide(left, 'YOU', UI.emberBright, pHp / pMax, String(Math.ceil(pHp)), state.myScore, timer);
       drawSide(right, app.mode === 'net' ? 'RIVAL' : 'BOT', UI.cool, oHp / oMax, String(Math.ceil(oHp)), state.oppScore, timer);
       drawCentre(state.message, state.phase === 'matchOver' ? '' : state.message ? `round ${state.round}` : '');
-      drawBack([
-        `round ${state.round}  ·  ${state.myScore} - ${state.oppScore}`,
-        `lifetime  ${app.stats.wins}W / ${app.stats.losses}L`,
-        app.mode === 'net' ? app.netStatus : 'sparring the bot',
-      ]);
     },
 
     updateTraining(hp, hpMax) {
       const timer = fmtTime(training.timeLeft);
-      const acc = training.thrown > 0 ? Math.round((training.hits / training.thrown) * 100) : 0;
       // Left board: score + streak.
       const { ctx, tex } = left;
       header(ctx, 'AIM TRAINING', UI.emberBright, timer);
@@ -232,11 +204,6 @@ export function createScoreboard(scene: Scene): Scoreboard {
         0, timer,
       );
       drawCentre('', '');
-      drawBack([
-        `accuracy ${acc}%  ·  hits ${training.hits}/${training.thrown}`,
-        `best streak x${training.bestStreak}`,
-        app.shootBack ? 'targets are shooting back' : 'targets are passive',
-      ]);
     },
 
     setVisible(v) {

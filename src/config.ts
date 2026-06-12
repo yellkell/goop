@@ -43,7 +43,7 @@ export const OCTAGON_VERTICES: Vector2Tuple[] = [
  * boxing wants you closer, so the gap is tightened — punches connect faster
  * and dodges get twitchier.
  */
-export const ARENA_GAP = 3.4;
+export const ARENA_GAP = 3.0;
 
 /**
  * The fireball — the whole game. Two per player, one bonded to each fist.

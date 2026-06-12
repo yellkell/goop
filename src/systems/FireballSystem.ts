@@ -148,8 +148,11 @@ export class FireballSystem extends createSystem({
     const tracker = this.trackers[hand];
     tracker.push(_grip, this.time);
 
+    // Trigger and grip are one action: either squeeze holds the orbit.
     const gp = this.input.xr.gamepads[HANDS[hand]];
-    const pressed = gp?.getButtonPressed(InputComponent.Trigger) ?? false;
+    const pressed =
+      (gp?.getButtonPressed(InputComponent.Trigger) ?? false) ||
+      (gp?.getButtonPressed(InputComponent.Squeeze) ?? false);
     const down = pressed && !this.triggerWas[hand];
     const released = !pressed && this.triggerWas[hand];
     this.triggerWas[hand] = pressed;
@@ -332,10 +335,13 @@ export class FireballSystem extends createSystem({
   /** Fill _grip/_gripQ with the owner's hand pose (local rig or the bus). */
   private handPose(owner: number, hand: Hand): void {
     if (owner === 0) {
+      // Position from the fist, orientation from the pointing ray — the same
+      // frame the gloves are aimed in, so hover/orbit sit over the knuckles.
       const grip = this.world.playerSpaceEntities.gripSpaces[HANDS[hand]]?.object3D;
+      const ray = this.world.playerSpaceEntities.raySpaces[HANDS[hand]]?.object3D;
       if (grip) {
         grip.getWorldPosition(_grip);
-        grip.getWorldQuaternion(_gripQ);
+        (ray ?? grip).getWorldQuaternion(_gripQ);
       }
     } else {
       _grip.copy(opponent.handPos[hand]);
@@ -414,7 +420,7 @@ export class FireballSystem extends createSystem({
     // particles overlap into one thick molten rope (see fx/fire.ts).
     if (state === BallState.Flying || state === BallState.Returning) {
       const acc = (this.trailAcc.get(ball) ?? 0) + delta;
-      if (acc >= 0.012) {
+      if (acc >= 0.009) {
         this.trailAcc.set(ball, 0);
         stampTrail(obj.position, cool);
       } else {

@@ -4,6 +4,9 @@
  * vs bot, shoot-back toggle), and shows/hides the right scene pieces per
  * app state. During a bout or training the menu hides and the pointers
  * disappear — your hands are for punching.
+ *
+ * In training, the A button summons a small waist-height forfeit panel
+ * (A again dismisses it); clicking FORFEIT bails back to the lobby.
  */
 
 import { createSystem, InputComponent } from '@iwsdk/core';
@@ -20,13 +23,15 @@ import {
   type Intersection,
 } from 'three';
 import { app, saveShootBack, type AppState } from '../menu/appState.js';
-import { createMenu, type Menu, type MenuAction, type PanelId } from '../menu/menu.js';
+import { createForfeitPanel, createMenu, type ForfeitPanel, type Menu, type MenuAction, type PanelId } from '../menu/menu.js';
 import { net } from '../net/client.js';
 import * as sfx from '../audio/sfx.js';
 
 const _origin = new Vector3();
 const _dir = new Vector3();
 const _end = new Vector3();
+const _head = new Vector3();
+const _fwd = new Vector3();
 
 interface Pointer {
   line: Line;
@@ -40,9 +45,12 @@ export class MenuSystem extends createSystem({}) {
   private lastState: AppState | null = null;
   private pointers: Record<'left' | 'right', Pointer> = {} as Record<'left' | 'right', Pointer>;
   private redrawTimer = 0;
+  private forfeit!: ForfeitPanel;
+  private forfeitHover = false;
 
   init(): void {
     this.menu = createMenu(this.scene);
+    this.forfeit = createForfeitPanel(this.scene);
     this.pointers.left = this.makePointer();
     this.pointers.right = this.makePointer();
     this.applyState();
@@ -51,7 +59,11 @@ export class MenuSystem extends createSystem({}) {
   update(delta: number): void {
     if (app.state !== this.lastState) this.applyState();
 
-    if (app.state === 'playing' || app.state === 'training') {
+    if (app.state === 'training') {
+      this.updateForfeit();
+      return;
+    }
+    if (app.state === 'playing') {
       this.hidePointers();
       return;
     }
@@ -110,6 +122,58 @@ export class MenuSystem extends createSystem({}) {
     this.applyState();
   }
 
+  // --- training forfeit panel ------------------------------------------------
+
+  /** A toggles the panel; point + trigger on FORFEIT bails to the lobby. */
+  private updateForfeit(): void {
+    if (this.input.xr.gamepads.right?.getButtonDown(InputComponent.A_Button)) {
+      this.forfeit.mesh.visible = !this.forfeit.mesh.visible;
+      if (this.forfeit.mesh.visible) this.placeForfeit();
+      sfx.ensureAudio();
+      sfx.uiClick();
+    }
+    if (!this.forfeit.mesh.visible) {
+      this.hidePointers();
+      return;
+    }
+
+    let hover = false;
+    for (const hand of ['left', 'right'] as const) {
+      const hit = this.updatePointer(hand, [this.forfeit.mesh]);
+      if (!hit?.uv || !this.forfeit.hitTest(hit.uv.x, hit.uv.y)) continue;
+      hover = true;
+      if (this.input.xr.gamepads[hand]?.getButtonDown(InputComponent.Trigger)) {
+        sfx.uiClick();
+        this.forfeit.mesh.visible = false;
+        app.state = 'menu'; // TrainingSystem tears the run down unsaved
+        this.applyState();
+        return;
+      }
+    }
+    if (hover !== this.forfeitHover) {
+      this.forfeitHover = hover;
+      this.forfeit.redraw(hover);
+    }
+  }
+
+  /** In front of you, off to the side, waist height — out of punching room. */
+  private placeForfeit(): void {
+    this.world.camera.getWorldPosition(_head);
+    this.world.camera.getWorldDirection(_fwd);
+    _fwd.y = 0;
+    if (_fwd.lengthSq() < 1e-4) _fwd.set(0, 0, -1);
+    _fwd.normalize();
+    // right = forward × up
+    const rx = -_fwd.z;
+    const rz = _fwd.x;
+    this.forfeit.mesh.position.set(
+      _head.x + _fwd.x * 0.55 + rx * 0.38,
+      0.95,
+      _head.z + _fwd.z * 0.55 + rz * 0.38,
+    );
+    this.forfeit.mesh.lookAt(_head);
+  }
+
   // --- controller pointers -------------------------------------------------
 
   private makePointer(): Pointer {
@@ -164,6 +228,13 @@ export class MenuSystem extends createSystem({}) {
   private applyState(): void {
     const inLobby = app.state === 'menu' || app.state === 'queueing';
     this.menu.setVisible(inLobby);
+
+    // The forfeit panel only lives inside a training run.
+    if (app.state !== 'training' && this.forfeit) {
+      this.forfeit.mesh.visible = false;
+      this.forfeitHover = false;
+      this.forfeit.redraw(false);
+    }
 
     // The title banner shows only in the lobby.
     const banner = this.scene.getObjectByName('title-banner');

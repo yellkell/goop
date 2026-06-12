@@ -167,9 +167,9 @@ function drawInfo(ctx: CanvasRenderingContext2D): void {
   ctx.font = '600 26px system-ui, sans-serif';
   ctx.fillStyle = UI.amberSoft;
   const lines = [
-    'hold trigger — ball orbits your fist',
+    'hold trigger or grip — ball orbits',
     'punch + release — throw',
-    'trigger — recall the ball',
+    'squeeze — recall the ball',
     'a recall through them still hits',
     'your orbit parries their fire',
     'stay on your platform!',
@@ -183,6 +183,74 @@ function drawInfo(ctx: CanvasRenderingContext2D): void {
     PW / 2,
     364,
   );
+}
+
+// --- training forfeit panel --------------------------------------------------
+
+export interface ForfeitPanel {
+  mesh: Mesh;
+  redraw: (hover: boolean) => void;
+  /** True if the hit UV lands on the FORFEIT button. */
+  hitTest: (u: number, v: number) => boolean;
+}
+
+const FW = 512;
+const FH = 288;
+
+/**
+ * The small in-training panel summoned with the A button: a single FORFEIT
+ * plate to bail out of a run early. Starts hidden; MenuSystem places it in
+ * front of you at waist height and toggles it.
+ */
+export function createForfeitPanel(scene: Scene): ForfeitPanel {
+  const canvas = document.createElement('canvas');
+  canvas.width = FW;
+  canvas.height = FH;
+  const ctx = canvas.getContext('2d')!;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const texture = new CanvasTexture(canvas);
+  texture.minFilter = LinearFilter;
+  const mesh = new Mesh(
+    new PlaneGeometry(0.46, 0.26),
+    new MeshBasicMaterial({ map: texture, transparent: true }),
+  );
+  mesh.name = 'forfeit-panel';
+  mesh.visible = false;
+  scene.add(mesh);
+
+  const redraw = (hover: boolean): void => {
+    ctx.clearRect(0, 0, FW, FH);
+    plate(ctx, 8, 8, FW - 16, FH - 16, {
+      cut: 22,
+      fill: UI.ink,
+      stroke: hover ? UI.danger : UI.steel,
+    });
+    hazardStrip(ctx, 36, 30, 48, 14, UI.amber);
+    ctx.textAlign = 'left';
+    ctx.font = stencilFont(30);
+    ctx.fillStyle = UI.amberSoft;
+    ctx.fillText('AIM TRAINING', 98, 38);
+    buttonPlate(ctx, 64, 84, FW - 128, 110, 'FORFEIT', UI.danger, hover);
+    ctx.textAlign = 'center';
+    ctx.font = '600 24px system-ui, sans-serif';
+    ctx.fillStyle = UI.textDim;
+    ctx.fillText('press A to dismiss', FW / 2, 240);
+  };
+  redraw(false);
+  texture.needsUpdate = true;
+
+  return {
+    mesh,
+    redraw: (hover) => {
+      redraw(hover);
+      texture.needsUpdate = true;
+    },
+    hitTest: (_u, v) => {
+      const y = (1 - v) * FH;
+      return y >= 76 && y <= 202;
+    },
+  };
 }
 
 export function createMenu(scene: Scene): Menu {

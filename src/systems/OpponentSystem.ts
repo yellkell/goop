@@ -8,7 +8,7 @@
 
 import { createSystem, Vector3, type Entity } from '@iwsdk/core';
 import { Object3D } from 'three';
-import { buildBoxer, solveTorso, type BoxerRig } from '../avatar/boxer.js';
+import { buildBoxer, setGloveLit, solveTorso, type BoxerRig } from '../avatar/boxer.js';
 import { Combatant } from '../components/Combatant.js';
 import { Health } from '../components/Health.js';
 import { Hitbox } from '../components/Hitbox.js';
@@ -34,7 +34,7 @@ export class OpponentSystem extends createSystem({
     }
   }
 
-  update(): void {
+  update(delta: number): void {
     const rig = this.rig;
     if (!rig) return;
 
@@ -54,6 +54,9 @@ export class OpponentSystem extends createSystem({
     for (const hand of [0, 1] as const) {
       rig.gloves[hand].position.copy(opponent.handPos[hand]);
       rig.gloves[hand].quaternion.copy(opponent.handQuat[hand]);
+      // Their squeeze flares their LEDs — the tell that fire is winding up,
+      // even when they're lining up a behind-the-back lob.
+      setGloveLit(rig.gloves[hand], opponent.orbiting[hand], delta);
     }
 
     this.hitboxes.head?.object3D?.position.copy(opponent.headPos);

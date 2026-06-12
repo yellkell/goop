@@ -1,15 +1,21 @@
 /**
  * Your boxing gloves: an ember-orange glove locked to each controller grip
- * whenever you're in the arena (bout or training). They squeeze down slightly
- * when you grip, and hide in the lobby so the menu lasers read clearly.
+ * whenever you're in the arena (bout or training). The fists are aimed along
+ * the controller's POINTING ray (not the tilted grip pose, which left the
+ * knuckles facing the ceiling), their LEDs flare while you squeeze trigger or
+ * grip, and they squash slightly under the squeeze. Hidden in the lobby so
+ * the menu lasers read clearly.
  */
 
 import { createSystem, InputComponent } from '@iwsdk/core';
-import type { Group } from 'three';
-import { buildGlove } from '../avatar/boxer.js';
+import { Quaternion, type Group } from 'three';
+import { buildGlove, setGloveLit } from '../avatar/boxer.js';
 import { app } from '../menu/appState.js';
 
 const HANDS = ['left', 'right'] as const;
+
+const _gripQ = new Quaternion();
+const _rayQ = new Quaternion();
 
 export class PlayerGloveSystem extends createSystem({}) {
   private gloves: Partial<Record<'left' | 'right', Group>> = {};
@@ -30,8 +36,23 @@ export class PlayerGloveSystem extends createSystem({}) {
       glove.visible = show;
       if (!show) continue;
 
+      // Knuckles down the pointing ray: cancel the grip tilt, take the ray's
+      // orientation (the glove model punches along its local -Z).
+      const ray = this.world.playerSpaceEntities.raySpaces[hand]?.object3D;
+      if (ray) {
+        grip.getWorldQuaternion(_gripQ);
+        ray.getWorldQuaternion(_rayQ);
+        glove.quaternion.copy(_gripQ).invert().multiply(_rayQ);
+      }
+
+      // Trigger and grip are one action — either one ignites the fist.
+      const gp = this.input.xr.gamepads[hand];
+      const squeezing =
+        (gp?.getButtonPressed(InputComponent.Trigger) ?? false) ||
+        (gp?.getButtonPressed(InputComponent.Squeeze) ?? false);
+      setGloveLit(glove, squeezing, delta);
+
       // A little squash while squeezing — feels grippy without physics.
-      const squeezing = this.input.xr.gamepads[hand]?.getButtonPressed(InputComponent.Squeeze) ?? false;
       const target = squeezing ? 0.88 : 1;
       const s = glove.scale.x + (target - glove.scale.x) * Math.min(1, delta * 14);
       glove.scale.setScalar(s);

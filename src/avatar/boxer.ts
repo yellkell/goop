@@ -12,6 +12,7 @@
 
 import {
   BoxGeometry,
+  Color,
   CylinderGeometry,
   Group,
   Mesh,
@@ -68,10 +69,25 @@ function glowMat(color: number, intensity = 1.4): MeshStandardMaterial {
  * A chunky mechanical gauntlet: armoured fist block, riveted knuckle plate
  * with glowing studs, side armour, a top piston, and a flared cuff with a
  * team-glow ring. Knuckles point down local -Z.
+ *
+ * The glow parts double as LEDs: they're registered on `glove.userData.leds`
+ * and `setGloveLit` flares them while the owner squeezes trigger/grip — a
+ * readable tell on BOTH boxers' fists.
  */
 export function buildGlove(team: number): Group {
   const glove = new Group();
   const accent = teamColor(team);
+
+  const leds: MeshStandardMaterial[] = [];
+  const ledMat = (intensity: number): MeshStandardMaterial => {
+    const m = glowMat(accent, intensity);
+    m.userData.baseIntensity = intensity;
+    m.userData.baseColor = new Color(accent);
+    m.userData.litColor = new Color(accent).lerp(new Color(PALETTE.white), 0.55);
+    leds.push(m);
+    return m;
+  };
+  glove.userData.leds = leds;
 
   // The fist: one thick armoured block.
   const fist = new Mesh(new BoxGeometry(0.16, 0.125, 0.17), chassisMat(accent, 0.06));
@@ -85,7 +101,7 @@ export function buildGlove(team: number): Group {
 
   // Four glowing knuckle studs across the strike face.
   for (let i = 0; i < 4; i++) {
-    const stud = new Mesh(new BoxGeometry(0.024, 0.022, 0.02), glowMat(accent, 1.1));
+    const stud = new Mesh(new BoxGeometry(0.024, 0.022, 0.02), ledMat(1.1));
     stud.position.set(-0.054 + i * 0.036, 0.052, -0.108);
     glove.add(stud);
   }
@@ -102,7 +118,7 @@ export function buildGlove(team: number): Group {
   piston.rotation.x = Math.PI / 2;
   piston.position.set(0, 0.07, 0.02);
   glove.add(piston);
-  const rod = new Mesh(new CylinderGeometry(0.008, 0.008, 0.06, 8), glowMat(accent, 0.7));
+  const rod = new Mesh(new CylinderGeometry(0.008, 0.008, 0.06, 8), ledMat(0.7));
   rod.rotation.x = Math.PI / 2;
   rod.position.set(0, 0.07, -0.05);
   glove.add(rod);
@@ -112,12 +128,28 @@ export function buildGlove(team: number): Group {
   cuff.rotation.x = Math.PI / 2;
   cuff.position.z = 0.095;
   glove.add(cuff);
-  const ring = new Mesh(new CylinderGeometry(0.073, 0.073, 0.018, 8), glowMat(accent, 0.9));
+  const ring = new Mesh(new CylinderGeometry(0.073, 0.073, 0.018, 8), ledMat(0.9));
   ring.rotation.x = Math.PI / 2;
   ring.position.z = 0.07;
   glove.add(ring);
 
   return glove;
+}
+
+/**
+ * Flare (or settle) a gauntlet's LEDs. `lit` = the owner is squeezing
+ * trigger/grip right now; eases so the light blooms on and fades off.
+ */
+export function setGloveLit(glove: Group, lit: boolean, delta: number): void {
+  const leds = glove.userData.leds as MeshStandardMaterial[] | undefined;
+  if (!leds) return;
+  const k = Math.min(1, delta * 14);
+  for (const m of leds) {
+    const base = (m.userData.baseIntensity as number) ?? 1;
+    const target = lit ? base * 3 + 1.5 : base;
+    m.emissiveIntensity += (target - m.emissiveIntensity) * k;
+    m.emissive.lerp(lit ? (m.userData.litColor as Color) : (m.userData.baseColor as Color), k);
+  }
 }
 
 /** Build the full opponent rig. Pieces start hidden; add them to the scene. */

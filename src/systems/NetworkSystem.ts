@@ -89,13 +89,20 @@ export class NetworkSystem extends createSystem({
     const hands: [PoseTuple, PoseTuple] = [headPose, headPose];
     const orbit: [boolean, boolean] = [false, false];
     for (const hand of [0, 1] as const) {
+      // Fist position from the grip, orientation from the pointing ray — the
+      // frame our own gloves are aimed in, so their mirror of us matches.
       const grip = this.world.playerSpaceEntities.gripSpaces[HANDS[hand]]?.object3D;
+      const ray = this.world.playerSpaceEntities.raySpaces[HANDS[hand]]?.object3D;
       if (grip) {
         grip.getWorldPosition(_p);
-        grip.getWorldQuaternion(_q);
+        (ray ?? grip).getWorldQuaternion(_q);
         hands[hand] = packPose(_p, _q);
       }
-      orbit[hand] = this.input.xr.gamepads[HANDS[hand]]?.getButtonPressed(InputComponent.Trigger) ?? false;
+      // Trigger and grip are one action; either squeeze lights us up for them.
+      const gp = this.input.xr.gamepads[HANDS[hand]];
+      orbit[hand] =
+        (gp?.getButtonPressed(InputComponent.Trigger) ?? false) ||
+        (gp?.getButtonPressed(InputComponent.Squeeze) ?? false);
     }
 
     net.send({ k: 'pose', head: headPose, left: hands[0], right: hands[1], orbit, hp: this.myHp });

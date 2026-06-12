@@ -55,8 +55,8 @@ export function createTitleBanner(scene: Scene): Mesh {
 
   ctx.font = '700 34px system-ui, sans-serif';
   ctx.fillStyle = UI.amberSoft;
-  ctx.fillText('hold trigger · ball orbits your fist', W / 2, 352);
-  ctx.fillText('punch to throw · trigger to recall', W / 2, 402);
+  ctx.fillText('hold trigger or grip · ball orbits your fist', W / 2, 352);
+  ctx.fillText('punch to throw · squeeze to recall', W / 2, 402);
 
   const texture = new CanvasTexture(canvas);
   texture.minFilter = LinearFilter;
@@ -65,7 +65,7 @@ export function createTitleBanner(scene: Scene): Mesh {
     new MeshBasicMaterial({ map: texture, transparent: true }),
   );
   banner.name = 'title-banner';
-  banner.position.set(0, 2.5, -ARENA_GAP - 1.2);
+  banner.position.set(0, 3.2, -ARENA_GAP - 1.2);
   scene.add(banner);
   return banner;
 }

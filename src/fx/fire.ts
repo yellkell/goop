@@ -330,8 +330,8 @@ export function stampTrail(pos: Vector3, cool = false): void {
     (Math.random() - 0.5) * 0.15,
     (Math.random() - 0.5) * 0.15,
     _c.r, _c.g, _c.b,
-    0.26 + Math.random() * 0.12,
-    0.11 + Math.random() * 0.06,
+    0.3 + Math.random() * 0.14,
+    0.17 + Math.random() * 0.09,
     0.15,
   );
 
@@ -344,8 +344,8 @@ export function stampTrail(pos: Vector3, cool = false): void {
     (Math.random() - 0.5) * 0.3 + 0.35,
     (Math.random() - 0.5) * 0.4,
     _c.r, _c.g, _c.b,
-    0.5 + Math.random() * 0.3,
-    0.045 + Math.random() * 0.04,
+    0.55 + Math.random() * 0.3,
+    0.07 + Math.random() * 0.05,
     0.5,
   );
 }
