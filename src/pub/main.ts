@@ -1,5 +1,5 @@
 /**
- * THE IRON TANKARD — entry point for the pub social scene.
+ * IRON BALLS PUB — entry point for the pub social scene.
  *
  * A 10–12 player VR local: low steel ceiling, diamond-plate underfoot, pints
  * you can stack (or lob at your mates, who can catch them), communal darts
@@ -26,6 +26,7 @@ import { buildPub } from './environment.js';
 import { pubConnect } from './net.js';
 import { pub } from './state.js';
 import { buildProps, PropSystem } from './systems/PropSystem.js';
+import { BartenderSystem } from './systems/BartenderSystem.js';
 import { DartsSystem } from './systems/DartsSystem.js';
 import { FightSystem } from './systems/FightSystem.js';
 import { PubPlayerSystem } from './systems/PubPlayerSystem.js';
@@ -76,9 +77,10 @@ World.create(container, {
   world.registerSystem(DartsSystem);
   world.registerSystem(SnakeSystem);
   world.registerSystem(FightSystem);
+  world.registerSystem(BartenderSystem);
 
   pubConnect(pubServerUrl(), pub.myName);
 
   // eslint-disable-next-line no-console
-  console.info('[IRON TANKARD] Doors open. Mind the low beams.');
+  console.info('[IRON BALLS PUB] Doors open. Mind the low beams.');
 });

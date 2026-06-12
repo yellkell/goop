@@ -41,6 +41,9 @@ interface PropRec {
   kind: PropKind;
   entity: Entity;
   mesh: Group;
+  /** Glasses start inactive past the opening 8 — hidden and ungrabbable
+   *  until the barkeep brings them out. */
+  active: boolean;
   mode: Mode;
   vel: Vector3;
   ring: { pos: Vector3; t: number }[];
@@ -69,12 +72,15 @@ export function buildProps(world: World): void {
   const refs = pub.refs!;
   let id = 0;
   for (const slot of refs.glassSlots) {
-    addProp(world, id++, 'glass', buildPintGlass(), slot, (mesh) => {
+    // The pub opens with `glassStart` pints out; the rest wait in the back
+    // until the barkeep brings them round (up to glassMax).
+    const active = id < PUB.glassStart;
+    addProp(world, id++, 'glass', buildPintGlass(), slot, active, (mesh) => {
       mesh.position.set(...slot);
     });
   }
   for (const slot of refs.dartRackSlots) {
-    addProp(world, id++, 'dart', buildDart(), slot, (mesh) => {
+    addProp(world, id++, 'dart', buildDart(), slot, true, (mesh) => {
       mesh.position.set(...slot);
       mesh.rotation.z = Math.PI / 2; // lying across the rack ledge
     });
@@ -87,17 +93,22 @@ function addProp(
   kind: PropKind,
   mesh: Group,
   home: [number, number, number],
+  active: boolean,
   place: (mesh: Group) => void,
 ): void {
   place(mesh);
+  mesh.visible = active;
   world.scene.add(mesh);
   const entity = world.createTransformEntity(mesh);
-  entity.addComponent(OneHandGrabbable, { rotate: true });
+  // Inactive glasses get their grab handle only when they come out — the
+  // invisible grab proxy would otherwise let you grab thin air.
+  if (active) entity.addComponent(OneHandGrabbable, { rotate: true });
   const rec: PropRec = {
     id,
     kind,
     entity,
     mesh,
+    active,
     mode: 'rest',
     vel: new Vector3(),
     ring: [],
@@ -113,9 +124,19 @@ function addProp(
   byId.set(id, rec);
 }
 
+/** The next glass still waiting in the back, if any (offline restocking). */
+export function nextInactiveGlassId(): number | null {
+  const rec = recs.find((r) => r.kind === 'glass' && !r.active);
+  return rec ? rec.id : null;
+}
+
 export class PropSystem extends createSystem({
   grabbedProps: { required: [OneHandGrabbable, Grabbed] },
 }) {
+  /** Glasses announced by the barkeep, landing after the delivery delay. */
+  private pendingGlasses: { rec: PropRec; t: number }[] = [];
+  private offlineRestock = 0;
+
   init(): void {
     this.queries.grabbedProps.subscribers.qualify.add((e: Entity) => this.onGrab(e));
     this.queries.grabbedProps.subscribers.disqualify.add((e: Entity) => this.onRelease(e));
@@ -123,6 +144,13 @@ export class PropSystem extends createSystem({
     this.cleanupFuncs.push(
       // Late-join: adopt whatever state the room is already in.
       bus.on('connected', () => this.applyServerState()),
+      // The barkeep is walking a fresh glass over — it lands when he does.
+      bus.on('glassOut', (id) => {
+        const rec = byId.get(id);
+        if (rec && !rec.active && !this.pendingGlasses.some((p) => p.rec === rec)) {
+          this.pendingGlasses.push({ rec, t: PUB.glassDeliverDelay });
+        }
+      }),
       bus.on('propGrabbed', ({ id, holder }) => {
         const rec = byId.get(id);
         if (!rec) return;
@@ -160,6 +188,26 @@ export class PropSystem extends createSystem({
   }
 
   update(delta: number): void {
+    // Glasses in transit from the back land once the barkeep gets there.
+    for (let i = this.pendingGlasses.length - 1; i >= 0; i--) {
+      const p = this.pendingGlasses[i];
+      p.t -= delta;
+      if (p.t <= 0) {
+        this.activateGlass(p.rec);
+        this.pendingGlasses.splice(i, 1);
+      }
+    }
+
+    // Offline the barkeep restocks on a local clock (online the server does).
+    if (!pub.online) {
+      this.offlineRestock += delta;
+      if (this.offlineRestock >= PUB.glassRestockInterval) {
+        this.offlineRestock = 0;
+        const id = nextInactiveGlassId();
+        if (id !== null) bus.emit('glassOut', id);
+      }
+    }
+
     for (const rec of recs) {
       switch (rec.mode) {
         case 'held':
@@ -432,11 +480,27 @@ export class PropSystem extends createSystem({
     });
   }
 
+  /** A fresh pint lands on the bar, visible and grabbable. */
+  private activateGlass(rec: PropRec): void {
+    if (rec.active) return;
+    rec.active = true;
+    rec.mesh.visible = true;
+    rec.mesh.position.set(...rec.home);
+    rec.mesh.quaternion.identity();
+    rec.mode = 'rest';
+    rec.entity.addComponent(OneHandGrabbable, { rotate: true });
+    deflect(); // a little glass clink as it's set down
+  }
+
   /** On welcome: place every prop where the room already has it. */
   private applyServerState(): void {
     for (const [id, net] of pub.props) {
       const rec = byId.get(id);
       if (!rec) continue;
+      // Glasses the barkeep has already brought out appear instantly for a
+      // late joiner; the rest stay in the back.
+      if (net.active && !rec.active) this.activateGlass(rec);
+      if (!rec.active) continue;
       if (net.pos && net.quat) {
         rec.mesh.position.set(net.pos[0], net.pos[1], net.pos[2]);
         rec.mesh.quaternion.set(net.quat[0], net.quat[1], net.quat[2], net.quat[3]);

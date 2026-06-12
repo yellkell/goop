@@ -59,6 +59,8 @@ interface Events {
   dartScored: { segment: string; score: number };
   /** Fight lifecycle/hp pushed from the server. */
   fight: FightNet;
+  /** The barkeep is fetching glass `id` — it lands on the bar shortly. */
+  glassOut: number;
 }
 
 type Handler<T> = (payload: T) => void;

@@ -36,9 +36,10 @@ function packWorldPose(obj: { getWorldPosition(v: Vector3): Vector3; getWorldQua
 /**
  * Re-tint a boxer rig built for team 1 (blue) to an arbitrary accent: every
  * material that used the team colour — chassis emissives, glow parts, glove
- * LED colour ramps — is swapped to the punter's own colour.
+ * LED colour ramps — is swapped to the punter's own colour. (Also used by
+ * the barkeep, who runs house amber.)
  */
-function retintRig(groups: Group[], accent: number): void {
+export function retintRig(groups: Group[], accent: number): void {
   const teamHex = teamColor(1);
   const accentColor = new Color(accent);
   const seen = new Set<MeshStandardMaterial>();

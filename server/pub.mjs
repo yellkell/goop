@@ -1,5 +1,5 @@
 /**
- * THE IRON TANKARD pub server — one shared room, up to 12 punters.
+ * IRON BALLS PUB server — one shared room, up to 12 punters.
  *
  * Unlike the 1v1 bout relay (index.mjs) this server holds real state:
  *   - players and their latest poses, snapshotted to everyone at 20 Hz;
@@ -24,7 +24,13 @@ import { WebSocketServer } from 'ws';
 const PORT = Number(process.env.PORT || 8788);
 const MAX_PLAYERS = 12;
 const TICK_MS = 50; // 20 Hz snapshots
-const PROP_COUNT = 14; // 8 pint glasses (ids 0-7) + 6 darts (ids 8-13)
+// Glasses are ids 0-14 (the pub opens with 8 active; the barkeep brings the
+// rest out one at a time), darts are ids 15-20. Mirrors src/pub/config.ts.
+const GLASS_MAX = 15;
+const GLASS_START = 8;
+const DART_COUNT = 6;
+const PROP_COUNT = GLASS_MAX + DART_COUNT;
+const RESTOCK_MS = 25_000;
 
 const DATA_FILE = join(dirname(fileURLToPath(import.meta.url)), 'pub-data.json');
 
@@ -46,7 +52,7 @@ function saveData() {
   try {
     writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
   } catch (err) {
-    console.warn('[iron-tankard] could not persist data:', err.message);
+    console.warn('[iron-balls-pub] could not persist data:', err.message);
   }
 }
 const data = loadData();
@@ -57,7 +63,16 @@ const players = new Map();
 /** id → { kind, holder, mode, pos, quat } */
 const props = new Map();
 for (let i = 0; i < PROP_COUNT; i++) {
-  props.set(i, { id: i, kind: i < 8 ? 'glass' : 'dart', holder: null, mode: 'rest', pos: null, quat: null });
+  props.set(i, {
+    id: i,
+    kind: i < GLASS_MAX ? 'glass' : 'dart',
+    holder: null,
+    mode: 'rest',
+    pos: null,
+    quat: null,
+    // Darts are always out; glasses past the opening 8 wait in the back.
+    active: i >= GLASS_MAX || i < GLASS_START,
+  });
 }
 const board = new Map(); // playerId → { name, accent, score, darts }
 let snakePlayer = null;
@@ -212,7 +227,7 @@ const http = createServer((req, res) => {
   res.writeHead(200, { 'content-type': 'application/json' });
   res.end(
     JSON.stringify({
-      pub: 'the-iron-tankard',
+      pub: 'iron-balls-pub',
       punters: players.size,
       snakeHi: data.snakeHi,
     }),
@@ -266,7 +281,7 @@ wss.on('connection', (ws) => {
         fight: fightNet(),
       });
       broadcast({ t: 'join', player: playerNet(myId) }, myId);
-      console.log(`[iron-tankard] ${myId} (${players.get(myId).name}) in — ${players.size}/${MAX_PLAYERS}`);
+      console.log(`[iron-balls-pub] ${myId} (${players.get(myId).name}) in — ${players.size}/${MAX_PLAYERS}`);
       return;
     }
 
@@ -376,11 +391,24 @@ wss.on('connection', (ws) => {
         prop.mode = 'rest';
         prop.pos = null;
         prop.quat = null;
+        prop.active = prop.kind === 'dart' || prop.id < GLASS_START;
       }
     }
-    console.log(`[iron-tankard] ${myId} out — ${players.size}/${MAX_PLAYERS}`);
+    console.log(`[iron-balls-pub] ${myId} out — ${players.size}/${MAX_PLAYERS}`);
   });
 });
+
+// The barkeep's restock round: while anyone is in, bring out one fresh
+// glass every RESTOCK_MS until all 15 are on the floor. (Clients animate the
+// robot walking it over; the glass lands on the bar a few seconds after this
+// broadcast — see glassDeliverDelay in src/pub/config.ts.)
+setInterval(() => {
+  if (players.size === 0) return;
+  const next = [...props.values()].find((p) => p.kind === 'glass' && !p.active);
+  if (!next) return;
+  next.active = true;
+  broadcast({ t: 'glass-out', id: next.id });
+}, RESTOCK_MS);
 
 // 20 Hz pose snapshots (each recipient gets everyone but themselves).
 setInterval(() => {
@@ -407,5 +435,5 @@ setInterval(() => {
 }, 10_000);
 
 http.listen(PORT, () => {
-  console.log(`[iron-tankard] pub open on :${PORT} — hi-score ${data.snakeHi.score} (${data.snakeHi.name})`);
+  console.log(`[iron-balls-pub] pub open on :${PORT} — hi-score ${data.snakeHi.score} (${data.snakeHi.name})`);
 });

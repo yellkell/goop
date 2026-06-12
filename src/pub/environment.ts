@@ -1,5 +1,5 @@
 /**
- * THE IRON TANKARD — the pub itself.
+ * IRON BALLS PUB — the pub itself.
  *
  * A low-ceilinged steel boozer in the FIRE FIGHT language: diamond-plate
  * floor, riveted gunmetal walls, hazard-amber trim, I-beams you can almost
@@ -53,7 +53,7 @@ const amberGlow = (intensity = 1.2): MeshStandardMaterial =>
 
 export function buildPub(world: World): PubRefs {
   const root = new Group();
-  root.name = 'the-iron-tankard';
+  root.name = 'iron-balls-pub';
 
   const W = PUB.halfWidth;
   const D = PUB.halfDepth;
@@ -245,7 +245,7 @@ export function buildPub(world: World): PubRefs {
   root.add(counter);
 
   // Beer taps along the counter.
-  for (const x of [-1.2, -0.4, 0.4, 1.2]) {
+  for (const x of PUB.tapXs) {
     const tap = new Group();
     tap.position.set(x, bar.top, bar.z - 0.18);
     const body = new Mesh(new CylinderGeometry(0.025, 0.035, 0.26, 8), gunmetal(0.2));
@@ -285,7 +285,7 @@ export function buildPub(world: World): PubRefs {
   }
 
   const sign = new Panel(2.4, 0.45);
-  sign.setLines([{ text: 'THE IRON TANKARD', size: 76, colour: '#ffb000', bold: true }]);
+  sign.setLines([{ text: 'IRON BALLS PUB', size: 76, colour: '#ffb000', bold: true }]);
   sign.mesh.position.set(0, 2.0, -D + 0.02);
   root.add(sign.mesh);
 
@@ -382,8 +382,13 @@ export function buildPub(world: World): PubRefs {
 
   // --- pint glass home slots on the bar -------------------------------------------
   const glassSlots: [number, number, number][] = [];
-  for (let i = 0; i < PUB.glassCount; i++) {
-    glassSlots.push([-2.1 + i * 0.6, bar.top + 0.002, bar.z - 0.28]);
+  // Two rows: the opening 8 along the front, the barkeep's restock row of 7
+  // tucked behind them.
+  for (let i = 0; i < 8; i++) {
+    glassSlots.push([-2.1 + i * 0.6, bar.top + 0.002, bar.z - 0.24]);
+  }
+  for (let i = 0; i < PUB.glassMax - 8; i++) {
+    glassSlots.push([-1.8 + i * 0.6, bar.top + 0.002, bar.z - 0.42]);
   }
 
   // --- the fight hall through the west door ---------------------------------

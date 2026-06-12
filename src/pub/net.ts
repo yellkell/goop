@@ -136,6 +136,12 @@ function handle(msg: PubServerMsg): void {
       pub.fight = msg.fight;
       bus.emit('fight', msg.fight);
       break;
+    case 'glass-out': {
+      const prop = pub.props.get(msg.id);
+      if (prop) prop.active = true;
+      bus.emit('glassOut', msg.id);
+      break;
+    }
     case 'ev':
       bus.emit('gameEvent', { from: msg.from, ev: msg.ev });
       break;

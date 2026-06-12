@@ -1,5 +1,5 @@
 /**
- * THE IRON TANKARD — layout + tunables for the pub social scene.
+ * IRON BALLS PUB — layout + tunables for the pub social scene.
  *
  * One low-ceilinged steel boozer, roughly 9 m × 6 m, everything in metres
  * and world space (no mirroring — all twelve punters share one room):
@@ -22,13 +22,18 @@ export const PUB = {
   ceiling: 2.45, // proper low pub ceiling — mind your head
   beamDrop: 0.16, // steel I-beams hang this far below the ceiling
 
-  // Bar counter along the north wall.
+  // Bar counter along the north wall, pulled out far enough to leave a
+  // working aisle behind it for the barkeep.
   bar: {
-    z: -2.35, // front face of the counter
+    z: -1.95, // front face of the counter
     top: 1.05, // counter top height
     halfLength: 2.6, // runs x −2.6 … +2.6
     depth: 0.55,
+    aisleZ: -2.7, // the barkeep's rail, between counter back and shelf
   },
+
+  /** Tap positions along the counter (x), used by the build and the barkeep. */
+  tapXs: [-1.2, -0.4, 0.4, 1.2],
 
   // Dartboard on the east wall (standard: bull at 1.73 m, oche 2.37 m out).
   darts: {
@@ -44,7 +49,15 @@ export const PUB = {
 
   spawn: { x: -0.5, y: 0, z: 1.6 },
 
-  glassCount: 8,
+  /** Glasses on the bar at opening time… */
+  glassStart: 8,
+  /** …and the most the barkeep will bring out (he restocks one at a time). */
+  glassMax: 15,
+  /** Seconds between the barkeep fetching a fresh glass from the back. */
+  glassRestockInterval: 25,
+  /** Seconds between a glass being announced and it landing on the bar —
+   *  covers the barkeep's walk-and-place animation on every client. */
+  glassDeliverDelay: 4,
 } as const;
 
 /**
@@ -91,7 +104,7 @@ export const FIGHT = {
 /** Where you may land a teleport (floor rectangles, walls implied between). */
 export const TELEPORT_AREAS = [
   // Pub floor, this side of the bar.
-  { minX: -4.3, maxX: 4.3, minZ: -2.25, maxZ: 2.8 },
+  { minX: -4.3, maxX: 4.3, minZ: -1.85, maxZ: 2.8 },
   // The doorway strip.
   { minX: -4.65, maxX: -4.2, minZ: FIGHT.door.z0, maxZ: FIGHT.door.z1 },
   // The fight hall.

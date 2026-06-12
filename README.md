@@ -114,7 +114,7 @@ Lineage: forked gameplay skeleton from `yellkell/glasston` (Blaston-style
 play space, IK body hitboxes, match flow) and the fire rendering from
 `yellkell/flamethrowerxr`, rebuilt into one game.
 
-## The Iron Tankard (pub social scene — `/pub.html`)
+## Iron Balls Pub (pub social scene — `/pub.html`)
 
 A separate 10–12 player social hangout that ships alongside the arena: an
 English pub done in the same gritty diamond-plate / gunmetal / hazard-amber
@@ -122,7 +122,15 @@ language, with the SAME iron-boxer avatars (each punter gets their own accent
 tint). Low steel ceiling with I-beams, a bar with taps, booths and stools,
 and three things to actually do:
 
-- **Pints** — 8 glasses on the bar. Grab, drink, stack them, or throw one
+- **The Landlord** — UNIT-86, the robot barkeep, works the aisle behind the
+  bar non-stop: wiping the counter, pulling pints at the taps, polishing
+  glasses, and glancing at whoever's nearest. You can't interact with him —
+  he's pure theatre — except that every ~25 s he trundles a FRESH GLASS out
+  from the back and sets it on the bar, restocking the house up to 15. The
+  restock is server-announced so the new pint lands at the same moment for
+  everyone (and survives for late joiners).
+- **Pints** — 8 glasses on the bar at opening, up to 15 once the Landlord
+  has done his rounds. Grab, drink, stack them, or throw one
   across the room; everything is networked with single-owner simulation, so
   every punter sees the same glass in the same place — and a thrown glass
   (or dart) can be CAUGHT mid-air by anyone, transferring ownership.

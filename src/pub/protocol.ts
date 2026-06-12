@@ -1,5 +1,5 @@
 /**
- * Wire protocol for THE IRON TANKARD — the pub social scene. JSON over a
+ * Wire protocol for IRON BALLS PUB — the pub social scene. JSON over a
  * WebSocket to server/pub.mjs: one shared room, up to 12 punters.
  *
  * Unlike the 1v1 bout relay, the pub server holds real state:
@@ -33,6 +33,11 @@ export interface PropNet {
   mode: 'rest' | 'held' | 'flight';
   pos: Vec3T | null;
   quat: QuatT | null;
+  /**
+   * Glasses only: false until the barkeep has brought this one out from the
+   * back (the pub opens with 8 on the bar and he restocks up to 15).
+   */
+  active: boolean;
 }
 
 export interface PubPlayerNet {
@@ -146,6 +151,8 @@ export type PubServerMsg =
   | { t: 'snake-hi'; hi: SnakeHi }
   /** Full fight state — sent on every lifecycle change and hp update. */
   | { t: 'fight'; fight: FightNet }
+  /** The barkeep is bringing glass `id` out — it lands on the bar shortly. */
+  | { t: 'glass-out'; id: number }
   | { t: 'ev'; from: string; ev: PubEvent };
 
 export const PUB_MAX_PLAYERS = 12;
