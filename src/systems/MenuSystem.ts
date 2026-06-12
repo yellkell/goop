@@ -5,8 +5,9 @@
  * app state. During a bout or training the menu hides and the pointers
  * disappear — your hands are for punching.
  *
- * In training, the A button summons a small waist-height forfeit panel
- * (A again dismisses it); clicking FORFEIT bails back to the lobby.
+ * The A button summons a small waist-height action panel (A again dismisses
+ * it): FORFEIT mid-training; at the end of a bout, RETURN — plus REMATCH in
+ * online bouts, where the panel pops up by itself for the decision.
  */
 
 import { createSystem, InputComponent } from '@iwsdk/core';
@@ -23,7 +24,17 @@ import {
   type Intersection,
 } from 'three';
 import { app, saveShootBack, type AppState } from '../menu/appState.js';
-import { createForfeitPanel, createMenu, type ForfeitPanel, type Menu, type MenuAction, type PanelId } from '../menu/menu.js';
+import {
+  createActionPanel,
+  createMenu,
+  type ActionButton,
+  type ActionPanel,
+  type Menu,
+  type MenuAction,
+  type PanelId,
+} from '../menu/menu.js';
+import { match } from '../combat/matchState.js';
+import { UI } from '../ui/industrial.js';
 import { net } from '../net/client.js';
 import * as sfx from '../audio/sfx.js';
 
@@ -45,12 +56,13 @@ export class MenuSystem extends createSystem({}) {
   private lastState: AppState | null = null;
   private pointers: Record<'left' | 'right', Pointer> = {} as Record<'left' | 'right', Pointer>;
   private redrawTimer = 0;
-  private forfeit!: ForfeitPanel;
-  private forfeitHover = false;
+  private panel!: ActionPanel;
+  private panelKey = '';
+  private wasMatchOver = false;
 
   init(): void {
     this.menu = createMenu(this.scene);
-    this.forfeit = createForfeitPanel(this.scene);
+    this.panel = createActionPanel(this.scene);
     this.pointers.left = this.makePointer();
     this.pointers.right = this.makePointer();
     this.applyState();
@@ -59,12 +71,8 @@ export class MenuSystem extends createSystem({}) {
   update(delta: number): void {
     if (app.state !== this.lastState) this.applyState();
 
-    if (app.state === 'training') {
-      this.updateForfeit();
-      return;
-    }
-    if (app.state === 'playing') {
-      this.hidePointers();
+    if (app.state === 'training' || app.state === 'playing') {
+      this.updateActionPanel();
       return;
     }
 
@@ -122,42 +130,108 @@ export class MenuSystem extends createSystem({}) {
     this.applyState();
   }
 
-  // --- training forfeit panel ------------------------------------------------
+  // --- the A-button action panel ---------------------------------------------
 
-  /** A toggles the panel; point + trigger on FORFEIT bails to the lobby. */
-  private updateForfeit(): void {
-    if (this.input.xr.gamepads.right?.getButtonDown(InputComponent.A_Button)) {
-      this.forfeit.mesh.visible = !this.forfeit.mesh.visible;
-      if (this.forfeit.mesh.visible) this.placeForfeit();
-      sfx.ensureAudio();
-      sfx.uiClick();
+  /**
+   * What the panel offers right now, or null when it has no business being
+   * up (mid-bout — your hands are for punching, not menus).
+   */
+  private panelContent(): { title: string; buttons: ActionButton[]; status: string } | null {
+    if (app.state === 'training') {
+      return {
+        title: 'AIM TRAINING',
+        buttons: [{ id: 'forfeit', label: 'FORFEIT', accent: UI.danger }],
+        status: '',
+      };
     }
-    if (!this.forfeit.mesh.visible) {
+    if (app.state === 'playing' && match.phase === 'matchOver') {
+      const buttons: ActionButton[] = [];
+      if (app.mode === 'net') {
+        buttons.push({
+          id: 'rematch',
+          label: match.rematchMine ? 'WAITING…' : 'REMATCH',
+          accent: UI.cool,
+        });
+      }
+      buttons.push({ id: 'return', label: 'RETURN', accent: UI.danger });
+      return {
+        title: 'FIGHT OVER',
+        buttons,
+        status: match.rematchTheirs ? 'rival wants a rematch' : '',
+      };
+    }
+    return null;
+  }
+
+  /** A toggles the panel; point + trigger clicks its buttons. */
+  private updateActionPanel(): void {
+    // The rematch decision pops the panel up by itself in online bouts.
+    const over = app.state === 'playing' && match.phase === 'matchOver';
+    if (over && !this.wasMatchOver && app.mode === 'net' && !this.panel.mesh.visible) {
+      this.panel.mesh.visible = true;
+      this.placePanel();
+    }
+    this.wasMatchOver = over;
+
+    const content = this.panelContent();
+    if (!content) {
+      this.panel.mesh.visible = false;
       this.hidePointers();
       return;
     }
 
-    let hover = false;
+    if (this.input.xr.gamepads.right?.getButtonDown(InputComponent.A_Button)) {
+      this.panel.mesh.visible = !this.panel.mesh.visible;
+      if (this.panel.mesh.visible) this.placePanel();
+      sfx.ensureAudio();
+      sfx.uiClick();
+    }
+    if (!this.panel.mesh.visible) {
+      this.hidePointers();
+      return;
+    }
+
+    let hover: string | null = null;
     for (const hand of ['left', 'right'] as const) {
-      const hit = this.updatePointer(hand, [this.forfeit.mesh]);
-      if (!hit?.uv || !this.forfeit.hitTest(hit.uv.x, hit.uv.y)) continue;
-      hover = true;
+      const hit = this.updatePointer(hand, [this.panel.mesh]);
+      const id = hit?.uv ? this.panel.hitTest(hit.uv.x, hit.uv.y) : null;
+      if (!id) continue;
+      hover = id;
       if (this.input.xr.gamepads[hand]?.getButtonDown(InputComponent.Trigger)) {
-        sfx.uiClick();
-        this.forfeit.mesh.visible = false;
-        app.state = 'menu'; // TrainingSystem tears the run down unsaved
-        this.applyState();
+        this.runPanelAction(id);
         return;
       }
     }
-    if (hover !== this.forfeitHover) {
-      this.forfeitHover = hover;
-      this.forfeit.redraw(hover);
+
+    // Redraw only when the content or hover actually changed.
+    const key = `${content.title}|${content.buttons.map((b) => b.id + b.label).join(',')}|${content.status}|${hover}`;
+    if (key !== this.panelKey) {
+      this.panelKey = key;
+      this.panel.redraw(content.title, content.buttons, 'press A to dismiss', hover, content.status);
+    }
+  }
+
+  private runPanelAction(id: string): void {
+    sfx.uiClick();
+    switch (id) {
+      case 'forfeit':
+      case 'return':
+        this.panel.mesh.visible = false;
+        if (app.state === 'playing' && app.mode === 'net') net.cancel();
+        app.state = 'menu'; // training tears down unsaved; bouts end here
+        this.applyState();
+        break;
+      case 'rematch':
+        if (!match.rematchMine) {
+          match.rematchMine = true;
+          net.send({ k: 'rematch' });
+        }
+        break;
     }
   }
 
   /** In front of you, off to the side, waist height — out of punching room. */
-  private placeForfeit(): void {
+  private placePanel(): void {
     this.world.camera.getWorldPosition(_head);
     this.world.camera.getWorldDirection(_fwd);
     _fwd.y = 0;
@@ -166,12 +240,12 @@ export class MenuSystem extends createSystem({}) {
     // right = forward × up
     const rx = -_fwd.z;
     const rz = _fwd.x;
-    this.forfeit.mesh.position.set(
+    this.panel.mesh.position.set(
       _head.x + _fwd.x * 0.55 + rx * 0.38,
       0.95,
       _head.z + _fwd.z * 0.55 + rz * 0.38,
     );
-    this.forfeit.mesh.lookAt(_head);
+    this.panel.mesh.lookAt(_head);
   }
 
   // --- controller pointers -------------------------------------------------
@@ -229,11 +303,11 @@ export class MenuSystem extends createSystem({}) {
     const inLobby = app.state === 'menu' || app.state === 'queueing';
     this.menu.setVisible(inLobby);
 
-    // The forfeit panel only lives inside a training run.
-    if (app.state !== 'training' && this.forfeit) {
-      this.forfeit.mesh.visible = false;
-      this.forfeitHover = false;
-      this.forfeit.redraw(false);
+    // The action panel only lives inside training runs and bouts.
+    if (inLobby && this.panel) {
+      this.panel.mesh.visible = false;
+      this.panelKey = '';
+      this.wasMatchOver = false;
     }
 
     // The title banner shows only in the lobby.

@@ -185,24 +185,37 @@ function drawInfo(ctx: CanvasRenderingContext2D): void {
   );
 }
 
-// --- training forfeit panel --------------------------------------------------
+// --- the A-button action panel -----------------------------------------------
 
-export interface ForfeitPanel {
+export interface ActionButton {
+  id: string;
+  label: string;
+  accent: string;
+}
+
+export interface ActionPanel {
   mesh: Mesh;
-  redraw: (hover: boolean) => void;
-  /** True if the hit UV lands on the FORFEIT button. */
-  hitTest: (u: number, v: number) => boolean;
+  /** Redraw with the given content; the layout is remembered for hitTest. */
+  redraw: (
+    title: string,
+    buttons: ActionButton[],
+    hint: string,
+    hoverId: string | null,
+    status?: string,
+  ) => void;
+  /** Map a hit UV to the id of the button under it, or null. */
+  hitTest: (u: number, v: number) => string | null;
 }
 
 const FW = 512;
-const FH = 288;
+const FH = 384;
 
 /**
- * The small in-training panel summoned with the A button: a single FORFEIT
- * plate to bail out of a run early. Starts hidden; MenuSystem places it in
- * front of you at waist height and toggles it.
+ * The small waist-height panel summoned with the A button: FORFEIT mid-
+ * training, REMATCH / RETURN at the end of a bout. Starts hidden; MenuSystem
+ * owns placement, toggling and what the buttons do.
  */
-export function createForfeitPanel(scene: Scene): ForfeitPanel {
+export function createActionPanel(scene: Scene): ActionPanel {
   const canvas = document.createElement('canvas');
   canvas.width = FW;
   canvas.height = FH;
@@ -212,43 +225,60 @@ export function createForfeitPanel(scene: Scene): ForfeitPanel {
   const texture = new CanvasTexture(canvas);
   texture.minFilter = LinearFilter;
   const mesh = new Mesh(
-    new PlaneGeometry(0.46, 0.26),
+    new PlaneGeometry(0.46, 0.345),
     new MeshBasicMaterial({ map: texture, transparent: true }),
   );
-  mesh.name = 'forfeit-panel';
+  mesh.name = 'action-panel';
   mesh.visible = false;
   scene.add(mesh);
 
-  const redraw = (hover: boolean): void => {
-    ctx.clearRect(0, 0, FW, FH);
-    plate(ctx, 8, 8, FW - 16, FH - 16, {
-      cut: 22,
-      fill: UI.ink,
-      stroke: hover ? UI.danger : UI.steel,
-    });
-    hazardStrip(ctx, 36, 30, 48, 14, UI.amber);
-    ctx.textAlign = 'left';
-    ctx.font = stencilFont(30);
-    ctx.fillStyle = UI.amberSoft;
-    ctx.fillText('AIM TRAINING', 98, 38);
-    buttonPlate(ctx, 64, 84, FW - 128, 110, 'FORFEIT', UI.danger, hover);
-    ctx.textAlign = 'center';
-    ctx.font = '600 24px system-ui, sans-serif';
-    ctx.fillStyle = UI.textDim;
-    ctx.fillText('press A to dismiss', FW / 2, 240);
-  };
-  redraw(false);
-  texture.needsUpdate = true;
+  let zones: Array<{ id: string; y0: number; y1: number }> = [];
 
   return {
     mesh,
-    redraw: (hover) => {
-      redraw(hover);
+    redraw: (title, buttons, hint, hoverId, status = '') => {
+      ctx.clearRect(0, 0, FW, FH);
+      plate(ctx, 8, 8, FW - 16, FH - 16, {
+        cut: 22,
+        fill: UI.ink,
+        stroke: hoverId ? UI.amberSoft : UI.steel,
+      });
+      hazardStrip(ctx, 36, 30, 48, 14, UI.amber);
+      ctx.textAlign = 'left';
+      ctx.font = stencilFont(30);
+      ctx.fillStyle = UI.amberSoft;
+      ctx.fillText(title, 98, 38);
+      ctx.strokeStyle = UI.steelDim;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(36, 64);
+      ctx.lineTo(FW - 36, 64);
+      ctx.stroke();
+
+      zones = [];
+      let y = 84;
+      for (const b of buttons) {
+        buttonPlate(ctx, 64, y, FW - 128, 84, b.label, b.accent, hoverId === b.id);
+        zones.push({ id: b.id, y0: y - 6, y1: y + 90 });
+        y += 102;
+      }
+
+      ctx.textAlign = 'center';
+      ctx.font = '600 24px system-ui, sans-serif';
+      if (status) {
+        ctx.fillStyle = UI.coolBright;
+        ctx.fillText(status, FW / 2, y + 12);
+      }
+      ctx.fillStyle = UI.textDim;
+      ctx.fillText(hint, FW / 2, FH - 34);
       texture.needsUpdate = true;
     },
     hitTest: (_u, v) => {
       const y = (1 - v) * FH;
-      return y >= 76 && y <= 202;
+      for (const z of zones) {
+        if (y >= z.y0 && y <= z.y1) return z.id;
+      }
+      return null;
     },
   };
 }

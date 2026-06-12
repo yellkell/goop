@@ -90,6 +90,13 @@ export class GameStateSystem extends createSystem({
       if (oHp <= 0) this.endRound(true, 'KNOCKOUT');
       else if (pHp <= 0) this.endRound(false, 'KNOCKED OUT');
       else if (match.roundTimer <= 0) this.endRound(pHp >= oHp, 'TIME');
+    } else if (match.phase === 'matchOver' && app.mode === 'net') {
+      // Net bouts HOLD at FIGHT OVER — the panel decides. Both boxers
+      // pressing REMATCH restarts the match; RETURN (or the rival leaving)
+      // tears the bout down via MenuSystem / onClosed instead.
+      if (match.rematchMine && match.rematchTheirs) {
+        this.startMatch(c);
+      }
     } else {
       match.resultTimer -= delta;
       if (match.resultTimer <= 0) {
@@ -101,8 +108,7 @@ export class GameStateSystem extends createSystem({
             this.beginRound(c);
           }
         } else {
-          // matchOver → back to the lobby.
-          if (app.mode === 'net') net.cancel();
+          // matchOver (bot bouts) → back to the lobby.
           app.state = 'menu';
           this.wasPlaying = false;
         }
@@ -145,6 +151,8 @@ export class GameStateSystem extends createSystem({
     match.myScore = 0;
     match.oppScore = 0;
     match.round = 1;
+    match.rematchMine = false;
+    match.rematchTheirs = false;
     training.active = false;
     if (app.mode === 'bot' || app.side === 0) this.beginRound(c);
   }

@@ -19,8 +19,12 @@ import { teamColor } from '../config.js';
 
 const SHARD_GEO = new IcosahedronGeometry(0.025, 0);
 
-/** A fiery burst where a ball lands, is parried, or burns out. */
-export function spawnFireImpact(world: World, pos: Vector3, team: number): void {
+/**
+ * A fiery burst where a ball lands, is parried, or burns out. `scale` grows
+ * the whole event (flash, ring, sparks, shard count) — body hits on the
+ * player use ~1.7 so taking a hit FEELS like taking a hit.
+ */
+export function spawnFireImpact(world: World, pos: Vector3, team: number, scale = 1): void {
   const color = teamColor(team);
   const cool = team === 1;
 
@@ -28,20 +32,20 @@ export function spawnFireImpact(world: World, pos: Vector3, team: number): void 
   const flash = glowSprite(color, 0.5);
   const fe = world.createTransformEntity(flash);
   fe.object3D!.position.copy(pos);
-  fe.addComponent(Effect, { kind: EffectKind.Flash, life: 0.16, baseScale: 0.5 });
+  fe.addComponent(Effect, { kind: EffectKind.Flash, life: 0.16, baseScale: 0.5 * scale });
 
   // Expanding shockwave.
   const ring = glowSprite(0xfff3cf, 0.3, 0.8);
   const re = world.createTransformEntity(ring);
   re.object3D!.position.copy(pos);
-  re.addComponent(Effect, { kind: EffectKind.Ring, life: 0.35, baseScale: 0.3 });
+  re.addComponent(Effect, { kind: EffectKind.Ring, life: 0.35, baseScale: 0.3 * scale });
 
   // Spark spray from the shared ember pool.
-  emberBurst(pos, 16, cool);
+  emberBurst(pos, Math.round(16 * scale), cool);
 
   // A few glowing ember chunks that pop and tumble outward.
   const tint = new Color(color);
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < Math.round(6 * scale); i++) {
     const mat = new MeshStandardMaterial({
       color: 0x1a1208,
       emissive: tint,

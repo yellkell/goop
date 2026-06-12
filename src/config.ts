@@ -113,6 +113,13 @@ export const BODY_IK = {
   hipHeight: 0.95,
   /** Fraction along hips→head where the chest sphere sits. */
   chestAlong: 0.55,
+  /**
+   * How far the spine hangs BEHIND the head along its yaw — your face sits
+   * forward of your spine. Looking down you see the front of your chest,
+   * not the base of your own neck, and the torso stops blocking your view
+   * of the ball at your fists.
+   */
+  spineSetBack: 0.11,
   headRadius: 0.13,
   chestRadius: 0.2,
   pelvisRadius: 0.17,
