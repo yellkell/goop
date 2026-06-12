@@ -113,3 +113,60 @@ server/index.mjs       the relay
 Lineage: forked gameplay skeleton from `yellkell/glasston` (Blaston-style
 play space, IK body hitboxes, match flow) and the fire rendering from
 `yellkell/flamethrowerxr`, rebuilt into one game.
+
+## Iron Balls Pub (pub social scene — `/pub.html`)
+
+A separate 10–12 player social hangout that ships alongside the arena: an
+English pub done in the same gritty diamond-plate / gunmetal / hazard-amber
+language, with the SAME iron-boxer avatars (each punter gets their own accent
+tint). Low steel ceiling with I-beams, a bar with taps, booths and stools,
+and three things to actually do:
+
+- **The Landlord** — UNIT-86, the robot barkeep, works the aisle behind the
+  bar non-stop: wiping the counter, pulling pints at the taps, polishing
+  glasses, and glancing at whoever's nearest. You can't interact with him —
+  he's pure theatre — except that every ~25 s he trundles a FRESH GLASS out
+  from the back and sets it on the bar, restocking the house up to 15. The
+  restock is server-announced so the new pint lands at the same moment for
+  everyone (and survives for late joiners).
+- **Pints** — 8 glasses on the bar at opening, up to 15 once the Landlord
+  has done his rounds. Grab, drink, stack them, or throw one
+  across the room; everything is networked with single-owner simulation, so
+  every punter sees the same glass in the same place — and a thrown glass
+  (or dart) can be CAUGHT mid-air by anyone, transferring ownership.
+- **House darts** — communal board (ported from the old vrstreet project and
+  fixed: the meshes now carry fat invisible grab proxies so they are actually
+  grabbable), regulation scoring off the board texture's UVs, score popups,
+  and a server-owned leaderboard.
+- **IRON SNAKE** — an arcade cabinet in the corner. One player at a time
+  (trigger to claim, then steer with the cabinet's own joystick — put your
+  hand on the red ball and push; arrows/Enter on desktop), everyone sees the
+  screen live, and the high score is persisted by the server in
+  `server/pub-data.json`.
+- **The fight hall** — through the door in the west wall: the full FIRE
+  FIGHT duel on display. Both arena platforms (ember vs blue corners), claim
+  consoles (pull the trigger at one to take that platform — you're planted
+  on it facing your opponent), and when both corners fill the server counts
+  down and the bout runs on the arena's own fireball mechanics: orbit on
+  trigger, punch to throw, trigger to recall, parries, victim-ruled hits,
+  100 hp at 20 a hit. Everyone in the social space can gather round the
+  hazard line and watch (both fighters stream their fireballs live) or
+  wander back to the pub. The invisible cage is pulled in to FIVE yards from
+  the platform rims (the arena uses ten) so the duel fits indoors. Leaving
+  your platform mid-bout forfeits.
+
+Movement is **teleport only**: deflect either thumbstick and a ballistic arc
+curves from that controller to the floor, ending in an octagonal marker with
+an arrow inside it. Move the controller to move the landing spot, roll the
+thumbstick to spin the arrow — that's the way you'll be facing when you
+arrive — and release to go. Landing is restricted to real floor (pub,
+doorway, fight hall); the marker burns red anywhere else.
+
+```
+npm run dev          # open http://localhost:5173/pub.html
+npm run server:pub   # the pub room server on :8788 (?server=wss://… to point elsewhere)
+```
+
+`?name=CALLSIGN` sets your name tag. The main game is untouched — the pub is
+its own entry point (`src/pub/`), its own server, its own protocol
+(`src/pub/protocol.ts`).
