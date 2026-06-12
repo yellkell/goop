@@ -6,6 +6,11 @@ node_modules/
 dist/
 *.tsbuildinfo
 
+# Firebase
+.firebase/
+firebase-debug.log
+.firebase-debug.log
+
 # Environment files
 .env
 .env.local
