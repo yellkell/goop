@@ -26,7 +26,7 @@ import {
 } from 'three';
 import { FIREBALL } from '../config.js';
 
-/** 3D simplex noise (Ken Perlin's optimised variant) + 5-octave fbm. */
+/** 3D simplex noise (Ken Perlin's optimised variant) + 3-octave fbm. */
 const NOISE_GLSL = /* glsl */ `
   vec3 mod289(vec3 x){return x-floor(x*(1.0/289.0))*289.0;}
   vec4 mod289(vec4 x){return x-floor(x*(1.0/289.0))*289.0;}
@@ -52,7 +52,7 @@ const NOISE_GLSL = /* glsl */ `
     vec4 m=max(0.6-vec4(dot(x0,x0),dot(x1,x1),dot(x2,x2),dot(x3,x3)),0.0); m=m*m;
     return 42.0*dot(m*m,vec4(dot(p0,x0),dot(p1,x1),dot(p2,x2),dot(p3,x3)));
   }
-  float fbm(vec3 p){ float a=0.0,w=0.5; for(int i=0;i<5;i++){ a+=w*snoise(p); p*=2.02; w*=0.5;} return a; }
+  float fbm(vec3 p){ float a=0.0,w=0.5; for(int i=0;i<3;i++){ a+=w*snoise(p); p*=2.02; w*=0.5;} return a; }
 `;
 
 /** Molten core: noise-driven heat with a 4-stop ramp, orange↔blue by uCool. */
@@ -194,6 +194,10 @@ class ParticlePool {
   private readonly size: Float32Array;
   private readonly grav: Float32Array;
   private cursor = 0;
+  /** Live-particle count: when 0 the whole pool skips CPU + GPU work. */
+  private alive = 0;
+  /** Colour/size only change at spawn — upload them only when they did. */
+  private staticDirty = false;
 
   constructor(private readonly max: number, opts: PoolOpts = {}) {
     this.pos = new Float32Array(max * 3);
@@ -245,6 +249,7 @@ class ParticlePool {
   ): void {
     const i = this.cursor;
     this.cursor = (this.cursor + 1) % this.max;
+    if (this.life[i] <= 0) this.alive++;
     this.pos[i * 3] = p.x; this.pos[i * 3 + 1] = p.y; this.pos[i * 3 + 2] = p.z;
     this.vel[i * 3] = vx; this.vel[i * 3 + 1] = vy; this.vel[i * 3 + 2] = vz;
     this.col[i * 3] = r; this.col[i * 3 + 1] = g; this.col[i * 3 + 2] = b;
@@ -252,10 +257,13 @@ class ParticlePool {
     this.maxLife[i] = life;
     this.size[i] = size;
     this.grav[i] = grav;
+    this.staticDirty = true;
   }
 
   update(dt: number): void {
+    if (this.alive === 0) return; // idle pool: no integration, no uploads
     const drag = Math.max(0, 1 - 0.5 * dt);
+    let alive = 0;
     for (let i = 0; i < this.max; i++) {
       if (this.life[i] <= 0) continue;
       this.vel[i * 3 + 1] -= this.grav[i] * dt;
@@ -264,11 +272,16 @@ class ParticlePool {
       this.pos[i * 3 + 1] += this.vel[i * 3 + 1] * dt;
       this.pos[i * 3 + 2] += this.vel[i * 3 + 2] * dt;
       this.life[i] = Math.max(0, this.life[i] - dt / this.maxLife[i]);
+      if (this.life[i] > 0) alive++;
     }
+    this.alive = alive;
     this.geo.attributes.position.needsUpdate = true;
     this.geo.attributes.aLife.needsUpdate = true;
-    this.geo.attributes.aColor.needsUpdate = true;
-    this.geo.attributes.aSize.needsUpdate = true;
+    if (this.staticDirty) {
+      this.geo.attributes.aColor.needsUpdate = true;
+      this.geo.attributes.aSize.needsUpdate = true;
+      this.staticDirty = false;
+    }
   }
 }
 
@@ -280,7 +293,10 @@ const _c = new Color();
 export function initFirePools(scene: Scene): void {
   if (emberPool) return;
   emberPool = new ParticlePool(1024);
-  trailPool = new ParticlePool(2048, { maxPx: 800, lifeExp: 2.2 });
+  // maxPx caps the worst case: a trail slug right against your face would
+  // otherwise become a near-fullscreen additive sprite × dozens overlapping
+  // — pure fill-rate murder in stereo. 320 px only bites inside ~0.25 m.
+  trailPool = new ParticlePool(2048, { maxPx: 320, lifeExp: 2.2 });
   scene.add(emberPool.points, trailPool.points);
 }
 

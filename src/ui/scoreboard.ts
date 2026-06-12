@@ -31,6 +31,13 @@ interface Board {
   mesh: Mesh;
   ctx: CanvasRenderingContext2D;
   tex: CanvasTexture;
+  /**
+   * Content fingerprint of the last draw. Boards are asked to refresh every
+   * frame but a canvas redraw + GPU texture upload is the single most
+   * expensive UI op we have — so each draw skips when nothing changed
+   * (the timer ticks once a second; health moves only on hits).
+   */
+  key?: string;
 }
 
 export interface Scoreboard {
@@ -120,8 +127,9 @@ export function createScoreboard(scene: Scene): Scoreboard {
   right.mesh.position.set(1.85, 1.95, -ARENA_GAP * 0.52);
   right.mesh.rotation.y = -0.62;
 
-  // Centre headline strip (ROUND WON, KNOCKOUT…), above the gap.
-  const centre = makeBoard(1.9, 0.5);
+  // Centre headline strip (ROUND WON, KNOCKOUT…), above the gap. Sized to
+  // the canvas aspect so the stencil type renders undistorted.
+  const centre = makeBoard(2.2, 1.05);
   centre.mesh.position.set(0, 2.45, -ARENA_GAP * 0.55);
 
   group.add(left.mesh, right.mesh, centre.mesh);
@@ -136,6 +144,9 @@ export function createScoreboard(scene: Scene): Scoreboard {
     pips: number,
     timer: string,
   ): void => {
+    const key = `s|${name}|${hpFrac}|${hpText}|${pips}|${timer}`;
+    if (board.key === key) return;
+    board.key = key;
     const { ctx, tex } = board;
     header(ctx, name, neon, timer);
     // The health readout gets the only solid-ish backing on the board.
@@ -150,23 +161,41 @@ export function createScoreboard(scene: Scene): Scoreboard {
   };
 
   const drawCentre = (message: string, sub: string): void => {
+    const key = `c|${message}|${sub}`;
+    if (centre.key === key) return;
+    centre.key = key;
     const { ctx, tex } = centre;
     ctx.clearRect(0, 0, W, H);
     if (message) {
-      plate(ctx, 60, 104, W - 120, 212, { cut: 30, fill: UI.inkDeep, stroke: UI.amberSoft });
-      hazardStrip(ctx, 78, 118, 70, 18, UI.amber);
-      hazardStrip(ctx, W - 148, 118, 70, 18, UI.amber);
+      // No backing plate — just the verdict, molten stencil type floating
+      // over the gap, shrunk until it fits whatever the message is.
       ctx.textAlign = 'center';
-      ctx.font = stencilFont(86);
-      const grad = ctx.createLinearGradient(0, 130, 0, 280);
+      let px = 120;
+      ctx.font = stencilFont(px);
+      while (px > 44 && ctx.measureText(message).width > W - 64) {
+        px -= 4;
+        ctx.font = stencilFont(px);
+      }
+      const midY = sub ? 188 : 216;
+      const grad = ctx.createLinearGradient(0, midY - px * 0.55, 0, midY + px * 0.55);
       grad.addColorStop(0, '#fff3cf');
       grad.addColorStop(1, UI.ember);
+      // A dark outline then an ember halo keep it readable over passthrough.
+      ctx.lineWidth = Math.max(6, px * 0.09);
+      ctx.strokeStyle = 'rgba(10,11,14,0.85)';
+      ctx.strokeText(message, W / 2, midY);
       ctx.fillStyle = grad;
-      ctx.fillText(message, W / 2, 200);
+      ctx.shadowColor = 'rgba(255,122,24,0.9)';
+      ctx.shadowBlur = 26;
+      ctx.fillText(message, W / 2, midY);
+      ctx.shadowBlur = 0;
       if (sub) {
-        ctx.font = '700 42px system-ui, sans-serif';
+        ctx.font = '700 44px system-ui, sans-serif';
+        ctx.lineWidth = 6;
+        ctx.strokeStyle = 'rgba(10,11,14,0.8)';
+        ctx.strokeText(sub, W / 2, 296);
         ctx.fillStyle = UI.textDim;
-        ctx.fillText(sub, W / 2, 274);
+        ctx.fillText(sub, W / 2, 296);
       }
     }
     tex.needsUpdate = true;
@@ -183,19 +212,24 @@ export function createScoreboard(scene: Scene): Scoreboard {
     updateTraining(hp, hpMax) {
       const timer = fmtTime(training.timeLeft);
       // Left board: score + streak.
-      const { ctx, tex } = left;
-      header(ctx, 'AIM TRAINING', UI.emberBright, timer);
-      ctx.textAlign = 'left';
-      ctx.font = stencilFont(104);
-      ctx.fillStyle = UI.text;
-      ctx.fillText(String(training.score), 52, 200);
-      ctx.font = '700 42px system-ui, sans-serif';
-      ctx.fillStyle = UI.amberSoft;
-      ctx.fillText(`streak x${training.streak}`, 52, 320);
-      ctx.textAlign = 'right';
-      ctx.fillStyle = UI.textDim;
-      ctx.fillText(`best ${Math.max(app.stats.trainingBest, training.score)}`, W - 52, 320);
-      tex.needsUpdate = true;
+      const best = Math.max(app.stats.trainingBest, training.score);
+      const key = `t|${training.score}|${training.streak}|${best}|${timer}`;
+      if (left.key !== key) {
+        left.key = key;
+        const { ctx, tex } = left;
+        header(ctx, 'AIM TRAINING', UI.emberBright, timer);
+        ctx.textAlign = 'left';
+        ctx.font = stencilFont(104);
+        ctx.fillStyle = UI.text;
+        ctx.fillText(String(training.score), 52, 200);
+        ctx.font = '700 42px system-ui, sans-serif';
+        ctx.fillStyle = UI.amberSoft;
+        ctx.fillText(`streak x${training.streak}`, 52, 320);
+        ctx.textAlign = 'right';
+        ctx.fillStyle = UI.textDim;
+        ctx.fillText(`best ${best}`, W - 52, 320);
+        tex.needsUpdate = true;
+      }
       // Right board: dodge readout (health only matters with shoot-back on).
       drawSide(
         right, 'DODGE', UI.cool,
