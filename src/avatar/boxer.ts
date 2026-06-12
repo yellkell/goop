@@ -38,31 +38,38 @@ export interface BoxerRig {
 }
 
 function chassisMat(emissive = 0, intensity = 0): MeshStandardMaterial {
-  return new MeshStandardMaterial({
-    color: PALETTE.gunmetal,
+  // Near-black mirror steel: the RoomEnvironment reflections do the reading.
+  const m = new MeshStandardMaterial({
+    color: 0x1c1f25,
     emissive,
     emissiveIntensity: intensity,
-    metalness: 0.92,
-    roughness: 0.3,
+    metalness: 0.96,
+    roughness: 0.2,
   });
+  m.userData.role = 'chassis'; // skin recolour target (avatar/skins.ts)
+  return m;
 }
 
 function darkMat(): MeshStandardMaterial {
-  return new MeshStandardMaterial({
-    color: PALETTE.gunmetalDark,
-    metalness: 0.85,
-    roughness: 0.45,
+  const m = new MeshStandardMaterial({
+    color: 0x121419,
+    metalness: 0.9,
+    roughness: 0.3,
   });
+  m.userData.role = 'trim';
+  return m;
 }
 
 function glowMat(color: number, intensity = 1.4): MeshStandardMaterial {
-  return new MeshStandardMaterial({
+  const m = new MeshStandardMaterial({
     color,
     emissive: color,
     emissiveIntensity: intensity,
     metalness: 0.2,
     roughness: 0.3,
   });
+  m.userData.role = 'glow';
+  return m;
 }
 
 /**
@@ -194,6 +201,45 @@ export function buildBoxer(team: number): BoxerRig {
   fin.position.y = BODY_IK.headRadius * 1.05;
   head.add(fin);
 
+  // --- Per-skin head ornaments (hidden; applyAvatarSkin shows ONE set) ---
+  const tagged = (g: Group, id: string): Group => {
+    g.userData.skinTag = id;
+    g.visible = false;
+    return g;
+  };
+
+  // COBALT: twin sensor antennas with glowing beacon tips — the tech build.
+  const antennas = tagged(new Group(), 'cobalt');
+  for (const side of [-1, 1]) {
+    const mast = new Mesh(new CylinderGeometry(0.004, 0.006, 0.1, 6), darkMat());
+    mast.position.set(side * 0.055, BODY_IK.headRadius * 1.72, 0.02);
+    mast.rotation.z = side * -0.25;
+    antennas.add(mast);
+    const tip = new Mesh(new BoxGeometry(0.014, 0.014, 0.014), glowMat(accent, 1.6));
+    tip.position.set(side * 0.068, BODY_IK.headRadius * 2.05, 0.02);
+    antennas.add(tip);
+  }
+  head.add(antennas);
+
+  // CRIMSON: forward-swept brawler horns off the helm sides.
+  const horns = tagged(new Group(), 'crimson');
+  for (const side of [-1, 1]) {
+    const horn = new Mesh(new CylinderGeometry(0.002, 0.02, 0.11, 6), chassisMat(accent, 0.05));
+    horn.position.set(side * BODY_IK.headRadius * 0.92, BODY_IK.headRadius * 0.6, -0.02);
+    horn.rotation.z = side * -0.95;
+    horn.rotation.x = -0.4; // swept toward the opponent
+    horns.add(horn);
+  }
+  head.add(horns);
+
+  // VALKYRIE: a swept-back glowing crest plume.
+  const plume = tagged(new Group(), 'valkyrie');
+  const blade = new Mesh(new BoxGeometry(0.012, 0.18, 0.055), glowMat(accent, 0.8));
+  blade.position.set(0, BODY_IK.headRadius * 1.55, 0.06);
+  blade.rotation.x = 0.6;
+  plume.add(blade);
+  head.add(plume);
+
   // --- Chest assembly: shoulders are the widest point of the machine ---
   const chest = new Group();
   chest.name = 'opponent-chest';
@@ -226,6 +272,48 @@ export function buildBoxer(team: number): BoxerRig {
   const core = new Mesh(new BoxGeometry(0.06, 0.11, 0.02), glowMat(accent, 1.3));
   core.position.set(0, -0.05, -0.135);
   chest.add(core);
+
+  // --- Per-skin chest ornaments (hidden; applyAvatarSkin shows ONE set) ---
+  const chestTag = (g: Group, id: string): Group => {
+    g.userData.skinTag = id;
+    g.visible = false;
+    return g;
+  };
+
+  // COBALT: shoulder sensor mast + a glowing data stripe across the yoke.
+  const sensor = chestTag(new Group(), 'cobalt');
+  const mast = new Mesh(new CylinderGeometry(0.005, 0.007, 0.16, 6), darkMat());
+  mast.position.set(0.3, 0.23, 0.02);
+  sensor.add(mast);
+  const beacon = new Mesh(new BoxGeometry(0.02, 0.02, 0.02), glowMat(accent, 1.6));
+  beacon.position.set(0.3, 0.32, 0.02);
+  sensor.add(beacon);
+  const stripe = new Mesh(new BoxGeometry(0.4, 0.016, 0.205), glowMat(accent, 0.7));
+  stripe.position.y = 0.145;
+  sensor.add(stripe);
+  chest.add(sensor);
+
+  // CRIMSON: rows of pauldron spikes — pure pit-fighter menace.
+  const spikes = chestTag(new Group(), 'crimson');
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 3; i++) {
+      const spike = new Mesh(new CylinderGeometry(0.001, 0.015, 0.075, 6), darkMat());
+      spike.position.set(side * (0.2 + i * 0.07), 0.21 - i * 0.012, 0);
+      spike.rotation.z = side * -(0.15 + i * 0.2);
+      spikes.add(spike);
+    }
+  }
+  chest.add(spikes);
+
+  // VALKYRIE: angled glowing winglets off the pauldrons.
+  const wings = chestTag(new Group(), 'valkyrie');
+  for (const side of [-1, 1]) {
+    const wing = new Mesh(new BoxGeometry(0.17, 0.014, 0.07), glowMat(accent, 0.6));
+    wing.position.set(side * 0.37, 0.17, 0.02);
+    wing.rotation.z = side * 0.5;
+    wings.add(wing);
+  }
+  chest.add(wings);
 
   // --- Pelvis: a small armoured block, the narrow end of the wedge ---
   const pelvis = new Group();

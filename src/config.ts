@@ -16,6 +16,15 @@ import type { Vector2Tuple } from 'three';
 export const GAME_TITLE = 'FIRE FIGHT';
 
 /**
+ * Where the IRON BALLS PUB social area lives. It builds side by side with
+ * the arena in this same app (see vite.config.ts rollup inputs: pub.html),
+ * so the lobby button is one page hop away. Override with ?pub=<url>.
+ */
+export function pubUrl(): string {
+  return new URLSearchParams(location.search).get('pub') ?? 'pub.html';
+}
+
+/**
  * The player's octagonal dodge box, same footprint as Blaston's play-space
  * diagram: overall ~1.72 m wide x 1.5 m deep, with a 0.75 m straight
  * front/back edge and ~0.6 m chamfered corners. Vertices are listed clockwise

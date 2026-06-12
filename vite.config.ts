@@ -18,5 +18,12 @@ export default defineConfig({
   },
   build: {
     target: 'esnext',
+    rollupOptions: {
+      input: {
+        // The arena (main game) and the pub social scene build side by side.
+        main: 'index.html',
+        pub: 'pub.html',
+      },
+    },
   },
 });

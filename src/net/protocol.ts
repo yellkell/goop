@@ -35,6 +35,10 @@ export type PeerMessage =
   | { k: 'clash'; mine: 0 | 1; yours: 0 | 1 }
   /** I want a rematch (sent from the FIGHT OVER panel; both sides → restart). */
   | { k: 'rematch' }
+  /** Who I am, once per bout: leaderboard callsign + hidden ELO (so the
+   *  winner can weight their score gain by rival quality) + my skin picks
+   *  so you see me dressed the way I chose. */
+  | { k: 'iam'; name: string; elo: number; av?: string; pf?: string }
   /** Host → guest match-state echo. Scores are in the HOST's perspective. */
   | {
       k: 'state';

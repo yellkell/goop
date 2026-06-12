@@ -13,11 +13,13 @@
 import { createSystem, InputComponent } from '@iwsdk/core';
 import {
   BufferGeometry,
+  Group,
   Line,
   LineBasicMaterial,
   Mesh,
   MeshBasicMaterial,
   Object3D,
+  Quaternion,
   Raycaster,
   SphereGeometry,
   Vector3,
@@ -33,9 +35,22 @@ import {
   type MenuAction,
   type PanelId,
 } from '../menu/menu.js';
+import { createNameKeyboard, type NameKeyboard } from '../menu/keyboard.js';
+import { customization, setAvatarSkin, setPlatformSkin } from '../menu/customization.js';
+import { buildBoxer, solveTorso, type BoxerRig } from '../avatar/boxer.js';
+import {
+  AVATAR_SKINS,
+  PLATFORM_SKINS,
+  applyAvatarSkin,
+  applyPlatformSkin,
+  avatarSkin,
+  platformSkin,
+} from '../avatar/skins.js';
 import { match } from '../combat/matchState.js';
 import { UI } from '../ui/industrial.js';
 import { net } from '../net/client.js';
+import { hasCustomName, leaderboard, myStats, refreshLeaderboard, setPlayerName } from '../net/leaderboard.js';
+import { pubUrl } from '../config.js';
 import * as sfx from '../audio/sfx.js';
 
 const _origin = new Vector3();
@@ -59,10 +74,16 @@ export class MenuSystem extends createSystem({}) {
   private panel!: ActionPanel;
   private panelKey = '';
   private wasMatchOver = false;
+  private keyboard!: NameKeyboard;
+  /** The action waiting behind the name keyboard. */
+  private kbPending: MenuAction | null = null;
+  private mirror?: { group: Group; rig: BoxerRig };
+  private skinVersion = 0;
 
   init(): void {
     this.menu = createMenu(this.scene);
     this.panel = createActionPanel(this.scene);
+    this.keyboard = createNameKeyboard(this.scene);
     this.pointers.left = this.makePointer();
     this.pointers.right = this.makePointer();
     this.applyState();
@@ -70,15 +91,29 @@ export class MenuSystem extends createSystem({}) {
 
   update(delta: number): void {
     if (app.state !== this.lastState) this.applyState();
+    this.applyOwnSkins();
 
     if (app.state === 'training' || app.state === 'playing') {
       this.updateActionPanel();
       return;
     }
 
+    // The name keyboard owns the pointers while it's up.
+    if (this.keyboard.isOpen()) {
+      this.updateKeyboard();
+      return;
+    }
+
+    // Customisation is modal: the arc swaps out for the panel + mirror.
+    for (const p of this.menu.panels) {
+      if (p.id === 'custom') p.mesh.visible = customization.open;
+      else if (p.id !== 'board') p.mesh.visible = !customization.open;
+    }
+    if (this.mirror) this.mirror.group.visible = customization.open;
+
     // Lobby / queueing: hover + click the panels.
     let hover: PanelId | null = null;
-    const meshes = this.menu.panels.map((p) => p.mesh);
+    const meshes = this.menu.panels.filter((p) => p.mesh.visible).map((p) => p.mesh);
     for (const hand of ['left', 'right'] as const) {
       const hit = this.updatePointer(hand, meshes);
       if (!hit) continue;
@@ -106,6 +141,15 @@ export class MenuSystem extends createSystem({}) {
   private run(action: MenuAction): void {
     sfx.ensureAudio();
     sfx.uiClick();
+    // The first leaderboard-relevant act (a training run or a 1v1 queue)
+    // claims a callsign: the keyboard pops once, prefilled with the auto
+    // name, and the pending action resumes after OK. Saved forever after,
+    // shared by both boards.
+    if ((action === 'start-training' || action === 'quick-match') && !hasCustomName()) {
+      this.kbPending = action;
+      this.keyboard.open(myStats().name);
+      return;
+    }
     switch (action) {
       case 'start-training':
         app.state = 'training';
@@ -126,8 +170,106 @@ export class MenuSystem extends createSystem({}) {
         app.mode = 'bot';
         app.state = 'playing';
         break;
+      case 'lb-duel':
+        leaderboard.tab = 'duel';
+        break;
+      case 'lb-training':
+        leaderboard.tab = 'training';
+        break;
+      case 'open-pub':
+        // The social area ships from its own branch as its own deployment.
+        window.location.assign(pubUrl());
+        break;
+      case 'open-custom':
+        customization.open = true;
+        this.ensureMirror();
+        break;
+      case 'custom-close':
+        customization.open = false;
+        break;
+      case 'av-0':
+      case 'av-1':
+      case 'av-2':
+        setAvatarSkin(AVATAR_SKINS[Number(action.slice(3))].id);
+        break;
+      case 'pf-0':
+      case 'pf-1':
+      case 'pf-2':
+        setPlatformSkin(PLATFORM_SKINS[Number(action.slice(3))].id);
+        break;
     }
     this.applyState();
+  }
+
+  // --- customisation: the avatar mirror + live skin application ---------------
+
+  /**
+   * The "mirror": your full boxer rig standing beside the customisation
+   * panel in a relaxed guard, re-skinned live as you click chips — so you
+   * see exactly how you'll look across the gap.
+   */
+  private ensureMirror(): void {
+    if (this.mirror) return;
+    const rig = buildBoxer(0);
+    const group = new Group();
+    group.name = 'mirror-avatar';
+    for (const piece of rig.all) {
+      piece.visible = true;
+      group.add(piece);
+    }
+    // Static display pose: solve the torso once under a standing head, fists
+    // up in a loose guard. Group-local coords, so place/turn the group only.
+    solveTorso(rig, new Vector3(0, 1.5, 0), new Quaternion(), 0, 0, _dir, _end);
+    rig.gloves[0].position.set(-0.22, 1.12, -0.28);
+    rig.gloves[1].position.set(0.22, 1.12, -0.28);
+    group.position.set(-0.75, 0, -2.0);
+    // Face the player standing at the rig origin (default forward is -Z).
+    group.rotation.y = Math.PI + Math.atan2(0 - group.position.x, 0 - group.position.z);
+    this.scene.add(group);
+    this.mirror = { group, rig };
+    this.skinVersion = 0; // force a re-apply so the mirror dresses correctly
+  }
+
+  /**
+   * Re-skin everything that's YOURS whenever the picks change: the mirror,
+   * your torso, both gloves and your platform. Visual only — PlayerBodyPart
+   * hitboxes never move.
+   */
+  private applyOwnSkins(): void {
+    if (customization.version === this.skinVersion) return;
+    this.skinVersion = customization.version;
+    const av = avatarSkin(customization.avatar);
+    const pf = platformSkin(customization.platform);
+    for (const name of ['player-torso', 'player-glove-left', 'player-glove-right', 'mirror-avatar']) {
+      const obj = this.scene.getObjectByName(name);
+      if (obj) applyAvatarSkin(obj, av);
+    }
+    const pad = this.scene.getObjectByName('player-platform');
+    if (pad) applyPlatformSkin(pad, pf);
+  }
+
+  /** Point + trigger types on the keyboard; OK saves and resumes the action. */
+  private updateKeyboard(): void {
+    let hover: string | null = null;
+    for (const hand of ['left', 'right'] as const) {
+      const hit = this.updatePointer(hand, [this.keyboard.mesh]);
+      const id = hit?.uv ? this.keyboard.hitTest(hit.uv.x, hit.uv.y) : null;
+      if (!id) continue;
+      hover = id;
+      if (this.input.xr.gamepads[hand]?.getButtonDown(InputComponent.Trigger)) {
+        sfx.uiClick();
+        const done = this.keyboard.press(id);
+        if (done !== null) {
+          setPlayerName(done);
+          this.keyboard.close();
+          const pending = this.kbPending;
+          this.kbPending = null;
+          if (pending) this.run(pending);
+          return;
+        }
+      }
+    }
+    this.keyboard.setHover(hover);
   }
 
   // --- the A-button action panel ---------------------------------------------
@@ -302,12 +444,24 @@ export class MenuSystem extends createSystem({}) {
   private applyState(): void {
     const inLobby = app.state === 'menu' || app.state === 'queueing';
     this.menu.setVisible(inLobby);
+    // Fresh board standings whenever you land back in the lobby (throttled).
+    if (inLobby) void refreshLeaderboard();
 
-    // The action panel only lives inside training runs and bouts.
+    // The action panel only lives inside training runs and bouts; the
+    // keyboard only in the lobby.
     if (inLobby && this.panel) {
       this.panel.mesh.visible = false;
       this.panelKey = '';
       this.wasMatchOver = false;
+    }
+    if (!inLobby && this.keyboard) {
+      this.keyboard.close();
+      this.kbPending = null;
+    }
+    // Customisation (panel + mirror) is a lobby-only affair.
+    if (!inLobby) {
+      customization.open = false;
+      if (this.mirror) this.mirror.group.visible = false;
     }
 
     // The title banner shows only in the lobby.

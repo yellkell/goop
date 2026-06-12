@@ -11,6 +11,7 @@
  */
 
 import { SessionMode, World } from '@iwsdk/core';
+import { initLeaderboard } from './net/leaderboard.js';
 import { buildArena } from './arena/arena.js';
 import { setupEnvironment } from './arena/environment.js';
 import { setupCombatants } from './combat/setup.js';
@@ -51,6 +52,7 @@ World.create(container, {
     camera: { position: [0, 1.6, 0] },
   },
 }).then((world) => {
+  initLeaderboard(); // anonymous profile + first board fetch
   setupEnvironment(world);
   buildArena(world);
   setupCombatants(world);

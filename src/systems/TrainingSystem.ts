@@ -29,6 +29,7 @@ import { Health } from '../components/Health.js';
 import { ballCommands } from '../combat/opponentBus.js';
 import { match } from '../combat/matchState.js';
 import { app, saveStats, training } from '../menu/appState.js';
+import { reportTraining } from '../net/leaderboard.js';
 import { emberBurst } from '../fx/fire.js';
 import * as sfx from '../audio/sfx.js';
 import { ARENA_GAP, FIREBALL, PALETTE, TRAINING } from '../config.js';
@@ -175,6 +176,7 @@ export class TrainingSystem extends createSystem({
         app.stats.trainingBest = training.score;
       }
       saveStats();
+      reportTraining(training.score); // leaderboard personal best
       sfx.matchEnd(training.score > 0);
       app.state = 'menu';
     }

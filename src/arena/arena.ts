@@ -14,19 +14,17 @@
  */
 
 import {
-  BufferGeometry,
+  AdditiveBlending,
+  BoxGeometry,
   Color,
   CylinderGeometry,
   Group,
   HemisphereLight,
-  Line,
-  LineBasicMaterial,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
   PlaneGeometry,
   PointLight,
-  Vector3,
   type Object3D,
 } from 'three';
 import type { World } from '@iwsdk/core';
@@ -39,14 +37,42 @@ import { createTitleBanner } from './banner.js';
 /** Shared diamond-plate maps, built lazily (both pedestals reuse them). */
 let plateMaps: DiamondPlateMaps | undefined;
 
-/** A glowing outline of the platform rim, just above the floor line. */
-function makeRimRing(color: number): Line {
-  const pts = OCTAGON_VERTICES.map(([x, z]) => new Vector3(x, PLATFORM.rimLift, z));
-  pts.push(pts[0].clone()); // close the loop
-  const geo = new BufferGeometry().setFromPoints(pts);
-  const ring = new Line(geo, new LineBasicMaterial({ color: new Color(color), transparent: true, opacity: 0.95 }));
-  ring.name = 'rim-ring';
-  return ring;
+/**
+ * Neon rim piping: a bright white-hot core bar along every rim edge wrapped
+ * in a fatter additive halo of the team colour — proper neon tubing, not a
+ * one-pixel line.
+ */
+function makeNeonRim(color: number): Group {
+  const rim = new Group();
+  rim.name = 'rim-ring';
+  const core = new MeshBasicMaterial({ color: new Color(color).lerp(new Color(0xffffff), 0.45) });
+  core.userData.role = 'neon-core'; // skin recolour target (avatar/skins.ts)
+  const halo = new MeshBasicMaterial({
+    color: new Color(color),
+    transparent: true,
+    opacity: 0.4,
+    blending: AdditiveBlending,
+    depthWrite: false,
+  });
+  halo.userData.role = 'neon-halo';
+  const n = OCTAGON_VERTICES.length;
+  for (let i = 0; i < n; i++) {
+    const [ax, az] = OCTAGON_VERTICES[i];
+    const [bx, bz] = OCTAGON_VERTICES[(i + 1) % n];
+    const len = Math.hypot(bx - ax, bz - az) + 0.012; // overlap the corners
+    const midx = (ax + bx) / 2;
+    const midz = (az + bz) / 2;
+    const yaw = -Math.atan2(bz - az, bx - ax);
+    const bar = new Mesh(new BoxGeometry(len, 0.014, 0.014), core);
+    bar.position.set(midx, PLATFORM.rimLift, midz);
+    bar.rotation.y = yaw;
+    rim.add(bar);
+    const glow = new Mesh(new BoxGeometry(len, 0.04, 0.04), halo);
+    glow.position.copy(bar.position);
+    glow.rotation.y = yaw;
+    rim.add(glow);
+  }
+  return rim;
 }
 
 /** Flat hazard-striped warning band laid along each rim edge. */
@@ -89,9 +115,9 @@ function makeCornerBolts(): Group {
   bolts.name = 'corner-bolts';
   const geo = new CylinderGeometry(0.028, 0.035, 0.035, 8);
   const mat = new MeshStandardMaterial({
-    color: PALETTE.gunmetal,
-    metalness: 0.95,
-    roughness: 0.3,
+    color: 0x202329,
+    metalness: 0.96,
+    roughness: 0.22,
   });
   for (const [x, z] of OCTAGON_VERTICES) {
     const bolt = new Mesh(geo, mat);
@@ -113,26 +139,50 @@ function makePlatform(color: number): Group {
   // ExtrudeGeometry UVs are in shape units (metres): repeat = tiles per metre.
   plateMaps.map.repeat.set(5, 5);
   plateMaps.bumpMap.repeat.set(5, 5);
-  const slab = new Mesh(
-    octagonSlab(OCTAGON_VERTICES, PLATFORM.thickness),
-    new MeshStandardMaterial({
-      color: 0xb6bcc7, // tint over the baked steel tones in the map
-      map: plateMaps.map,
-      bumpMap: plateMaps.bumpMap,
-      bumpScale: 0.9,
-      emissive: color,
-      emissiveIntensity: 0.16,
-      metalness: 0.65,
-      roughness: 0.5,
-    }),
-  );
+  const slabMat = new MeshStandardMaterial({
+    color: 0x9aa0ab, // tint over the baked dark-steel tones in the map
+    map: plateMaps.map,
+    bumpMap: plateMaps.bumpMap,
+    bumpScale: 1.1,
+    emissive: color,
+    emissiveIntensity: 0.08,
+    metalness: 0.92, // glistens off scene.environment (RoomEnvironment)
+    roughness: 0.28,
+  });
+  slabMat.userData.role = 'slab';
+  const slab = new Mesh(octagonSlab(OCTAGON_VERTICES, PLATFORM.thickness), slabMat);
   // Top face at y=0 (the real floor), body glowing faintly below.
   slab.position.y = -PLATFORM.thickness;
   group.add(slab);
 
   group.add(makeHazardBand());
   group.add(makeCornerBolts());
-  group.add(makeRimRing(color));
+  group.add(makeNeonRim(color));
+
+  // --- Per-skin ornaments (hidden; applyPlatformSkin shows one set) ---
+  // AZURE: a second, inset neon ring — clean concentric tech.
+  const inner = makeNeonRim(color);
+  inner.scale.setScalar(0.82);
+  inner.userData.skinTag = 'azure';
+  inner.visible = false;
+  group.add(inner);
+
+  // INFERNO: upright glowing blade fins at every rim vertex.
+  const fins = new Group();
+  fins.name = 'vertex-fins';
+  const finMat = new MeshBasicMaterial({ color: new Color(color).lerp(new Color(0xffffff), 0.45) });
+  finMat.userData.role = 'neon-core';
+  for (const [x, z] of OCTAGON_VERTICES) {
+    const fin = new Mesh(new BoxGeometry(0.018, 0.085, 0.05), finMat);
+    fin.position.set(x * 1.02, 0.045, z * 1.02);
+    fin.rotation.y = Math.atan2(x, z); // blade faces outward, radially
+    fins.add(fin);
+  }
+  fins.userData.skinTag = 'inferno';
+  fins.visible = false;
+  group.add(fins);
+
+  // EMBER: the classic look — banding + bolts, no extra furniture.
   return group;
 }
 

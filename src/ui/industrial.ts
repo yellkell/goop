@@ -9,9 +9,9 @@
  */
 
 export const UI = {
-  ink: 'rgba(10,11,14,0.42)', // smoked-glass backplate
-  inkDeep: 'rgba(10,11,14,0.7)', // behind headline text
-  steel: 'rgba(172,182,198,0.5)', // panel edge
+  ink: 'rgba(5,6,9,0.68)', // smoked-glass backplate — near-black glass
+  inkDeep: 'rgba(4,5,8,0.88)', // behind headline text
+  steel: 'rgba(172,182,198,0.55)', // panel edge
   steelDim: 'rgba(172,182,198,0.22)',
   amber: '#ffb000',
   amberSoft: 'rgba(255,176,0,0.8)',
@@ -53,7 +53,11 @@ interface PlateOpts {
   rivets?: boolean;
 }
 
-/** A smoked-steel plate: chamfered, thin steel edge, corner rivets. */
+/**
+ * A smoked-steel plate: chamfered, NEON-edged, corner rivets. The outline is
+ * drawn twice — a soft glow pass under a crisp core — so every plate edge
+ * reads as lit tubing against the dark glass.
+ */
 export function plate(
   ctx: CanvasRenderingContext2D,
   x: number, y: number, w: number, h: number,
@@ -64,9 +68,13 @@ export function plate(
   ctx.fillStyle = fill;
   ctx.fill();
   chamferPath(ctx, x, y, w, h, cut);
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 2.5;
   ctx.strokeStyle = stroke;
+  ctx.shadowColor = stroke;
+  ctx.shadowBlur = 14;
   ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.stroke(); // crisp core over the glow
   if (rivets) {
     ctx.fillStyle = UI.steelDim;
     const inset = cut * 0.85;
@@ -134,7 +142,7 @@ export function segmentBar(
     if (i < lit) {
       ctx.fillStyle = color;
       ctx.shadowColor = color;
-      ctx.shadowBlur = 9;
+      ctx.shadowBlur = 13;
       ctx.fill();
       ctx.shadowBlur = 0;
     } else {
@@ -157,15 +165,23 @@ export function buttonPlate(
 ): void {
   plate(ctx, x, y, w, h, {
     cut: 14,
-    fill: hot ? 'rgba(28,30,38,0.85)' : 'rgba(18,19,24,0.72)',
+    fill: hot ? 'rgba(16,18,24,0.9)' : 'rgba(9,10,14,0.8)',
     stroke: hot ? accent : UI.steel,
     rivets: false,
   });
-  // Accent keying notch on the left edge.
+  // Accent keying notch on the left edge — always neon.
+  ctx.shadowColor = accent;
+  ctx.shadowBlur = 10;
   ctx.fillStyle = accent;
   ctx.fillRect(x + 6, y + h * 0.25, 5, h * 0.5);
+  ctx.shadowBlur = 0;
   ctx.font = stencilFont(Math.round(h * 0.4));
   ctx.textAlign = 'center';
   ctx.fillStyle = hot ? accent : UI.text;
+  if (hot) {
+    ctx.shadowColor = accent;
+    ctx.shadowBlur = 12;
+  }
   ctx.fillText(label.toUpperCase(), x + w / 2, y + h / 2 + 2);
+  ctx.shadowBlur = 0;
 }

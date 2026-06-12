@@ -19,6 +19,7 @@ import * as sfx from '../audio/sfx.js';
 import { MATCH } from '../config.js';
 import { createScoreboard, type Scoreboard } from '../ui/scoreboard.js';
 import { net } from '../net/client.js';
+import { reportResult, rival } from '../net/leaderboard.js';
 
 interface Boxers {
   me: Entity;
@@ -143,6 +144,8 @@ export class GameStateSystem extends createSystem({
     if (win) app.stats.wins += 1;
     else app.stats.losses += 1;
     saveStats();
+    // Only real 1v1s feed the leaderboard — no farming the bot.
+    if (app.mode === 'net') reportResult(win, rival.elo);
     sfx.matchEnd(win);
     if (app.mode === 'net') this.echoState();
   }

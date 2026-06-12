@@ -38,11 +38,11 @@ function damageTexture(dmg: number): CanvasTexture {
   ctx.textBaseline = 'middle';
   ctx.font = `900 96px 'Arial Black', system-ui, sans-serif`;
   ctx.lineWidth = 14;
-  ctx.strokeStyle = 'rgba(10,11,14,0.9)';
+  ctx.strokeStyle = 'rgba(10,11,14,0.95)';
   ctx.strokeText(String(dmg), 128, 68);
-  ctx.fillStyle = '#ff3b2d';
-  ctx.shadowColor = 'rgba(232,53,42,0.9)';
-  ctx.shadowBlur = 16;
+  ctx.fillStyle = '#ff1605';
+  ctx.shadowColor = 'rgba(255,30,10,1)';
+  ctx.shadowBlur = 22;
   ctx.fillText(String(dmg), 128, 68);
   tex = new CanvasTexture(canvas);
   tex.minFilter = LinearFilter;

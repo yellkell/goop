@@ -9,12 +9,21 @@
 import { createSystem, Vector3, type Entity } from '@iwsdk/core';
 import { Object3D } from 'three';
 import { buildBoxer, setGloveLit, solveTorso, type BoxerRig } from '../avatar/boxer.js';
+import {
+  OPPONENT_DEFAULT_AVATAR,
+  OPPONENT_DEFAULT_PLATFORM,
+  applyAvatarSkin,
+  applyPlatformSkin,
+  avatarSkin,
+  platformSkin,
+} from '../avatar/skins.js';
 import { Combatant } from '../components/Combatant.js';
 import { BallState, Fireball } from '../components/Fireball.js';
 import { Health } from '../components/Health.js';
 import { Hitbox } from '../components/Hitbox.js';
 import { opponent } from '../combat/opponentBus.js';
 import { app } from '../menu/appState.js';
+import { rival } from '../net/leaderboard.js';
 import { ARENA_GAP, BODY_IK } from '../config.js';
 
 const _chest = new Vector3();
@@ -27,6 +36,23 @@ export class OpponentSystem extends createSystem({
   private rig?: BoxerRig;
   private hitboxes: { head?: Entity; chest?: Entity; pelvis?: Entity } = {};
   private built = false;
+  private appliedSkins = '';
+
+  /**
+   * Dress the rival the way THEY chose (skins from their `iam` message);
+   * bot bouts wear the team-blue default. Visual only — hitboxes untouched.
+   */
+  private applySkins(rig: BoxerRig): void {
+    const net = app.mode === 'net';
+    const av = net && rival.avatarSkin ? avatarSkin(rival.avatarSkin) : OPPONENT_DEFAULT_AVATAR;
+    const pf = net && rival.platformSkin ? platformSkin(rival.platformSkin) : OPPONENT_DEFAULT_PLATFORM;
+    const key = `${av.id}|${pf.id}`;
+    if (key === this.appliedSkins) return;
+    this.appliedSkins = key;
+    for (const piece of rig.all) applyAvatarSkin(piece, av);
+    const pad = this.scene.getObjectByName('opponent-platform');
+    if (pad) applyPlatformSkin(pad, pf);
+  }
 
   /** True while the opponent's bound ball for this hand is homing back. */
   private ballReturning(hand: 0 | 1): boolean {
@@ -64,6 +90,8 @@ export class OpponentSystem extends createSystem({
       this.parkHitboxes();
       return;
     }
+
+    this.applySkins(rig);
 
     // Head + torso from the bus pose; gloves straight onto the hand poses.
     solveTorso(rig, opponent.headPos, opponent.headQuat, 0, -ARENA_GAP, _chest, _pelvis);

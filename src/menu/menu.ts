@@ -2,9 +2,11 @@
  * The lobby: three smoked-steel plates on a shallow arc in front of the
  * player — industrial robot-wars styling, translucent so your room stays
  * visible through them. Centre = AIM TRAINING (the headline mode), left =
- * 1V1 (quick match + vs bot), right = stats & connection info. Each panel is
- * a canvas texture on a plane; MenuSystem raycasts the controllers for
- * hover + click and maps the hit UV to an action zone.
+ * 1V1 (quick match + vs bot), right = stats & connection info. A fourth
+ * plate hangs BEHIND the player: the Firebase leaderboard (1V1 score / aim
+ * training tabs) — lobby only, gone the moment a bout or run starts. Each
+ * panel is a canvas texture on a plane; MenuSystem raycasts the controllers
+ * for hover + click and maps the hit UV to an action zone.
  */
 
 import {
@@ -16,18 +18,28 @@ import {
   PlaneGeometry,
   type Scene,
 } from 'three';
-import { app, training } from './appState.js';
+import { app } from './appState.js';
+import { customization } from './customization.js';
+import { AVATAR_SKINS, PLATFORM_SKINS } from '../avatar/skins.js';
 import { GAME_TITLE } from '../config.js';
+import { leaderboard, myStats } from '../net/leaderboard.js';
 import { UI, buttonPlate, hazardStrip, plate, stencilFont } from '../ui/industrial.js';
 
-export type PanelId = 'train' | 'duel' | 'info';
+export type PanelId = 'train' | 'duel' | 'info' | 'board' | 'custom';
 
 export type MenuAction =
   | 'start-training'
   | 'toggle-shootback'
   | 'quick-match'
   | 'cancel-queue'
-  | 'vs-bot';
+  | 'vs-bot'
+  | 'lb-duel'
+  | 'lb-training'
+  | 'open-pub'
+  | 'open-custom'
+  | 'custom-close'
+  | 'av-0' | 'av-1' | 'av-2'
+  | 'pf-0' | 'pf-1' | 'pf-2';
 
 const PW = 512;
 const PH = 400;
@@ -160,29 +172,149 @@ function hitDuel(_u: number, v: number): MenuAction | null {
   return null;
 }
 
-/** Right — stats & how-to. Not clickable. */
-function drawInfo(ctx: CanvasRenderingContext2D): void {
-  panelBg(ctx, false, UI.text, GAME_TITLE);
+/** Right — doors out of the lobby: the PUB social area + customisation. */
+function drawInfo(ctx: CanvasRenderingContext2D, hover: boolean): void {
+  panelBg(ctx, hover, UI.text, GAME_TITLE);
 
-  ctx.font = '600 26px system-ui, sans-serif';
-  ctx.fillStyle = UI.amberSoft;
-  const lines = [
-    'hold trigger or grip — ball orbits',
-    'punch + release — throw',
-    'squeeze — recall the ball',
-    'a recall through them still hits',
-    'your orbit parries their fire',
-    'stay on your platform!',
+  buttonPlate(ctx, 70, 104, PW - 140, 96, 'IRON BALLS PUB', UI.cool, hover);
+  buttonPlate(ctx, 70, 226, PW - 140, 96, 'CUSTOMISE', UI.ember, hover);
+
+  ctx.font = '600 24px system-ui, sans-serif';
+  ctx.fillStyle = UI.textDim;
+  ctx.fillText(`aim best ${app.stats.trainingBest}  ·  scores behind you`, PW / 2, 366);
+}
+
+function hitInfo(_u: number, v: number): MenuAction | null {
+  const y = (1 - v) * PH;
+  if (y >= 96 && y <= 208) return 'open-pub';
+  if (y >= 218 && y <= 330) return 'open-custom';
+  return null;
+}
+
+/**
+ * The customisation panel — replaces the lobby arc while open, with the
+ * avatar mirror standing beside it. One chip row per slot: three live
+ * skins + a greyed-out COMING SOON.
+ */
+function drawCustom(ctx: CanvasRenderingContext2D, hover: boolean): void {
+  panelBg(ctx, hover, UI.emberBright, 'CUSTOMISE');
+
+  const chipRow = (
+    label: string,
+    skins: Array<{ name: string; locked?: boolean; accent?: number; neon?: number }>,
+    selectedIdx: number,
+    y: number,
+  ): void => {
+    ctx.textAlign = 'left';
+    ctx.font = '700 22px system-ui, sans-serif';
+    ctx.fillStyle = UI.textDim;
+    ctx.fillText(label, 40, y);
+    const w = (PW - 80 - 3 * 10) / 4;
+    skins.forEach((s, i) => {
+      const x = 40 + i * (w + 10);
+      const cy = y + 16;
+      const hex = s.locked ? undefined : ((s.accent ?? s.neon ?? 0xffffff) as number);
+      const css = hex !== undefined ? `#${hex.toString(16).padStart(6, '0')}` : UI.steelDim;
+      const selected = i === selectedIdx;
+      plate(ctx, x, cy, w, 54, {
+        cut: 8,
+        fill: s.locked ? 'rgba(60,62,70,0.25)' : selected ? 'rgba(20,22,30,0.92)' : 'rgba(10,11,15,0.7)',
+        stroke: s.locked ? UI.steelDim : selected ? css : UI.steel,
+        rivets: false,
+      });
+      ctx.textAlign = 'center';
+      ctx.font = `700 ${s.name.length > 7 ? 18 : 21}px system-ui, sans-serif`;
+      ctx.fillStyle = s.locked ? UI.steelDim : selected ? css : UI.text;
+      ctx.fillText(s.name, x + w / 2, cy + 23);
+      ctx.font = '600 13px system-ui, sans-serif';
+      ctx.fillStyle = s.locked ? UI.steelDim : 'rgba(232,236,242,0.45)';
+      ctx.fillText(s.locked ? 'COMING SOON' : selected ? 'EQUIPPED' : 'select', x + w / 2, cy + 43);
+    });
+    ctx.textAlign = 'center';
+  };
+
+  chipRow('AVATAR', AVATAR_SKINS, AVATAR_SKINS.findIndex((s) => s.id === customization.avatar), 102);
+  chipRow('PLATFORM', PLATFORM_SKINS, PLATFORM_SKINS.findIndex((s) => s.id === customization.platform), 204);
+
+  buttonPlate(ctx, 156, 296, 200, 56, 'CLOSE', UI.amber, hover);
+  ctx.font = '600 20px system-ui, sans-serif';
+  ctx.fillStyle = UI.textDim;
+  ctx.fillText('looks only — your hitbox never changes', PW / 2, 376);
+}
+
+function hitCustom(u: number, v: number): MenuAction | null {
+  const x = u * PW;
+  const y = (1 - v) * PH;
+  const w = (PW - 80 - 3 * 10) / 4;
+  const chipIdx = (px: number): number => Math.floor((px - 40) / (w + 10));
+  if (y >= 112 && y <= 178 && x >= 40 && x <= PW - 40) {
+    const i = chipIdx(x);
+    if (i >= 0 && i <= 2 && !AVATAR_SKINS[i].locked) return `av-${i}` as MenuAction;
+    return null;
+  }
+  if (y >= 214 && y <= 280 && x >= 40 && x <= PW - 40) {
+    const i = chipIdx(x);
+    if (i >= 0 && i <= 2 && !PLATFORM_SKINS[i].locked) return `pf-${i}` as MenuAction;
+    return null;
+  }
+  if (y >= 288 && y <= 360 && x >= 148 && x <= 364) return 'custom-close';
+  return null;
+}
+
+/** Behind — the Firebase leaderboard: 1V1 score / aim training tabs. */
+function drawBoard(ctx: CanvasRenderingContext2D, hover: boolean): void {
+  panelBg(ctx, hover, UI.amber, 'LEADERBOARD');
+
+  // Tab plates: 1V1 (score) | AIM TRAINING (best runs).
+  const tabs: Array<['duel' | 'training', string]> = [
+    ['duel', '1V1'],
+    ['training', 'AIM TRAINING'],
   ];
-  lines.forEach((l, i) => ctx.fillText(l, PW / 2, 112 + i * 40));
+  const tw = (PW - 96 - 16) / 2;
+  let x = 48;
+  for (const [id, label] of tabs) {
+    const active = leaderboard.tab === id;
+    plate(ctx, x, 88, tw, 44, {
+      cut: 10,
+      fill: active ? 'rgba(255,176,0,0.18)' : 'rgba(150,150,170,0.10)',
+      stroke: active ? UI.amber : UI.steelDim,
+      rivets: false,
+    });
+    ctx.font = '700 24px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = active ? UI.amber : UI.textDim;
+    ctx.fillText(label, x + tw / 2, 110);
+    x += tw + 16;
+  }
 
-  ctx.font = '700 28px system-ui, sans-serif';
-  ctx.fillStyle = UI.emberBright;
-  ctx.fillText(
-    `${app.stats.wins}W / ${app.stats.losses}L  ·  best ${app.stats.trainingBest}${training.lastScore ? `  ·  last ${training.lastScore}` : ''}`,
-    PW / 2,
-    364,
-  );
+  // Ranked rows; your own entry burns ember.
+  const rows = leaderboard.tab === 'duel' ? leaderboard.duel : leaderboard.training;
+  ctx.font = '600 24px system-ui, sans-serif';
+  rows.slice(0, 6).forEach((r, i) => {
+    const y = 166 + i * 34;
+    ctx.fillStyle = r.me ? UI.emberBright : UI.textDim;
+    ctx.textAlign = 'left';
+    ctx.fillText(`${i + 1}.  ${r.name}`, 56, y);
+    ctx.textAlign = 'right';
+    ctx.fillText(String(r.value), PW - 56, y);
+  });
+  if (!rows.length) {
+    ctx.textAlign = 'center';
+    ctx.fillStyle = UI.textDim;
+    ctx.fillText(leaderboard.status || 'no entries yet', PW / 2, 230);
+  }
+
+  const mine = myStats();
+  ctx.textAlign = 'center';
+  ctx.font = '700 24px system-ui, sans-serif';
+  ctx.fillStyle = UI.amberSoft;
+  ctx.fillText(`${mine.name}  ·  score ${mine.score}  ·  aim best ${mine.training}`, PW / 2, 376);
+}
+
+function hitBoard(u: number, v: number): MenuAction | null {
+  const y = (1 - v) * PH;
+  if (y >= 82 && y <= 138) return u < 0.5 ? 'lb-duel' : 'lb-training';
+  return null;
 }
 
 // --- the A-button action panel -----------------------------------------------
@@ -289,7 +421,9 @@ export function createMenu(scene: Scene): Menu {
 
   const train = makePanel('train', 0.86, 0.68, drawTrain, hitTrain);
   const duel = makePanel('duel', 0.78, 0.62, drawDuel, hitDuel);
-  const info = makePanel('info', 0.78, 0.62, (ctx) => drawInfo(ctx), () => null);
+  const info = makePanel('info', 0.78, 0.62, drawInfo, hitInfo);
+  const board = makePanel('board', 1.0, 0.78, drawBoard, hitBoard);
+  const custom = makePanel('custom', 0.9, 0.7, drawCustom, hitCustom);
 
   // Shallow arc in front of the player, tilted inward toward the centre.
   const y = 1.45;
@@ -298,8 +432,16 @@ export function createMenu(scene: Scene): Menu {
   duel.mesh.rotation.y = 0.48;
   info.mesh.position.set(0.84, y - 0.02, -1.02);
   info.mesh.rotation.y = -0.48;
+  // The leaderboard hangs behind you — turn around between fights.
+  board.mesh.position.set(0, 1.6, 1.5);
+  board.mesh.rotation.y = Math.PI;
+  // Customisation: hidden until opened; sits right of centre so the avatar
+  // mirror has room to stand beside it (MenuSystem owns the mirror).
+  custom.mesh.position.set(0.5, 1.45, -1.1);
+  custom.mesh.rotation.y = -0.3;
+  custom.mesh.visible = false;
 
-  const panels = [train, duel, info];
+  const panels = [train, duel, info, board, custom];
   for (const p of panels) {
     p.redraw(false);
     group.add(p.mesh);

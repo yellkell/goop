@@ -181,7 +181,10 @@ export class FireballSystem extends createSystem({
         }
       } else if (state === BallState.Flying || state === BallState.Dead) {
         ball.setValue(Fireball, 'state', BallState.Returning);
-        ball.setValue(Fireball, 'returnHit', 0); // fresh return-pass window
+        // Fresh return-pass window — but ONLY for a ball recalled mid-
+        // flight. A DEAD ball just landed on someone: letting its return
+        // leg connect again read as an awful instant double hit.
+        ball.setValue(Fireball, 'returnHit', state === BallState.Dead ? 1 : 0);
         sfx.recall();
         net.send({ k: 'recall', hand });
       }
@@ -401,11 +404,15 @@ export class FireballSystem extends createSystem({
           sfx.throwWhoosh();
           break;
         }
-        case 'recall':
+        case 'recall': {
+          // A DEAD ball just landed its hit — its return leg flies inert,
+          // otherwise recalling off a fresh hit double-scored on the way out.
+          const st = ball.getValue(Fireball, 'state') ?? 0;
           ball.setValue(Fireball, 'state', BallState.Returning);
-          ball.setValue(Fireball, 'returnHit', 0);
+          ball.setValue(Fireball, 'returnHit', st === BallState.Dead ? 1 : 0);
           this.netBlend.delete(ball);
           break;
+        }
         case 'spend':
           // Their sim says this ball is finished (it hit us / was parried
           // on their side) — retire it where it is.
