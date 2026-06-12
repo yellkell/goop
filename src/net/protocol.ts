@@ -27,6 +27,14 @@ export type PeerMessage =
   | { k: 'hit'; hand: 0 | 1; dmg: number; ret?: boolean }
   /** I parried your `hand` ball out of the air. */
   | { k: 'deflect'; hand: 0 | 1 }
+  /**
+   * Our flying balls BLOCKED each other mid-air on my sim: my `mine` ball
+   * and your `yours` ball are both spent. (Ball hand indices are always the
+   * sender's own — same convention as `throw`.)
+   */
+  | { k: 'clash'; mine: 0 | 1; yours: 0 | 1 }
+  /** I want a rematch (sent from the FIGHT OVER panel; both sides → restart). */
+  | { k: 'rematch' }
   /** Host → guest match-state echo. Scores are in the HOST's perspective. */
   | {
       k: 'state';

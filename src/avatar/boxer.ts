@@ -238,6 +238,7 @@ const _hips = new Vector3();
 const _chest = new Vector3();
 const _spine = new Vector3();
 const _fwd = new Vector3();
+const _anchor = new Vector3();
 const _tilt = new Quaternion();
 const _yaw = new Quaternion();
 
@@ -246,6 +247,12 @@ const _yaw = new Quaternion();
  * pad centre (padX/padZ) — but dragged DOWN when the head ducks, so a dodge
  * folds the whole machine instead of leaving the pelvis hanging in the air —
  * chest lerped hips→head, both oriented to the spine lean and the head's yaw.
+ *
+ * The spine hangs from a point slightly BEHIND the head along its yaw
+ * (faces sit forward of spines): looking down shows the player the front of
+ * their own chest instead of the base of their neck, and the torso stops
+ * blocking the view of what's in front.
+ *
  * Returns chest/pelvis world positions for the caller's hitboxes via out args.
  */
 export function solveTorso(
@@ -260,16 +267,26 @@ export function solveTorso(
   rig.head.position.copy(headPos);
   rig.head.quaternion.copy(headQuat);
 
-  // Hips track the head laterally a bit so big leans drag the torso along,
+  // Horizontal yaw-forward of the head; the spine anchor sits behind it.
+  _fwd.set(0, 0, -1).applyQuaternion(headQuat);
+  const hl = Math.hypot(_fwd.x, _fwd.z);
+  const nx = hl > 1e-3 ? _fwd.x / hl : 0;
+  const nz = hl > 1e-3 ? _fwd.z / hl : -1;
+  _anchor.set(
+    headPos.x - nx * BODY_IK.spineSetBack,
+    headPos.y,
+    headPos.z - nz * BODY_IK.spineSetBack,
+  );
+
+  // Hips track the anchor laterally a bit so big leans drag the torso along,
   // and follow it down on a duck (never higher than standing hip height).
   const hipY = Math.min(BODY_IK.hipHeight, headPos.y - 0.5);
-  _hips.set(padX * 0.4 + headPos.x * 0.6, hipY, padZ * 0.4 + headPos.z * 0.6);
-  _chest.copy(_hips).lerp(headPos, BODY_IK.chestAlong);
+  _hips.set(padX * 0.4 + _anchor.x * 0.6, hipY, padZ * 0.4 + _anchor.z * 0.6);
+  _chest.copy(_hips).lerp(_anchor, BODY_IK.chestAlong);
 
-  // Orientation: lean the chest along the hips→head spine, yaw with the head.
-  _spine.copy(headPos).sub(_hips).normalize();
+  // Orientation: lean the chest along the hips→anchor spine, yaw with the head.
+  _spine.copy(_anchor).sub(_hips).normalize();
   _tilt.setFromUnitVectors(UP, _spine);
-  _fwd.set(0, 0, -1).applyQuaternion(headQuat);
   _yaw.setFromAxisAngle(UP, Math.atan2(-_fwd.x, -_fwd.z));
 
   // The torso group sits at the world origin, so world coords ARE local here.

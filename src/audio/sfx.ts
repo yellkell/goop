@@ -194,10 +194,11 @@ export function hitDealt(): void {
   tone({ freq: 260, to: 78, type: 'sine', dur: 0.18, gain: 0.3 });
 }
 
-/** You take a hit — a chassis-rattling slam. */
+/** You take a hit — a hard plate CLINK over a chassis-rattling slam. */
 export function hitTaken(): void {
+  clank(760, 0.26, 0.45); // the iron ball ringing off your armour
   tone({ freq: 105, to: 36, type: 'sawtooth', dur: 0.3, gain: 0.3 });
-  clank(270, 0.16, 0.28, 0.01);
+  clank(270, 0.14, 0.26, 0.015); // loose chassis rattle behind it
   whooshNoise(0.12, 0.12, 380, 140);
 }
 
@@ -206,6 +207,14 @@ export function deflect(): void {
   clank(1240, 0.22, 0.45);
   clank(1860, 0.09, 0.25, 0.02);
   whooshNoise(0.1, 0.1, 2600, 1000);
+}
+
+/** Two flying balls blocking each other mid-air — a hard double clink. */
+export function ballClash(): void {
+  clank(1040, 0.26, 0.42);
+  clank(1560, 0.11, 0.22, 0.025); // ricochet ring
+  whooshNoise(0.08, 0.11, 3000, 1200);
+  tone({ freq: 170, to: 90, type: 'triangle', dur: 0.1, gain: 0.12 });
 }
 
 /** A spent ball slamming into the arena's far cage wall — distant boom. */

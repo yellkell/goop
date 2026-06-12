@@ -16,6 +16,10 @@ export interface MatchState {
   message: string; // headline status for the HUD
   /** Bumped every time a fresh round starts — systems reset on change. */
   resetCount: number;
+  /** Net bouts hold at FIGHT OVER: I pressed REMATCH on the panel. */
+  rematchMine: boolean;
+  /** …and the rival pressed theirs (peer `rematch` message). Both → restart. */
+  rematchTheirs: boolean;
 }
 
 export const match: MatchState = {
@@ -27,4 +31,6 @@ export const match: MatchState = {
   resultTimer: 0,
   message: '',
   resetCount: 0,
+  rematchMine: false,
+  rematchTheirs: false,
 };

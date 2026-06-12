@@ -66,6 +66,8 @@ export class CollisionSystem extends createSystem({
         // Parry first: your roaring orbit is also your shield. (Only flying
         // balls can be parried — a recalled ball is already leaving.)
         if (!returning && this.tryParry(ball, balls, radius)) continue;
+        // Mid-air block: two thrown balls meeting cancel each other out.
+        if (!returning && this.tryClash(ball, balls, radius)) continue;
         this.enemyBallVsMe(ball, hitboxes, radius, damage, returning);
       } else if (inMatch && app.mode === 'bot') {
         this.myBallVsOpponent(ball, hitboxes, radius, damage, returning);
@@ -89,7 +91,10 @@ export class CollisionSystem extends createSystem({
 
       const me = (hitbox.getValue(Hitbox, 'owner') as Entity | null) ?? hitbox;
       this.applyDamage(me, damage);
-      spawnFireImpact(this.world, _ballPos, 1);
+      // Taking a hit is the loudest moment in the game: oversized burst,
+      // extra spark spray, plate-clink sound, hard double-hand buzz.
+      spawnFireImpact(this.world, _ballPos, 1, 1.7);
+      emberBurst(_ballPos, 18, true);
       sfx.hitTaken();
       feedback.playerHitFlash = 1;
       const v = ball.getVectorView(Fireball, 'velocity');
@@ -97,8 +102,8 @@ export class CollisionSystem extends createSystem({
       feedback.srcX = -v[0] / len;
       feedback.srcY = -v[1] / len;
       feedback.srcZ = -v[2] / len;
-      pulseHand(this.world.session, 'left', 0.7, 110);
-      pulseHand(this.world.session, 'right', 0.7, 110);
+      pulseHand(this.world.session, 'left', 1.0, 160);
+      pulseHand(this.world.session, 'right', 1.0, 160);
 
       // A return-pass keeps flying home; a thrown ball is spent on contact.
       if (returning) ball.setValue(Fireball, 'returnHit', 1);
@@ -179,6 +184,40 @@ export class CollisionSystem extends createSystem({
       this.spendBall(enemyBall);
       if (app.mode === 'net' && app.state === 'playing') {
         net.send({ k: 'deflect', hand: (enemyBall.getValue(Fireball, 'hand') ?? 0) as 0 | 1 });
+      }
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Two FLYING balls (one of theirs, one of mine) meeting mid-air block each
+   * other: both are spent on the spot with an iron-on-iron clink. Online the
+   * peer is told via `clash` so both sims agree both balls died.
+   */
+  private tryClash(enemyBall: Entity, balls: Entity[], radius: number): boolean {
+    for (const mine of balls) {
+      if ((mine.getValue(Fireball, 'owner') ?? 0) !== 0) continue;
+      if ((mine.getValue(Fireball, 'state') ?? 0) !== BallState.Flying) continue;
+      const mObj = mine.object3D;
+      if (!mObj || !mObj.visible) continue;
+      mObj.getWorldPosition(_otherPos);
+      const reach = radius + (mine.getValue(Fireball, 'radius') ?? FIREBALL.radius) + FIREBALL.deflectBonus;
+      if (_ballPos.distanceToSquared(_otherPos) > reach * reach) continue;
+
+      // Sparks in both fire colours — the clash belongs to nobody.
+      emberBurst(_ballPos, 14, true);
+      emberBurst(_ballPos, 14, false);
+      spawnFireImpact(this.world, _ballPos, 0, 1.2);
+      sfx.ballClash();
+      this.spendBall(mine);
+      this.spendBall(enemyBall);
+      if (app.mode === 'net' && app.state === 'playing') {
+        net.send({
+          k: 'clash',
+          mine: (mine.getValue(Fireball, 'hand') ?? 0) as 0 | 1,
+          yours: (enemyBall.getValue(Fireball, 'hand') ?? 0) as 0 | 1,
+        });
       }
       return true;
     }

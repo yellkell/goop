@@ -160,6 +160,22 @@ export class NetworkSystem extends createSystem({
         sfx.deflect();
         break;
       }
+      case 'clash': {
+        // Their sim ruled our two flying balls blocked each other. `yours`
+        // is MY ball in their wording; `mine` is theirs. If my sim already
+        // saw the clash itself both balls are dead — skip the echo quietly.
+        const ball = this.findMyBall(msg.yours);
+        if (ball?.object3D && (ball.getValue(Fireball, 'state') ?? 0) === BallState.Flying) {
+          spawnFireImpact(this.world, ball.object3D.position, 0, 1.2);
+          sfx.ballClash();
+          ball.setValue(Fireball, 'state', BallState.Dead);
+        }
+        ballCommands.push({ type: 'spend', hand: msg.mine });
+        break;
+      }
+      case 'rematch':
+        match.rematchTheirs = true;
+        break;
       case 'state':
         if (app.side === 1) this.applyHostState(msg);
         break;
@@ -190,8 +206,11 @@ export class NetworkSystem extends createSystem({
       }
     }
 
-    // Fresh round on the guest: restore healths locally too.
+    // Fresh round on the guest: restore healths locally too, and clear any
+    // rematch handshake (a rematch restart arrives as matchOver → playing).
     if (msg.phase === 'playing' && prevPhase !== 'playing') {
+      match.rematchMine = false;
+      match.rematchTheirs = false;
       for (const e of this.queries.combatants.entities) {
         e.setValue(Health, 'current', e.getValue(Health, 'max') ?? 100);
       }
