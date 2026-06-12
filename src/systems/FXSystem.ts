@@ -3,11 +3,12 @@
  * integrates the shared fire particle pools (embers + comet trails).
  */
 
-import { createSystem } from '@iwsdk/core';
+import { createSystem, Quaternion } from '@iwsdk/core';
 import { Effect, EffectKind } from '../components/Effect.js';
 import { initFirePools, updateFirePools } from '../fx/fire.js';
 
 const GRAVITY = 4.5;
+const _camQ = new Quaternion();
 
 type Fadable = { opacity: number; transparent: boolean };
 
@@ -46,6 +47,15 @@ export class FXSystem extends createSystem({
           obj.scale.setScalar(base * (1 + t * 6));
           if (mat) mat.opacity = 0.8 * (1 - t) * (1 - t);
           break;
+        case EffectKind.Popup: {
+          // Damage number: drift up, always face the player, pop then fade.
+          obj.position.y += delta * 0.4;
+          this.world.camera.getWorldQuaternion(_camQ);
+          obj.quaternion.copy(_camQ);
+          obj.scale.setScalar(base * (1 + t * 0.25));
+          if (mat) mat.opacity = t < 0.12 ? t / 0.12 : 1 - (t - 0.12) / 0.88;
+          break;
+        }
         case EffectKind.Shard: {
           const v = e.getVectorView(Effect, 'velocity');
           obj.position.x += v[0] * delta;

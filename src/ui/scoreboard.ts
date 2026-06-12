@@ -1,13 +1,14 @@
 /**
- * Match UI in the industrial robot-wars language: two angled boards flank the
- * gap — YOUR board on the left (ember), THEIRS on the right (blue) — but
- * they're smoked glass, not opaque hoardings: a stencilled name strip, a
- * chunky segmented health readout, chamfered round pips and the timer, with
- * your real room visible through everything. A centre strip appears for
- * headline messages (ROUND WON, etc.).
+ * Match UI in the industrial robot-wars language: both boards hang together
+ * behind and above the opponent's pad — YOURS on the left (ember), THEIRS on
+ * the right (blue) — so one glance over your rival's shoulder takes in the
+ * whole game state. Smoked glass, not opaque hoardings: a stencilled name
+ * strip, a chunky segmented health readout, chamfered round pips and the
+ * timer, with your real room visible through everything. The headline
+ * (ROUND WON, etc.) floats above them.
  *
  * In Aim Training the left board becomes your score/streak readout and the
- * right board shows accuracy + time.
+ * right board shows the dodge bar + time.
  */
 
 import {
@@ -119,18 +120,19 @@ export function createScoreboard(scene: Scene): Scoreboard {
   const group = new Group();
   group.name = 'scoreboards';
 
-  // Flanking boards at mid-gap, angled inward like arena hoardings.
+  // Both boards side by side behind/above the opponent's pad, barely angled
+  // inward — read your bar and theirs without turning your head.
   const left = makeBoard(1.5, 0.72); // YOU — ember
-  left.mesh.position.set(-1.85, 1.95, -ARENA_GAP * 0.52);
-  left.mesh.rotation.y = 0.62;
+  left.mesh.position.set(-0.82, 2.0, -ARENA_GAP - 1.1);
+  left.mesh.rotation.y = 0.16;
   const right = makeBoard(1.5, 0.72); // THEM — blue
-  right.mesh.position.set(1.85, 1.95, -ARENA_GAP * 0.52);
-  right.mesh.rotation.y = -0.62;
+  right.mesh.position.set(0.82, 2.0, -ARENA_GAP - 1.1);
+  right.mesh.rotation.y = -0.16;
 
-  // Centre headline strip (ROUND WON, KNOCKOUT…), above the gap. Sized to
-  // the canvas aspect so the stencil type renders undistorted.
+  // Headline strip (ROUND WON, KNOCKOUT…) floating just above the boards.
+  // Sized to the canvas aspect so the stencil type renders undistorted.
   const centre = makeBoard(2.2, 1.05);
-  centre.mesh.position.set(0, 2.45, -ARENA_GAP * 0.55);
+  centre.mesh.position.set(0, 2.9, -ARENA_GAP - 1.15);
 
   group.add(left.mesh, right.mesh, centre.mesh);
   scene.add(group);
@@ -140,23 +142,19 @@ export function createScoreboard(scene: Scene): Scoreboard {
     name: string,
     neon: string,
     hpFrac: number,
-    hpText: string,
     pips: number,
     timer: string,
   ): void => {
-    const key = `s|${name}|${hpFrac}|${hpText}|${pips}|${timer}`;
+    const key = `s|${name}|${hpFrac}|${pips}|${timer}`;
     if (board.key === key) return;
     board.key = key;
     const { ctx, tex } = board;
     header(ctx, name, neon, timer);
-    // The health readout gets the only solid-ish backing on the board.
+    // The health readout gets the only solid-ish backing on the board —
+    // the segmented bar IS the number, no digits needed.
     plate(ctx, 28, 124, W - 56, 110, { cut: 16, fill: UI.ink, rivets: false });
     segmentBar(ctx, 52, 148, W - 104, 60, hpFrac, neon);
     scorePips(ctx, 70, 308, pips, neon);
-    ctx.textAlign = 'right';
-    ctx.font = stencilFont(48);
-    ctx.fillStyle = UI.textDim;
-    ctx.fillText(hpText, W - 40, 310);
     tex.needsUpdate = true;
   };
 
@@ -204,8 +202,8 @@ export function createScoreboard(scene: Scene): Scoreboard {
   return {
     updateMatch(state, pHp, pMax, oHp, oMax) {
       const timer = fmtTime(state.roundTimer);
-      drawSide(left, 'YOU', UI.emberBright, pHp / pMax, String(Math.ceil(pHp)), state.myScore, timer);
-      drawSide(right, app.mode === 'net' ? 'RIVAL' : 'BOT', UI.cool, oHp / oMax, String(Math.ceil(oHp)), state.oppScore, timer);
+      drawSide(left, 'YOU', UI.emberBright, pHp / pMax, state.myScore, timer);
+      drawSide(right, app.mode === 'net' ? 'RIVAL' : 'BOT', UI.cool, oHp / oMax, state.oppScore, timer);
       drawCentre(state.message, state.phase === 'matchOver' ? '' : state.message ? `round ${state.round}` : '');
     },
 
@@ -231,12 +229,7 @@ export function createScoreboard(scene: Scene): Scoreboard {
         tex.needsUpdate = true;
       }
       // Right board: dodge readout (health only matters with shoot-back on).
-      drawSide(
-        right, 'DODGE', UI.cool,
-        app.shootBack ? hp / hpMax : 1,
-        app.shootBack ? String(Math.ceil(hp)) : 'SAFE',
-        0, timer,
-      );
+      drawSide(right, 'DODGE', UI.cool, app.shootBack ? hp / hpMax : 1, 0, timer);
       drawCentre('', '');
     },
 

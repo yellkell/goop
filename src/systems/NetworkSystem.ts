@@ -28,7 +28,7 @@ import { app, saveStats } from '../menu/appState.js';
 import { mirrorPos, mirrorQuat, mirrorVel, net, packPose } from '../net/client.js';
 import { setSpeakerPosition, updateListener } from '../net/voice.js';
 import type { PeerMessage, PoseTuple } from '../net/protocol.js';
-import { spawnFireImpact } from '../fx/effects.js';
+import { spawnDamagePopup, spawnFireImpact } from '../fx/effects.js';
 import * as sfx from '../audio/sfx.js';
 import { InputComponent } from '@iwsdk/core';
 import { NET } from '../config.js';
@@ -54,6 +54,15 @@ export class NetworkSystem extends createSystem({
 }) {
   private sendTimer = 0;
   private myHp = 100;
+  /**
+   * Grace window after every round reset during which the rival's reported
+   * hp is IGNORED: packets sent before they processed the fresh-round echo
+   * still carry the old knockout's 0 hp, and writing that back over the
+   * restored pool made the host score the same knockout twice (and end
+   * matches early).
+   */
+  private graceTimer = 0;
+  private lastReset = -1;
 
   update(delta: number): void {
     if (app.mode !== 'net' || app.state !== 'playing') {
@@ -61,6 +70,12 @@ export class NetworkSystem extends createSystem({
       if (net.inbox.length) net.inbox.length = 0;
       return;
     }
+
+    if (match.resetCount !== this.lastReset) {
+      this.lastReset = match.resetCount;
+      this.graceTimer = 1.0;
+    }
+    this.graceTimer = Math.max(0, this.graceTimer - delta);
 
     this.receive();
     this.smooth(delta);
@@ -141,10 +156,14 @@ export class NetworkSystem extends createSystem({
         // Their client ruled our ball connected: damage them on our side and
         // burst the ball where our sim has it. A return-pass hit (`ret`)
         // doesn't spend the ball — it keeps homing back to our fist.
+        // Hits in flight while the round ended are dropped: they must not
+        // bleed into the next round's pool or re-score the old one.
+        if (match.phase !== 'playing') break;
         this.damageThem(msg.dmg);
         const ball = this.findMyBall(msg.hand);
         if (ball?.object3D) {
           spawnFireImpact(this.world, ball.object3D.position, 0);
+          spawnDamagePopup(this.world, ball.object3D.position, msg.dmg);
           if (!msg.ret) ball.setValue(Fireball, 'state', BallState.Dead);
         }
         sfx.hitDealt();
@@ -274,8 +293,11 @@ export class NetworkSystem extends createSystem({
       const team = e.getValue(Combatant, 'team') ?? 0;
       if (team === 0) this.myHp = e.getValue(Health, 'current') ?? 100;
       // Their own hp report is authoritative for their pool (covers rim
-      // damage and anything our sim can't see).
-      else e.setValue(Health, 'current', theirReportedHp);
+      // damage and anything our sim can't see) — but NOT around round
+      // transitions, where it's stale (see graceTimer).
+      else if (match.phase === 'playing' && this.graceTimer <= 0) {
+        e.setValue(Health, 'current', theirReportedHp);
+      }
     }
   }
 }
