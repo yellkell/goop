@@ -22,7 +22,7 @@ import { BallState, Fireball } from '../components/Fireball.js';
 import { Hitbox } from '../components/Hitbox.js';
 import { Health } from '../components/Health.js';
 import { TargetState, TrainingTarget } from '../components/TrainingTarget.js';
-import { spawnFireImpact } from '../fx/effects.js';
+import { spawnDamagePopup, spawnFireImpact } from '../fx/effects.js';
 import { emberBurst } from '../fx/fire.js';
 import { feedback } from '../fx/feedback.js';
 import { pulseHand } from '../input/haptics.js';
@@ -95,6 +95,7 @@ export class CollisionSystem extends createSystem({
       // extra spark spray, plate-clink sound, hard double-hand buzz.
       spawnFireImpact(this.world, _ballPos, 1, 1.7);
       emberBurst(_ballPos, 18, true);
+      spawnDamagePopup(this.world, _ballPos, damage);
       sfx.hitTaken();
       feedback.playerHitFlash = 1;
       const v = ball.getVectorView(Fireball, 'velocity');
@@ -133,6 +134,7 @@ export class CollisionSystem extends createSystem({
       const them = (hitbox.getValue(Hitbox, 'owner') as Entity | null) ?? hitbox;
       this.applyDamage(them, damage);
       spawnFireImpact(this.world, _ballPos, 0);
+      spawnDamagePopup(this.world, _ballPos, damage);
       sfx.hitDealt();
       app.stats.hitsLanded += 1;
       if (returning) ball.setValue(Fireball, 'returnHit', 1);

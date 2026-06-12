@@ -75,7 +75,6 @@ export class FireballSystem extends createSystem({
 }) {
   private visuals = new Map<Entity, FireVisual>();
   private trackers: [VelocityTracker, VelocityTracker] = [new VelocityTracker(), new VelocityTracker()];
-  private triggerWas: [boolean, boolean] = [false, false];
   private time = 0;
   private lastReset = -1;
   private trailAcc = new Map<Entity, number>();
@@ -155,13 +154,19 @@ export class FireballSystem extends createSystem({
     tracker.push(_grip, this.time);
 
     // Trigger and grip are one action: either squeeze holds the orbit.
+    // Edges are PER BUTTON: many players rest a finger on the grip the
+    // whole bout — a combined-state edge would swallow every trigger tap
+    // (recalls silently doing nothing).
     const gp = this.input.xr.gamepads[HANDS[hand]];
     const pressed =
       (gp?.getButtonPressed(InputComponent.Trigger) ?? false) ||
       (gp?.getButtonPressed(InputComponent.Squeeze) ?? false);
-    const down = pressed && !this.triggerWas[hand];
-    const released = !pressed && this.triggerWas[hand];
-    this.triggerWas[hand] = pressed;
+    const down =
+      (gp?.getButtonDown(InputComponent.Trigger) ?? false) ||
+      (gp?.getButtonDown(InputComponent.Squeeze) ?? false);
+    const released =
+      (gp?.getButtonUp(InputComponent.Trigger) ?? false) ||
+      (gp?.getButtonUp(InputComponent.Squeeze) ?? false);
 
     const obj = ball.object3D!;
     const state = ball.getValue(Fireball, 'state') ?? BallState.Hover;
