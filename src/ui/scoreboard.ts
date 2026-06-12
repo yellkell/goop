@@ -1,10 +1,12 @@
 /**
- * Match UI, styled after the Blaston arena boards: two angled neon banners
- * flanking the gap — YOUR board on the left (ember orange), THEIRS on the
- * right (blue) — each with a big health bar, round-win pips and the round
- * timer. A centre strip appears for headline messages (ROUND WON, etc.), and
- * a stats board hangs BEHIND you (curveball-style: always there, unclickable,
- * turn around to read it mid-bout).
+ * Match UI in the industrial robot-wars language: two angled boards flank the
+ * gap — YOUR board on the left (ember), THEIRS on the right (blue) — but
+ * they're smoked glass, not opaque hoardings: a stencilled name strip, a
+ * chunky segmented health readout, chamfered round pips and the timer, with
+ * your real room visible through everything. A centre strip appears for
+ * headline messages (ROUND WON, etc.), and a stats plate hangs BEHIND you
+ * (curveball-style: always there, unclickable, turn around to read it
+ * mid-bout).
  *
  * In Aim Training the left board becomes your score/streak readout and the
  * right board shows accuracy + time.
@@ -22,6 +24,7 @@ import {
 import { ARENA_GAP, GAME_TITLE, MATCH } from '../config.js';
 import type { MatchState } from '../combat/matchState.js';
 import { app, training } from '../menu/appState.js';
+import { UI, hazardStrip, plate, segmentBar, stencilFont } from './industrial.js';
 
 const W = 880;
 const H = 420;
@@ -40,16 +43,6 @@ export interface Scoreboard {
   setVisible(v: boolean): void;
 }
 
-function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
-}
-
 function makeBoard(wMeters: number, hMeters: number): Board {
   const canvas = document.createElement('canvas');
   canvas.width = W;
@@ -65,70 +58,50 @@ function makeBoard(wMeters: number, hMeters: number): Board {
   return { mesh, ctx, tex };
 }
 
-/** Dark arena-board backdrop with a neon edge in the side's colour. */
-function boardBg(ctx: CanvasRenderingContext2D, neon: string): void {
+/**
+ * The shared board skeleton: clear canvas, a hazard keying chip + stencilled
+ * title + neon underline up top. Everything below floats over passthrough.
+ */
+function header(ctx: CanvasRenderingContext2D, title: string, neon: string, right = ''): void {
   ctx.clearRect(0, 0, W, H);
-  const bg = ctx.createLinearGradient(0, 0, 0, H);
-  bg.addColorStop(0, 'rgba(20,22,30,0.92)');
-  bg.addColorStop(1, 'rgba(30,26,34,0.92)');
-  roundRect(ctx, 8, 8, W - 16, H - 16, 30);
-  ctx.fillStyle = bg;
-  ctx.shadowColor = neon;
-  ctx.shadowBlur = 26;
-  ctx.fill();
-  ctx.shadowBlur = 0;
-  roundRect(ctx, 8, 8, W - 16, H - 16, 30);
-  ctx.lineWidth = 5;
-  ctx.strokeStyle = neon;
-  ctx.stroke();
-}
-
-/** The big Blaston-style health bar: chunky, gradient, glowing. */
-function healthBar(
-  ctx: CanvasRenderingContext2D,
-  x: number, y: number, w: number, h: number,
-  frac: number, c0: string, c1: string,
-): void {
-  roundRect(ctx, x, y, w, h, h / 2);
-  ctx.fillStyle = 'rgba(255,255,255,0.08)';
-  ctx.fill();
-  const f = Math.max(0, Math.min(1, frac));
-  if (f > 0) {
-    const fw = Math.max(h, w * f);
-    const grad = ctx.createLinearGradient(x, 0, x + w, 0);
-    grad.addColorStop(0, c0);
-    grad.addColorStop(1, c1);
-    ctx.save();
-    roundRect(ctx, x, y, fw, h, h / 2);
-    ctx.clip();
-    ctx.fillStyle = grad;
-    ctx.shadowColor = c1;
-    ctx.shadowBlur = 30;
-    ctx.fillRect(x, y, fw, h);
-    ctx.restore();
+  hazardStrip(ctx, 32, 38, 64, 22, UI.amber);
+  ctx.textAlign = 'left';
+  ctx.font = stencilFont(54);
+  ctx.fillStyle = neon;
+  ctx.fillText(title, 116, 54);
+  if (right) {
+    ctx.textAlign = 'right';
+    ctx.font = stencilFont(60);
+    ctx.fillStyle = UI.text;
+    ctx.fillText(right, W - 36, 54);
   }
-  roundRect(ctx, x, y, w, h, h / 2);
+  ctx.strokeStyle = neon;
   ctx.lineWidth = 3;
-  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+  ctx.beginPath();
+  ctx.moveTo(32, 96);
+  ctx.lineTo(W - 32, 96);
   ctx.stroke();
 }
 
-/** Round-win pips: filled per round taken, hollow up to the win target. */
+/** Round-win pips: chamfered studs, lit per round taken. */
 function scorePips(ctx: CanvasRenderingContext2D, x: number, y: number, won: number, color: string): void {
   for (let i = 0; i < MATCH.winTarget; i++) {
-    ctx.beginPath();
-    ctx.arc(x + i * 56, y, 18, 0, Math.PI * 2);
+    const px = x + i * 58;
+    ctx.save();
+    ctx.translate(px, y);
+    ctx.rotate(Math.PI / 4);
     if (i < won) {
       ctx.fillStyle = color;
       ctx.shadowColor = color;
-      ctx.shadowBlur = 16;
-      ctx.fill();
+      ctx.shadowBlur = 14;
+      ctx.fillRect(-14, -14, 28, 28);
       ctx.shadowBlur = 0;
     } else {
-      ctx.lineWidth = 4;
-      ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-      ctx.stroke();
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = UI.steelDim;
+      ctx.strokeRect(-14, -14, 28, 28);
     }
+    ctx.restore();
   }
 }
 
@@ -153,7 +126,7 @@ export function createScoreboard(scene: Scene): Scoreboard {
   const centre = makeBoard(1.9, 0.5);
   centre.mesh.position.set(0, 2.45, -ARENA_GAP * 0.55);
 
-  // Stats board behind you — unclickable, curveball-style.
+  // Stats plate behind you — unclickable, curveball-style.
   const back = makeBoard(1.5, 0.72);
   back.mesh.position.set(0, 1.7, 1.6);
   back.mesh.rotation.y = Math.PI;
@@ -163,14 +136,16 @@ export function createScoreboard(scene: Scene): Scoreboard {
 
   const drawBack = (lines: string[]): void => {
     const { ctx, tex } = back;
-    boardBg(ctx, 'rgba(255,160,60,0.7)');
+    ctx.clearRect(0, 0, W, H);
+    plate(ctx, 16, 16, W - 32, H - 32, { cut: 28 });
+    hazardStrip(ctx, 56, 44, W - 112, 16, UI.amber);
     ctx.textAlign = 'center';
-    ctx.font = '900 54px system-ui, sans-serif';
-    ctx.fillStyle = '#ffc04d';
-    ctx.fillText(GAME_TITLE, W / 2, 80);
-    ctx.font = '600 40px system-ui, sans-serif';
-    ctx.fillStyle = 'rgba(244,246,251,0.9)';
-    lines.forEach((line, i) => ctx.fillText(line, W / 2, 170 + i * 64));
+    ctx.font = stencilFont(52);
+    ctx.fillStyle = UI.emberBright;
+    ctx.fillText(GAME_TITLE, W / 2, 110);
+    ctx.font = '600 38px system-ui, sans-serif';
+    ctx.fillStyle = UI.textDim;
+    lines.forEach((line, i) => ctx.fillText(line, W / 2, 184 + i * 62));
     tex.needsUpdate = true;
   };
 
@@ -182,25 +157,17 @@ export function createScoreboard(scene: Scene): Scoreboard {
     hpText: string,
     pips: number,
     timer: string,
-    c0: string,
-    c1: string,
   ): void => {
     const { ctx, tex } = board;
-    boardBg(ctx, neon);
-    ctx.textAlign = 'left';
-    ctx.font = '900 56px system-ui, sans-serif';
-    ctx.fillStyle = neon;
-    ctx.fillText(name, 56, 86);
+    header(ctx, name, neon, timer);
+    // The health readout gets the only solid-ish backing on the board.
+    plate(ctx, 28, 124, W - 56, 110, { cut: 16, fill: UI.ink, rivets: false });
+    segmentBar(ctx, 52, 148, W - 104, 60, hpFrac, neon);
+    scorePips(ctx, 70, 308, pips, neon);
     ctx.textAlign = 'right';
-    ctx.font = '900 64px system-ui, sans-serif';
-    ctx.fillStyle = '#f4f6fb';
-    ctx.fillText(timer, W - 56, 86);
-    healthBar(ctx, 56, 150, W - 112, 64, hpFrac, c0, c1);
-    ctx.textAlign = 'right';
-    ctx.font = '800 42px system-ui, sans-serif';
-    ctx.fillStyle = 'rgba(255,255,255,0.85)';
-    ctx.fillText(hpText, W - 56, 296);
-    scorePips(ctx, 80, 296, pips, neon);
+    ctx.font = stencilFont(48);
+    ctx.fillStyle = UI.textDim;
+    ctx.fillText(hpText, W - 40, 310);
     tex.needsUpdate = true;
   };
 
@@ -208,23 +175,20 @@ export function createScoreboard(scene: Scene): Scoreboard {
     const { ctx, tex } = centre;
     ctx.clearRect(0, 0, W, H);
     if (message) {
-      roundRect(ctx, 40, 110, W - 80, 200, 44);
-      ctx.fillStyle = 'rgba(18,20,28,0.88)';
-      ctx.shadowColor = 'rgba(255,150,60,0.8)';
-      ctx.shadowBlur = 34;
-      ctx.fill();
-      ctx.shadowBlur = 0;
+      plate(ctx, 60, 104, W - 120, 212, { cut: 30, fill: UI.inkDeep, stroke: UI.amberSoft });
+      hazardStrip(ctx, 78, 118, 70, 18, UI.amber);
+      hazardStrip(ctx, W - 148, 118, 70, 18, UI.amber);
       ctx.textAlign = 'center';
-      ctx.font = '900 92px system-ui, sans-serif';
+      ctx.font = stencilFont(86);
       const grad = ctx.createLinearGradient(0, 130, 0, 280);
       grad.addColorStop(0, '#fff3cf');
-      grad.addColorStop(1, '#ff7a18');
+      grad.addColorStop(1, UI.ember);
       ctx.fillStyle = grad;
-      ctx.fillText(message, W / 2, 196);
+      ctx.fillText(message, W / 2, 200);
       if (sub) {
-        ctx.font = '700 44px system-ui, sans-serif';
-        ctx.fillStyle = 'rgba(244,246,251,0.9)';
-        ctx.fillText(sub, W / 2, 272);
+        ctx.font = '700 42px system-ui, sans-serif';
+        ctx.fillStyle = UI.textDim;
+        ctx.fillText(sub, W / 2, 274);
       }
     }
     tex.needsUpdate = true;
@@ -233,8 +197,8 @@ export function createScoreboard(scene: Scene): Scoreboard {
   return {
     updateMatch(state, pHp, pMax, oHp, oMax) {
       const timer = fmtTime(state.roundTimer);
-      drawSide(left, 'YOU', '#ff9a3c', pHp / pMax, String(Math.ceil(pHp)), state.myScore, timer, '#ff7a18', '#ffc04d');
-      drawSide(right, app.mode === 'net' ? 'RIVAL' : 'BOT', '#4fb7ff', oHp / oMax, String(Math.ceil(oHp)), state.oppScore, timer, '#2f7fd6', '#9fe2ff');
+      drawSide(left, 'YOU', UI.emberBright, pHp / pMax, String(Math.ceil(pHp)), state.myScore, timer);
+      drawSide(right, app.mode === 'net' ? 'RIVAL' : 'BOT', UI.cool, oHp / oMax, String(Math.ceil(oHp)), state.oppScore, timer);
       drawCentre(state.message, state.phase === 'matchOver' ? '' : state.message ? `round ${state.round}` : '');
       drawBack([
         `round ${state.round}  ·  ${state.myScore} - ${state.oppScore}`,
@@ -248,26 +212,24 @@ export function createScoreboard(scene: Scene): Scoreboard {
       const acc = training.thrown > 0 ? Math.round((training.hits / training.thrown) * 100) : 0;
       // Left board: score + streak.
       const { ctx, tex } = left;
-      boardBg(ctx, '#ff9a3c');
+      header(ctx, 'AIM TRAINING', UI.emberBright, timer);
       ctx.textAlign = 'left';
-      ctx.font = '900 56px system-ui, sans-serif';
-      ctx.fillStyle = '#ff9a3c';
-      ctx.fillText('AIM TRAINING', 56, 86);
-      ctx.font = '900 110px system-ui, sans-serif';
-      ctx.fillStyle = '#f4f6fb';
-      ctx.fillText(String(training.score), 56, 210);
-      ctx.font = '700 44px system-ui, sans-serif';
-      ctx.fillStyle = 'rgba(255,220,170,0.95)';
-      ctx.fillText(`streak x${training.streak}`, 56, 320);
+      ctx.font = stencilFont(104);
+      ctx.fillStyle = UI.text;
+      ctx.fillText(String(training.score), 52, 200);
+      ctx.font = '700 42px system-ui, sans-serif';
+      ctx.fillStyle = UI.amberSoft;
+      ctx.fillText(`streak x${training.streak}`, 52, 320);
       ctx.textAlign = 'right';
-      ctx.fillText(`best ${Math.max(app.stats.trainingBest, training.score)}`, W - 56, 320);
+      ctx.fillStyle = UI.textDim;
+      ctx.fillText(`best ${Math.max(app.stats.trainingBest, training.score)}`, W - 52, 320);
       tex.needsUpdate = true;
-      // Right board: time + accuracy (+ health when shoot-back is on).
+      // Right board: dodge readout (health only matters with shoot-back on).
       drawSide(
-        right, 'DODGE', '#4fb7ff',
+        right, 'DODGE', UI.cool,
         app.shootBack ? hp / hpMax : 1,
-        app.shootBack ? String(Math.ceil(hp)) : 'safe',
-        0, timer, '#2f7fd6', '#9fe2ff',
+        app.shootBack ? String(Math.ceil(hp)) : 'SAFE',
+        0, timer,
       );
       drawCentre('', '');
       drawBack([

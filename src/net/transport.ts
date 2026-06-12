@@ -17,6 +17,8 @@ export interface TransportEvents {
   /** Paired and the pipe is open. side 0 hosts the match state. */
   onMatched(side: 0 | 1): void;
   onMessage(d: PeerMessage): void;
+  /** The opponent's microphone arrived (P2P transport only). */
+  onRemoteAudio?(stream: MediaStream): void;
   /** The bout/queue ended underneath us (peer left, connection lost…). */
   onClosed(reason: string): void;
 }

@@ -31,8 +31,11 @@ export class PlayerBodySystem extends createSystem({
     headObj.getWorldPosition(_head);
     rigObj.getWorldPosition(_rig);
 
-    // Hips pinned under the standing spot; spine = hips -> tracked head.
-    _hips.set(_rig.x, _rig.y + BODY_IK.hipHeight, _rig.z);
+    // Hips under the standing spot; spine = hips -> tracked head. Ducking
+    // drags the hips down too (mirrors avatar/boxer.ts solveTorso, so the
+    // hitboxes you carry match the body your rival sees).
+    const hipY = Math.min(BODY_IK.hipHeight, _head.y - _rig.y - 0.5);
+    _hips.set(_rig.x, _rig.y + hipY, _rig.z);
     _chest.copy(_hips).lerp(_head, BODY_IK.chestAlong);
 
     for (const entity of this.queries.parts.entities) {

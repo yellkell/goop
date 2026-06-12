@@ -18,14 +18,14 @@
 
 import { createSystem, InputComponent, Quaternion, Vector3, type Entity } from '@iwsdk/core';
 import { BallState, Fireball } from '../components/Fireball.js';
-import { createFireVisual, spawnEmber, stampTrail, type FireVisual } from '../fx/fire.js';
+import { createFireVisual, emberBurst, spawnEmber, stampTrail, type FireVisual } from '../fx/fire.js';
 import { ballCommands, opponent } from '../combat/opponentBus.js';
 import { match } from '../combat/matchState.js';
 import { app, training } from '../menu/appState.js';
 import { net } from '../net/client.js';
 import { pulseHand } from '../input/haptics.js';
 import * as sfx from '../audio/sfx.js';
-import { ARENA_GAP, FIREBALL } from '../config.js';
+import { ARENA_BOUNDS, ARENA_GAP, FIREBALL } from '../config.js';
 
 const HANDS = ['left', 'right'] as const;
 type Hand = 0 | 1;
@@ -167,6 +167,7 @@ export class FireballSystem extends createSystem({
         }
       } else if (state === BallState.Flying || state === BallState.Dead) {
         ball.setValue(Fireball, 'state', BallState.Returning);
+        ball.setValue(Fireball, 'returnHit', 0); // fresh return-pass window
         sfx.recall();
         net.send({ k: 'recall', hand });
       }
@@ -262,6 +263,19 @@ export class FireballSystem extends createSystem({
         obj.position.x += v[0] * delta;
         obj.position.y += v[1] * delta;
         obj.position.z += v[2] * delta;
+        // The invisible cage ~10 yards out from the platforms: a ball that
+        // reaches it bursts against the wall and dies right there.
+        if (this.clampToCage(obj.position)) {
+          emberBurst(obj.position, 14, owner === 1);
+          sfx.wallThud();
+          if (transient) {
+            this.destroyBall(ball);
+          } else {
+            ball.setValue(Fireball, 'state', BallState.Dead);
+            v[0] = 0; v[1] = 0; v[2] = 0;
+          }
+          break;
+        }
         const elapsed = (ball.getValue(Fireball, 'elapsed') ?? 0) + delta;
         ball.setValue(Fireball, 'elapsed', elapsed);
         if (elapsed >= FIREBALL.lifetime || obj.position.y <= FIREBALL.radius) {
@@ -294,6 +308,17 @@ export class FireballSystem extends createSystem({
         break;
       }
     }
+  }
+
+  /** True if the position crossed the arena cage; clamps it onto the wall. */
+  private clampToCage(p: Vector3): boolean {
+    let hit = false;
+    if (p.x < -ARENA_BOUNDS.halfWidth) { p.x = -ARENA_BOUNDS.halfWidth; hit = true; }
+    else if (p.x > ARENA_BOUNDS.halfWidth) { p.x = ARENA_BOUNDS.halfWidth; hit = true; }
+    if (p.z > ARENA_BOUNDS.zBack) { p.z = ARENA_BOUNDS.zBack; hit = true; }
+    else if (p.z < ARENA_BOUNDS.zFront) { p.z = ARENA_BOUNDS.zFront; hit = true; }
+    if (p.y > ARENA_BOUNDS.ceiling) { p.y = ARENA_BOUNDS.ceiling; hit = true; }
+    return hit;
   }
 
   /** Where this ball idles: just over the owner's knuckles. */
@@ -340,6 +365,7 @@ export class FireballSystem extends createSystem({
         }
         case 'recall':
           ball.setValue(Fireball, 'state', BallState.Returning);
+          ball.setValue(Fireball, 'returnHit', 0);
           break;
         case 'spend':
           // Their sim says this ball is finished (it hit us / was parried
@@ -384,10 +410,11 @@ export class FireballSystem extends createSystem({
 
     const cool = (ball.getValue(Fireball, 'owner') ?? 0) === 1;
 
-    // Comet trail while moving fast.
+    // Comet trail while moving fast — stamped densely so the fat core
+    // particles overlap into one thick molten rope (see fx/fire.ts).
     if (state === BallState.Flying || state === BallState.Returning) {
       const acc = (this.trailAcc.get(ball) ?? 0) + delta;
-      if (acc >= 0.022) {
+      if (acc >= 0.012) {
         this.trailAcc.set(ball, 0);
         stampTrail(obj.position, cool);
       } else {
@@ -447,6 +474,7 @@ export class FireballSystem extends createSystem({
       ball.setValue(Fireball, 'state', BallState.Hover);
       ball.setValue(Fireball, 'spin', 0);
       ball.setValue(Fireball, 'elapsed', 0);
+      ball.setValue(Fireball, 'returnHit', 0);
     }
     this.trackers[0].reset();
     this.trackers[1].reset();

@@ -38,13 +38,19 @@ export const Fireball = createComponent(
     elapsed: { type: Types.Float32, default: 0 },
     /** Smoothed shader heat, 0 (cold iron) .. ~1.5 (white-hot). */
     heat: { type: Types.Float32, default: 0.8 },
-    damage: { type: Types.Float32, default: 12 },
+    damage: { type: Types.Float32, default: 20 },
     radius: { type: Types.Float32, default: 0.09 },
     /**
      * 1 = a throwaway ball (training targets' return fire): it is destroyed
      * when spent instead of falling Dead and being recallable.
      */
     transient: { type: Types.Int32, default: 0 },
+    /**
+     * 1 once this ball has connected during its CURRENT return flight — a
+     * recalled ball that passes through a body or target counts as a hit,
+     * but only once per recall. Cleared whenever a return starts.
+     */
+    returnHit: { type: Types.Int32, default: 0 },
   },
   'A flaming iron ball bonded to one fist.',
 );

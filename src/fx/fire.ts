@@ -280,7 +280,7 @@ const _c = new Color();
 export function initFirePools(scene: Scene): void {
   if (emberPool) return;
   emberPool = new ParticlePool(1024);
-  trailPool = new ParticlePool(768, { maxPx: 800, lifeExp: 2.2 });
+  trailPool = new ParticlePool(2048, { maxPx: 800, lifeExp: 2.2 });
   scene.add(emberPool.points, trailPool.points);
 }
 
@@ -312,19 +312,40 @@ export function emberBurst(pos: Vector3, count: number, cool = false): void {
   for (let i = 0; i < count; i++) spawnEmber(pos, 0.8 + Math.random() * 1.4, cool);
 }
 
-/** A comet-tail stamp behind a flying ball. Call as the ball moves. */
+/**
+ * A comet-tail stamp behind a flying ball — the THICK FlamethrowerXR trail:
+ * a fat, hot core slug plus a lingering wisp that drifts up off the path.
+ * Call as the ball moves.
+ */
 export function stampTrail(pos: Vector3, cool = false): void {
   if (!trailPool) return;
   const hue = cool ? 0.56 + Math.random() * 0.05 : 0.05 + Math.random() * 0.05;
-  _c.setHSL(hue, 1.0, 0.55);
+
+  // The body of the trail: big, bright, short-lived — overlapping stamps
+  // fuse into one continuous molten rope.
+  _c.setHSL(hue, 1.0, 0.62);
   trailPool.spawn(
     pos,
-    (Math.random() - 0.5) * 0.25,
-    (Math.random() - 0.5) * 0.25 + 0.15,
-    (Math.random() - 0.5) * 0.25,
+    (Math.random() - 0.5) * 0.15,
+    (Math.random() - 0.5) * 0.15,
+    (Math.random() - 0.5) * 0.15,
     _c.r, _c.g, _c.b,
-    0.35 + Math.random() * 0.2,
-    0.05 + Math.random() * 0.05,
-    0.4,
+    0.26 + Math.random() * 0.12,
+    0.11 + Math.random() * 0.06,
+    0.15,
+  );
+
+  // The afterglow: smaller, slower, rises and lingers like flame shed off
+  // the comet — gives the rope a licking, smoky edge.
+  _c.setHSL(hue, 1.0, 0.5);
+  trailPool.spawn(
+    pos,
+    (Math.random() - 0.5) * 0.4,
+    (Math.random() - 0.5) * 0.3 + 0.35,
+    (Math.random() - 0.5) * 0.4,
+    _c.r, _c.g, _c.b,
+    0.5 + Math.random() * 0.3,
+    0.045 + Math.random() * 0.04,
+    0.5,
   );
 }

@@ -18,6 +18,7 @@ import { app } from '../menu/appState.js';
 import { FIREBASE_ENABLED } from './firebaseConfig.js';
 import type { PeerMessage, PoseTuple } from './protocol.js';
 import type { Transport, TransportEvents } from './transport.js';
+import { attachRemoteVoice, detachRemoteVoice } from './voice.js';
 import { WsTransport } from './wsTransport.js';
 
 const Y_180 = new Quaternion(0, 1, 0, 0); // 180° yaw, used to mirror poses
@@ -92,6 +93,7 @@ class NetClient {
   disconnect(): void {
     this.matched = false;
     this.inbox.length = 0;
+    detachRemoteVoice();
     this.transport?.close();
     this.transport = null;
   }
@@ -116,8 +118,12 @@ class NetClient {
         // Bound the inbox so a stall can't balloon memory.
         if (this.inbox.length < 256) this.inbox.push(d);
       },
+      onRemoteAudio: (stream) => {
+        attachRemoteVoice(stream);
+      },
       onClosed: (reason) => {
         this.matched = false;
+        detachRemoteVoice();
         this.transport = null;
         app.netStatus = reason;
         if (app.state !== 'menu') app.state = 'menu';

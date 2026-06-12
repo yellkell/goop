@@ -1,10 +1,12 @@
 /**
- * The iron boxer — the opponent's avatar, built from cheap primitives so it
- * reads instantly across the arena: a riveted metal head with a glowing
- * visor, a chest/pelvis torso solved under the head, and two boxing gloves
- * driven straight by the (bot or remote) hand poses.
+ * The iron boxer — the opponent's avatar, styled like a 90s UK robot-wars
+ * machine: an eight-sided helmet with a glowing visor slit, a shoulder-heavy
+ * torso (wide armoured yoke + sloped pauldrons tapering down to a narrow
+ * waist — the silhouette is THICKEST at the shoulders), a small pelvis block,
+ * and two chunky mechanical gauntlets driven straight by the (bot or remote)
+ * hand poses. No legs — floating hands and iron, on brand.
  *
- * The body intentionally matches the gameplay hitboxes (head/chest/pelvis
+ * The body volumes still track the gameplay hitboxes (head/chest/pelvis
  * spheres from BODY_IK) so what you see is what you can hit.
  */
 
@@ -15,56 +17,105 @@ import {
   Mesh,
   MeshStandardMaterial,
   Quaternion,
-  SphereGeometry,
   Vector3,
 } from 'three';
 import { BODY_IK, PALETTE, teamColor } from '../config.js';
 
 export interface BoxerRig {
-  /** Head + visor; position/orient from the head pose. */
+  /** Helmet + visor; position/orient from the head pose. */
   head: Group;
-  /** Chest + pelvis spheres; solved from the head each frame. */
+  /** Container for the solved torso pieces (sits at the world origin). */
   torso: Group;
-  chest: Mesh;
-  pelvis: Mesh;
-  /** One glove per hand; position/orient from the hand poses. */
+  /** Shoulder yoke + pauldrons + trunk; placed/oriented at the chest point. */
+  chest: Group;
+  /** Pelvis block; placed at the hips. */
+  pelvis: Group;
+  /** One gauntlet per hand; position/orient from the hand poses. */
   gloves: [Group, Group];
   /** Everything, for showing/hiding as one. */
   all: Group[];
 }
 
-function ironMat(emissive: number, intensity = 0.25): MeshStandardMaterial {
+function chassisMat(emissive = 0, intensity = 0): MeshStandardMaterial {
   return new MeshStandardMaterial({
-    color: PALETTE.iron,
+    color: PALETTE.gunmetal,
     emissive,
     emissiveIntensity: intensity,
-    metalness: 0.85,
-    roughness: 0.35,
+    metalness: 0.92,
+    roughness: 0.3,
   });
 }
 
-/** A chunky boxing glove, knuckles pointing down local -Z. */
+function darkMat(): MeshStandardMaterial {
+  return new MeshStandardMaterial({
+    color: PALETTE.gunmetalDark,
+    metalness: 0.85,
+    roughness: 0.45,
+  });
+}
+
+function glowMat(color: number, intensity = 1.4): MeshStandardMaterial {
+  return new MeshStandardMaterial({
+    color,
+    emissive: color,
+    emissiveIntensity: intensity,
+    metalness: 0.2,
+    roughness: 0.3,
+  });
+}
+
+/**
+ * A chunky mechanical gauntlet: armoured fist block, riveted knuckle plate
+ * with glowing studs, side armour, a top piston, and a flared cuff with a
+ * team-glow ring. Knuckles point down local -Z.
+ */
 export function buildGlove(team: number): Group {
   const glove = new Group();
   const accent = teamColor(team);
 
-  const fist = new Mesh(
-    new SphereGeometry(0.075, 18, 14),
-    new MeshStandardMaterial({
-      color: accent,
-      emissive: accent,
-      emissiveIntensity: 0.22,
-      metalness: 0.3,
-      roughness: 0.5,
-    }),
-  );
-  fist.scale.set(1, 0.88, 1.12);
+  // The fist: one thick armoured block.
+  const fist = new Mesh(new BoxGeometry(0.16, 0.125, 0.17), chassisMat(accent, 0.06));
+  fist.position.z = -0.015;
   glove.add(fist);
 
-  const cuff = new Mesh(new CylinderGeometry(0.05, 0.062, 0.07, 14), ironMat(accent, 0.35));
+  // Knuckle plate riding the top front edge.
+  const plate = new Mesh(new BoxGeometry(0.165, 0.05, 0.07), darkMat());
+  plate.position.set(0, 0.05, -0.075);
+  glove.add(plate);
+
+  // Four glowing knuckle studs across the strike face.
+  for (let i = 0; i < 4; i++) {
+    const stud = new Mesh(new BoxGeometry(0.024, 0.022, 0.02), glowMat(accent, 1.1));
+    stud.position.set(-0.054 + i * 0.036, 0.052, -0.108);
+    glove.add(stud);
+  }
+
+  // Side armour cheeks.
+  for (const side of [-1, 1]) {
+    const cheek = new Mesh(new BoxGeometry(0.022, 0.1, 0.13), darkMat());
+    cheek.position.set(side * 0.09, 0, -0.01);
+    glove.add(cheek);
+  }
+
+  // Recoil piston along the top.
+  const piston = new Mesh(new CylinderGeometry(0.016, 0.016, 0.1, 8), darkMat());
+  piston.rotation.x = Math.PI / 2;
+  piston.position.set(0, 0.07, 0.02);
+  glove.add(piston);
+  const rod = new Mesh(new CylinderGeometry(0.008, 0.008, 0.06, 8), glowMat(accent, 0.7));
+  rod.rotation.x = Math.PI / 2;
+  rod.position.set(0, 0.07, -0.05);
+  glove.add(rod);
+
+  // Flared cuff with a glowing team ring.
+  const cuff = new Mesh(new CylinderGeometry(0.06, 0.078, 0.08, 8), chassisMat());
   cuff.rotation.x = Math.PI / 2;
-  cuff.position.z = 0.085;
+  cuff.position.z = 0.095;
   glove.add(cuff);
+  const ring = new Mesh(new CylinderGeometry(0.073, 0.073, 0.018, 8), glowMat(accent, 0.9));
+  ring.rotation.x = Math.PI / 2;
+  ring.position.z = 0.07;
+  glove.add(ring);
 
   return glove;
 }
@@ -73,32 +124,74 @@ export function buildGlove(team: number): Group {
 export function buildBoxer(team: number): BoxerRig {
   const accent = teamColor(team);
 
-  // --- Head: iron dome + glowing visor slit ---
+  // --- Head: eight-sided helmet, visor slit, jaw guard, crest fin ---
   const head = new Group();
   head.name = 'opponent-head';
-  const dome = new Mesh(new SphereGeometry(BODY_IK.headRadius, 20, 16), ironMat(accent));
-  dome.scale.set(1, 1.08, 1.05);
-  head.add(dome);
-  const visor = new Mesh(
-    new BoxGeometry(BODY_IK.headRadius * 1.5, 0.035, 0.02),
-    new MeshStandardMaterial({
-      color: accent,
-      emissive: accent,
-      emissiveIntensity: 1.6,
-      metalness: 0.2,
-      roughness: 0.3,
-    }),
+  const helm = new Mesh(
+    new CylinderGeometry(BODY_IK.headRadius * 0.82, BODY_IK.headRadius * 0.98, BODY_IK.headRadius * 2.05, 8),
+    chassisMat(accent, 0.08),
   );
-  visor.position.set(0, 0.01, -BODY_IK.headRadius * 0.95);
+  head.add(helm);
+  const crown = new Mesh(
+    new CylinderGeometry(BODY_IK.headRadius * 0.5, BODY_IK.headRadius * 0.84, BODY_IK.headRadius * 0.5, 8),
+    darkMat(),
+  );
+  crown.position.y = BODY_IK.headRadius * 1.25;
+  head.add(crown);
+  const visor = new Mesh(new BoxGeometry(BODY_IK.headRadius * 1.45, 0.03, 0.025), glowMat(accent, 1.8));
+  visor.position.set(0, 0.012, -BODY_IK.headRadius * 0.92);
   head.add(visor);
+  const jaw = new Mesh(new BoxGeometry(BODY_IK.headRadius * 1.1, 0.05, 0.06), darkMat());
+  jaw.position.set(0, -BODY_IK.headRadius * 0.62, -BODY_IK.headRadius * 0.72);
+  head.add(jaw);
+  const fin = new Mesh(new BoxGeometry(0.018, 0.07, BODY_IK.headRadius * 1.3), darkMat());
+  fin.position.y = BODY_IK.headRadius * 1.05;
+  head.add(fin);
 
-  // --- Torso: chest + pelvis spheres matching the hitbox volumes ---
+  // --- Chest assembly: shoulders are the widest point of the machine ---
+  const chest = new Group();
+  chest.name = 'opponent-chest';
+
+  // Shoulder yoke: the wide armoured beam across the top.
+  const yoke = new Mesh(new BoxGeometry(0.46, 0.1, 0.2), chassisMat(accent, 0.05));
+  yoke.position.y = 0.09;
+  chest.add(yoke);
+
+  // Pauldrons sloping off either end — the robot-wars wedge look.
+  for (const side of [-1, 1]) {
+    const pad = new Mesh(new BoxGeometry(0.17, 0.14, 0.24), darkMat());
+    pad.position.set(side * 0.27, 0.1, 0);
+    pad.rotation.z = side * -0.2; // slope down and out
+    chest.add(pad);
+    const trim = new Mesh(new BoxGeometry(0.175, 0.018, 0.245), glowMat(accent, 0.5));
+    trim.position.set(side * 0.27, 0.175, 0);
+    trim.rotation.z = side * -0.2;
+    chest.add(trim);
+  }
+
+  // Trunk: an 8-sided wedge tapering hard from shoulders to waist —
+  // nothing bulbous below the yoke.
+  const trunk = new Mesh(new CylinderGeometry(0.19, 0.1, 0.42, 8), chassisMat(accent, 0.04));
+  trunk.scale.z = 0.72;
+  trunk.position.y = -0.13;
+  chest.add(trunk);
+
+  // Glowing reactor core slit on the chest plate.
+  const core = new Mesh(new BoxGeometry(0.06, 0.11, 0.02), glowMat(accent, 1.3));
+  core.position.set(0, -0.05, -0.135);
+  chest.add(core);
+
+  // --- Pelvis: a small armoured block, the narrow end of the wedge ---
+  const pelvis = new Group();
+  pelvis.name = 'opponent-pelvis';
+  const hipBlock = new Mesh(new BoxGeometry(0.21, 0.15, 0.17), chassisMat(accent, 0.03));
+  pelvis.add(hipBlock);
+  const beltTrim = new Mesh(new BoxGeometry(0.215, 0.02, 0.175), glowMat(accent, 0.4));
+  beltTrim.position.y = 0.06;
+  pelvis.add(beltTrim);
+
   const torso = new Group();
   torso.name = 'opponent-torso';
-  const chest = new Mesh(new SphereGeometry(BODY_IK.chestRadius, 18, 14), ironMat(accent, 0.18));
-  chest.scale.set(1.05, 1.15, 0.8);
-  const pelvis = new Mesh(new SphereGeometry(BODY_IK.pelvisRadius, 18, 14), ironMat(accent, 0.12));
-  pelvis.scale.set(1, 0.9, 0.85);
   torso.add(chest, pelvis);
 
   const gloves: [Group, Group] = [buildGlove(team), buildGlove(team)];
@@ -108,12 +201,19 @@ export function buildBoxer(team: number): BoxerRig {
   return { head, torso, chest, pelvis, gloves, all: [head, torso, gloves[0], gloves[1]] };
 }
 
+const UP = new Vector3(0, 1, 0);
 const _hips = new Vector3();
 const _chest = new Vector3();
+const _spine = new Vector3();
+const _fwd = new Vector3();
+const _tilt = new Quaternion();
+const _yaw = new Quaternion();
 
 /**
- * Solve the torso under the head, mirroring PlayerBodySystem: hips pinned
- * over the pad centre (padX/padZ) at hip height, chest lerped hips→head.
+ * Solve the torso under the head, mirroring PlayerBodySystem: hips over the
+ * pad centre (padX/padZ) — but dragged DOWN when the head ducks, so a dodge
+ * folds the whole machine instead of leaving the pelvis hanging in the air —
+ * chest lerped hips→head, both oriented to the spine lean and the head's yaw.
  * Returns chest/pelvis world positions for the caller's hitboxes via out args.
  */
 export function solveTorso(
@@ -128,13 +228,23 @@ export function solveTorso(
   rig.head.position.copy(headPos);
   rig.head.quaternion.copy(headQuat);
 
-  // Hips track the head laterally a bit so big leans drag the torso along.
-  _hips.set(padX * 0.4 + headPos.x * 0.6, BODY_IK.hipHeight, padZ * 0.4 + headPos.z * 0.6);
+  // Hips track the head laterally a bit so big leans drag the torso along,
+  // and follow it down on a duck (never higher than standing hip height).
+  const hipY = Math.min(BODY_IK.hipHeight, headPos.y - 0.5);
+  _hips.set(padX * 0.4 + headPos.x * 0.6, hipY, padZ * 0.4 + headPos.z * 0.6);
   _chest.copy(_hips).lerp(headPos, BODY_IK.chestAlong);
+
+  // Orientation: lean the chest along the hips→head spine, yaw with the head.
+  _spine.copy(headPos).sub(_hips).normalize();
+  _tilt.setFromUnitVectors(UP, _spine);
+  _fwd.set(0, 0, -1).applyQuaternion(headQuat);
+  _yaw.setFromAxisAngle(UP, Math.atan2(-_fwd.x, -_fwd.z));
 
   // The torso group sits at the world origin, so world coords ARE local here.
   rig.chest.position.copy(_chest);
+  rig.chest.quaternion.copy(_tilt).multiply(_yaw);
   rig.pelvis.position.copy(_hips);
+  rig.pelvis.quaternion.copy(_yaw);
 
   outChest.copy(_chest);
   outPelvis.copy(_hips);

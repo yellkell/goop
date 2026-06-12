@@ -26,6 +26,7 @@ import { ballCommands, opponent } from '../combat/opponentBus.js';
 import { match } from '../combat/matchState.js';
 import { app, saveStats } from '../menu/appState.js';
 import { mirrorPos, mirrorQuat, mirrorVel, net, packPose } from '../net/client.js';
+import { setSpeakerPosition, updateListener } from '../net/voice.js';
 import type { PeerMessage, PoseTuple } from '../net/protocol.js';
 import { spawnFireImpact } from '../fx/effects.js';
 import * as sfx from '../audio/sfx.js';
@@ -64,6 +65,12 @@ export class NetworkSystem extends createSystem({
     this.receive();
     this.smooth(delta);
     this.sendPose(delta);
+
+    // Directional voice: listener on your camera, their voice on their head.
+    this.world.camera.getWorldPosition(_p);
+    this.world.camera.getWorldQuaternion(_q);
+    updateListener(_p, _q);
+    setSpeakerPosition(opponent.headPos);
   }
 
   // --- outgoing ------------------------------------------------------------
@@ -125,12 +132,13 @@ export class NetworkSystem extends createSystem({
         break;
       case 'hit': {
         // Their client ruled our ball connected: damage them on our side and
-        // burst the ball where our sim has it.
+        // burst the ball where our sim has it. A return-pass hit (`ret`)
+        // doesn't spend the ball — it keeps homing back to our fist.
         this.damageThem(msg.dmg);
         const ball = this.findMyBall(msg.hand);
         if (ball?.object3D) {
           spawnFireImpact(this.world, ball.object3D.position, 0);
-          ball.setValue(Fireball, 'state', BallState.Dead);
+          if (!msg.ret) ball.setValue(Fireball, 'state', BallState.Dead);
         }
         sfx.hitDealt();
         app.stats.hitsLanded += 1;

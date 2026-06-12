@@ -1,9 +1,10 @@
 /**
- * The lobby: three dark fight-poster panels on a shallow arc in front of the
- * player. Centre = AIM TRAINING (the headline mode), left = 1V1 (quick match
- * + vs bot), right = stats & connection info. Each panel is a canvas texture
- * on a plane; MenuSystem raycasts the controllers for hover + click and maps
- * the hit UV to an action zone.
+ * The lobby: three smoked-steel plates on a shallow arc in front of the
+ * player — industrial robot-wars styling, translucent so your room stays
+ * visible through them. Centre = AIM TRAINING (the headline mode), left =
+ * 1V1 (quick match + vs bot), right = stats & connection info. Each panel is
+ * a canvas texture on a plane; MenuSystem raycasts the controllers for
+ * hover + click and maps the hit UV to an action zone.
  */
 
 import {
@@ -17,6 +18,7 @@ import {
 } from 'three';
 import { app, training } from './appState.js';
 import { GAME_TITLE } from '../config.js';
+import { UI, buttonPlate, hazardStrip, plate, stencilFont } from '../ui/industrial.js';
 
 export type PanelId = 'train' | 'duel' | 'info';
 
@@ -45,55 +47,32 @@ export interface Menu {
   redrawAll: (hoverId: PanelId | null) => void;
 }
 
-function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
-}
-
-function panelBg(ctx: CanvasRenderingContext2D, hover: boolean, neon: string): void {
+/** The shared panel skeleton: smoked plate, hazard chip, stencil title. */
+function panelBg(ctx: CanvasRenderingContext2D, hover: boolean, accent: string, title: string): void {
   ctx.clearRect(0, 0, PW, PH);
-  const g = ctx.createLinearGradient(0, 0, 0, PH);
-  g.addColorStop(0, hover ? 'rgba(30,32,44,0.96)' : 'rgba(22,24,32,0.92)');
-  g.addColorStop(1, hover ? 'rgba(44,30,24,0.96)' : 'rgba(34,24,20,0.92)');
-  roundRect(ctx, 10, 10, PW - 20, PH - 20, 32);
-  ctx.fillStyle = g;
-  ctx.shadowColor = neon;
-  ctx.shadowBlur = hover ? 34 : 20;
-  ctx.fill();
-  ctx.shadowBlur = 0;
-  roundRect(ctx, 10, 10, PW - 20, PH - 20, 32);
-  ctx.lineWidth = 4;
-  ctx.strokeStyle = hover ? neon : 'rgba(255,160,60,0.45)';
+  plate(ctx, 8, 8, PW - 16, PH - 16, {
+    cut: 26,
+    fill: hover ? 'rgba(14,15,20,0.6)' : UI.ink,
+    stroke: hover ? accent : UI.steel,
+  });
+  hazardStrip(ctx, 36, 34, 52, 16, UI.amber);
+  ctx.textAlign = 'left';
+  ctx.font = stencilFont(40);
+  ctx.fillStyle = accent;
+  ctx.fillText(title, 104, 44);
+  ctx.strokeStyle = hover ? accent : UI.steelDim;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(36, 72);
+  ctx.lineTo(PW - 36, 72);
   ctx.stroke();
-}
-
-/** A chunky pill button. */
-function button(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, label: string, c0: string, c1: string): void {
-  const grad = ctx.createLinearGradient(x, y, x, y + h);
-  grad.addColorStop(0, c0);
-  grad.addColorStop(1, c1);
-  roundRect(ctx, x, y, w, h, h / 2);
-  ctx.fillStyle = grad;
-  ctx.shadowColor = c1;
-  ctx.shadowBlur = 18;
-  ctx.fill();
-  ctx.shadowBlur = 0;
-  ctx.fillStyle = '#16181f';
-  ctx.font = `900 ${Math.round(h * 0.42)}px system-ui, sans-serif`;
   ctx.textAlign = 'center';
-  ctx.fillText(label, x + w / 2, y + h / 2 + 2);
 }
 
 function makePanel(
   id: PanelId,
   wMeters: number,
   hMeters: number,
-  neon: string,
   draw: (ctx: CanvasRenderingContext2D, hover: boolean) => void,
   hitTest: MenuPanel['hitTest'],
 ): MenuPanel {
@@ -111,40 +90,38 @@ function makePanel(
   );
   mesh.name = `menu-panel:${id}`;
   const redraw = (hover: boolean): void => {
-    panelBg(ctx, hover, neon);
     draw(ctx, hover);
     texture.needsUpdate = true;
   };
   return { id, mesh, redraw, hitTest };
 }
 
-/** Centre — AIM TRAINING: the big start button + the shoot-back toggle. */
+/** Centre — AIM TRAINING: the big start plate + the shoot-back toggle. */
 function drawTrain(ctx: CanvasRenderingContext2D, hover: boolean): void {
-  ctx.fillStyle = '#ffc04d';
-  ctx.font = '900 52px system-ui, sans-serif';
-  ctx.fillText('AIM TRAINING', PW / 2, 70);
+  panelBg(ctx, hover, UI.emberBright, 'AIM TRAINING');
 
-  button(ctx, 70, 120, PW - 140, 110, 'START', hover ? '#ffd27a' : '#ffc04d', '#ff7a18');
+  buttonPlate(ctx, 70, 120, PW - 140, 110, 'START', UI.ember, hover);
 
-  // Shoot-back toggle row.
+  // Shoot-back toggle row: an industrial breaker switch.
   const on = app.shootBack;
-  ctx.font = '700 30px system-ui, sans-serif';
+  ctx.font = '700 28px system-ui, sans-serif';
   ctx.textAlign = 'left';
-  ctx.fillStyle = 'rgba(244,246,251,0.9)';
+  ctx.fillStyle = UI.textDim;
   ctx.fillText('targets shoot back', 64, 300);
   const pw = 120, ph = 56, px = PW - 64 - pw, py = 272;
-  roundRect(ctx, px, py, pw, ph, ph / 2);
-  ctx.fillStyle = on ? '#4fb7ff' : 'rgba(150,150,170,0.3)';
-  ctx.fill();
-  const kr = ph / 2 - 7;
-  ctx.beginPath();
-  ctx.arc(on ? px + pw - kr - 8 : px + kr + 8, py + ph / 2, kr, 0, Math.PI * 2);
-  ctx.fillStyle = '#f4f6fb';
-  ctx.fill();
+  plate(ctx, px, py, pw, ph, {
+    cut: 10,
+    fill: on ? 'rgba(79,183,255,0.25)' : 'rgba(150,150,170,0.12)',
+    stroke: on ? UI.cool : UI.steelDim,
+    rivets: false,
+  });
+  ctx.fillStyle = on ? UI.cool : UI.steelDim;
+  const kw = pw / 2 - 12;
+  ctx.fillRect(on ? px + pw - kw - 8 : px + 8, py + 8, kw, ph - 16);
 
   ctx.textAlign = 'center';
   ctx.font = '600 24px system-ui, sans-serif';
-  ctx.fillStyle = 'rgba(255,200,140,0.8)';
+  ctx.fillStyle = UI.amberSoft;
   ctx.fillText(`best score  ${app.stats.trainingBest}`, PW / 2, 360);
 }
 
@@ -158,22 +135,22 @@ function hitTrain(_u: number, v: number): MenuAction | null {
 
 /** Left — 1V1: quick match (or cancel) + vs bot. */
 function drawDuel(ctx: CanvasRenderingContext2D, hover: boolean): void {
-  ctx.fillStyle = '#4fb7ff';
-  ctx.font = '900 52px system-ui, sans-serif';
-  ctx.fillText('1 V 1', PW / 2, 70);
+  panelBg(ctx, hover, UI.cool, '1 V 1');
 
   const queueing = app.state === 'queueing';
-  button(
+  buttonPlate(
     ctx, 70, 116, PW - 140, 96,
     queueing ? 'CANCEL' : 'QUICK MATCH',
-    queueing ? '#ffd27a' : hover ? '#9fe2ff' : '#7fd0ff',
-    queueing ? '#ff9a3c' : '#2f7fd6',
+    queueing ? UI.amber : UI.cool,
+    hover,
   );
-  button(ctx, 70, 240, PW - 140, 96, 'VS BOT', hover ? '#ffd27a' : '#ffc04d', '#ff7a18');
+  buttonPlate(ctx, 70, 240, PW - 140, 96, 'VS BOT', UI.ember, hover);
 
-  ctx.font = '600 24px system-ui, sans-serif';
+  ctx.font = '600 22px system-ui, sans-serif';
   ctx.fillStyle = 'rgba(159,226,255,0.85)';
-  ctx.fillText(queueing ? 'searching for an opponent…' : app.netStatus, PW / 2, 368);
+  ctx.fillText(queueing ? 'searching for an opponent…' : app.netStatus, PW / 2, 352);
+  ctx.fillStyle = UI.textDim;
+  ctx.fillText('online duels carry positional voice chat', PW / 2, 380);
 }
 
 function hitDuel(_u: number, v: number): MenuAction | null {
@@ -185,27 +162,26 @@ function hitDuel(_u: number, v: number): MenuAction | null {
 
 /** Right — stats & how-to. Not clickable. */
 function drawInfo(ctx: CanvasRenderingContext2D): void {
-  ctx.fillStyle = '#f4f6fb';
-  ctx.font = '900 44px system-ui, sans-serif';
-  ctx.fillText(GAME_TITLE, PW / 2, 64);
+  panelBg(ctx, false, UI.text, GAME_TITLE);
 
-  ctx.font = '600 27px system-ui, sans-serif';
-  ctx.fillStyle = 'rgba(255,220,170,0.95)';
+  ctx.font = '600 26px system-ui, sans-serif';
+  ctx.fillStyle = UI.amberSoft;
   const lines = [
     'hold trigger — ball orbits your fist',
     'punch + release — throw',
     'trigger — recall the ball',
+    'a recall through them still hits',
     'your orbit parries their fire',
     'stay on your platform!',
   ];
-  lines.forEach((l, i) => ctx.fillText(l, PW / 2, 122 + i * 42));
+  lines.forEach((l, i) => ctx.fillText(l, PW / 2, 112 + i * 40));
 
   ctx.font = '700 28px system-ui, sans-serif';
-  ctx.fillStyle = '#ffc04d';
+  ctx.fillStyle = UI.emberBright;
   ctx.fillText(
     `${app.stats.wins}W / ${app.stats.losses}L  ·  best ${app.stats.trainingBest}${training.lastScore ? `  ·  last ${training.lastScore}` : ''}`,
     PW / 2,
-    352,
+    364,
   );
 }
 
@@ -213,9 +189,9 @@ export function createMenu(scene: Scene): Menu {
   const group = new Group();
   group.name = 'lobby-menu';
 
-  const train = makePanel('train', 0.86, 0.68, 'rgba(255,160,60,0.95)', drawTrain, hitTrain);
-  const duel = makePanel('duel', 0.78, 0.62, 'rgba(79,183,255,0.95)', drawDuel, hitDuel);
-  const info = makePanel('info', 0.78, 0.62, 'rgba(255,243,207,0.7)', (ctx) => drawInfo(ctx), () => null);
+  const train = makePanel('train', 0.86, 0.68, drawTrain, hitTrain);
+  const duel = makePanel('duel', 0.78, 0.62, drawDuel, hitDuel);
+  const info = makePanel('info', 0.78, 0.62, (ctx) => drawInfo(ctx), () => null);
 
   // Shallow arc in front of the player, tilted inward toward the centre.
   const y = 1.45;

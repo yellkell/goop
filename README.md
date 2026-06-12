@@ -3,8 +3,18 @@
 Bare-knuckle boxing at a distance, in WebXR passthrough. Two flaming iron
 balls orbit your fists — **hold the trigger** and a ball roars in orbit around
 your hand, **whip a punch and release** to hurl it at your opponent, **pull
-the trigger again** to call it blazing back to your palm. Your orbiting ball
-is also your shield: it parries incoming fire out of the air.
+the trigger again** to call it blazing back to your palm. A recalled ball
+that passes **through** your opponent (or a training target) on its way home
+still counts as a hit — recalling through them is a real technique. Your
+orbiting ball is also your shield: it parries incoming fire out of the air.
+
+The look is industrial future fight club — 90s UK robot-wars: gunmetal
+plate, hazard-amber striping, riveted smoked-glass UI you can see your room
+through, shoulder-heavy mech avatars and chunky mechanical gauntlets, with a
+synthesised metal-on-metal soundscape (servos, pistons, anvil clangs). An
+invisible cage stands ~10 yards out from each platform on every side; stray
+fire bursts against it instead of sailing off into your house, and every
+ball drags a thick FlamethrowerXR comet trail.
 
 Built on Meta's [Immersive Web SDK](https://iwsdk.dev/) (Three.js + ECS).
 Play space dimensions follow Blaston's layout — two octagonal platforms
@@ -21,6 +31,10 @@ in-your-face boxing feel.
   throws and hurls fire back on a cadence.
 - **1V1 QUICK MATCH** — competitive online duels through the bundled relay
   server. Best of 5 rounds, 60 s each, knockout or higher health at the bell.
+  P2P matches carry **directional voice chat**: your rival's mic is
+  spatialised onto their avatar's head (HRTF), so their trash talk pans and
+  ducks with them. Mic permission is asked when you queue; declining still
+  lets you hear them.
 
 ## The rules of the platform
 
@@ -76,6 +90,7 @@ world origin.
 | Hold trigger | Ball orbits that fist (spins up over ~1 s) |
 | Release mid-punch | Throw — speed and direction follow your swing |
 | Trigger (ball away) | Recall the ball to that fist |
+| Recall through a body/target | Counts as a hit (once per recall) |
 | Your orbit/recall path | Parries enemy balls on contact |
 | Head past the rim | Rapid health drain — get back on the platform |
 

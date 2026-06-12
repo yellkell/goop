@@ -19,8 +19,12 @@ export type PeerMessage =
   | { k: 'throw'; hand: 0 | 1; pos: [number, number, number]; vel: [number, number, number] }
   /** I recalled my `hand` ball. */
   | { k: 'recall'; hand: 0 | 1 }
-  /** Your `hand` ball HIT me (victim-authoritative) for `dmg`. */
-  | { k: 'hit'; hand: 0 | 1; dmg: number }
+  /**
+   * Your `hand` ball HIT me (victim-authoritative) for `dmg`. `ret` means it
+   * connected mid-RETURN (you recalled it through me) — the ball is not
+   * spent and keeps homing back to your fist.
+   */
+  | { k: 'hit'; hand: 0 | 1; dmg: number; ret?: boolean }
   /** I parried your `hand` ball out of the air. */
   | { k: 'deflect'; hand: 0 | 1 }
   /** Host → guest match-state echo. Scores are in the HOST's perspective. */

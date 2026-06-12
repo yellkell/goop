@@ -349,7 +349,10 @@ export class TrainingSystem extends createSystem({
       // down the texture, so shift the board up so that point sits at y = 0.
       const board = new Mesh(
         new PlaneGeometry(0.5, 0.75),
-        new MeshBasicMaterial({ map: cutoutTex, transparent: true, side: DoubleSide }),
+        // alphaTest discards the see-through texels in the depth pass too —
+        // without it the whole quad writes depth and a ball flying behind
+        // the cutout vanishes inside an invisible square.
+        new MeshBasicMaterial({ map: cutoutTex, transparent: true, alphaTest: 0.5, side: DoubleSide }),
       );
       board.position.y = 0.75 * (0.625 - 0.5);
       group.add(board);

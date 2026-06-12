@@ -54,7 +54,7 @@ export const ARENA_GAP = 3.4;
  */
 export const FIREBALL = {
   radius: 0.09, // iron core radius (also the collision radius)
-  damage: 12, // damage per landed hit
+  damage: 20, // damage per landed hit — five clean hits is a knockout
 
   // Orbit (trigger held): the ball circles the fist.
   orbitRadius: 0.17, // distance from the fist while orbiting
@@ -91,6 +91,19 @@ export const COMBAT = {
 };
 
 /**
+ * The invisible cage around the whole arena: a wall ~10 yards (9.1 m) out
+ * from each platform's rim on every side, plus a ceiling. A flying ball that
+ * reaches it bursts against it and drops dead there — fire never sails off
+ * into your real room forever.
+ */
+export const ARENA_BOUNDS = {
+  halfWidth: OCTAGON_HALF_WIDTH + 9.1, // left/right of both platforms
+  zBack: OCTAGON_HALF_DEPTH + 9.1, // behind YOUR platform (+z)
+  zFront: -ARENA_GAP - OCTAGON_HALF_DEPTH - 9.1, // behind THEIR platform (−z)
+  ceiling: 9.0,
+};
+
+/**
  * Head-driven IK body. The hitbox is not one sphere — it is a spine solved
  * each frame from the tracked head down to pinned hips, with three hitbox
  * spheres along it. Leaning/ducking the head swings the torso, so dodging is
@@ -117,7 +130,7 @@ export const BOT = {
   throwInterval: 2.3, // seconds between throws (alternates hands)
   windup: 0.7, // orbit/wind-up time before the ball leaves
   throwSpeed: 4.4, // a touch slower than yours → readable and dodgeable
-  damage: 10,
+  damage: 20, // every landed hit is 20, theirs included
   aimError: 0.16, // metres of aim slop at the target
   recallDelay: 1.4, // seconds after a throw before it recalls the ball
 };
@@ -165,7 +178,7 @@ export const TRAINING = {
   shootChance: 0.55, // chance a cutout takes its shot
   shootDelay: 0.7, // aim time before it fires
   shotSpeed: 4.0,
-  shotDamage: 8,
+  shotDamage: 20, // every landed hit is 20 — training regen softens it
   regenDelay: 2.5, // seconds after damage before training regen kicks in
   regenPerSec: 9, // training-only health regen
 };
@@ -201,6 +214,9 @@ export const PALETTE = {
   coolCore: 0x9fe2ff,
   danger: 0xe8352a,
   iron: 0x3a3d46,
+  gunmetal: 0x2c2f36, // robot-wars chassis steel
+  gunmetalDark: 0x1e2126,
+  amber: 0xffb000, // industrial hazard amber
   charcoal: 0x191b22,
   white: 0xf4f6fb,
 };

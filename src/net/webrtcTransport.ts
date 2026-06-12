@@ -8,6 +8,9 @@
  * Two channels:
  *   'pose' — unordered, no retransmits: a late pose is a useless pose.
  *   'evt'  — reliable, ordered: throws, hits, match state must all arrive.
+ * Plus VOICE: both peers offer their microphone on the same connection;
+ * the remote track is surfaced via onRemoteAudio and spatialised in
+ * net/voice.ts. Mic denied? You still hear them (recvonly).
  *
  * Matchmaking (collection `lobbies`):
  *   - look for an open lobby; claim it with a transaction → you are the
@@ -67,6 +70,7 @@ export class WebRtcTransport implements Transport {
   private closed = false;
   private unsubs: Unsubscribe[] = [];
   private connectTimer: ReturnType<typeof setTimeout> | null = null;
+  private micStream: MediaStream | null = null;
 
   constructor(private readonly events: TransportEvents) {}
 
@@ -79,6 +83,8 @@ export class WebRtcTransport implements Transport {
 
     this.pc = new RTCPeerConnection(ICE_SERVERS);
     this.watchConnection();
+    await this.setupVoice();
+    if (this.closed) return;
 
     if (claimed) {
       this.isCaller = false;
@@ -113,6 +119,8 @@ export class WebRtcTransport implements Transport {
     this.matched = false;
     if (this.connectTimer) clearTimeout(this.connectTimer);
     for (const u of this.unsubs.splice(0)) u();
+    for (const track of this.micStream?.getTracks() ?? []) track.stop();
+    this.micStream = null;
     this.evtChannel?.close();
     this.poseChannel?.close();
     this.pc?.close();
@@ -122,6 +130,39 @@ export class WebRtcTransport implements Transport {
       void deleteDoc(this.lobbyRef).catch(() => {});
     }
     this.lobbyRef = null;
+  }
+
+  // --- voice -----------------------------------------------------------------
+
+  /**
+   * Offer the microphone on the peer connection (before any offer/answer is
+   * created so the audio m-line is in the SDP), and surface the remote track.
+   */
+  private async setupVoice(): Promise<void> {
+    const pc = this.pc!;
+    pc.ontrack = (ev) => {
+      if (ev.track.kind !== 'audio') return;
+      const stream = ev.streams[0] ?? new MediaStream([ev.track]);
+      this.events.onRemoteAudio?.(stream);
+    };
+    try {
+      this.micStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+      if (this.closed) {
+        for (const track of this.micStream.getTracks()) track.stop();
+        this.micStream = null;
+        return;
+      }
+      for (const track of this.micStream.getTracks()) pc.addTrack(track, this.micStream);
+    } catch {
+      // Mic denied/unavailable — still set up to RECEIVE their voice.
+      try {
+        pc.addTransceiver('audio', { direction: 'recvonly' });
+      } catch {
+        /* no audio support at all — data channels still work */
+      }
+    }
   }
 
   // --- matchmaking -----------------------------------------------------------

@@ -1,6 +1,7 @@
 /**
- * The "IRON BALLS BOXING" title banner — a canvas-drawn fight poster floating
- * high behind the opponent's pad. Visible in the lobby; hidden during a bout.
+ * The "FIRE FIGHT" title plate — a riveted, hazard-striped steel sign
+ * floating high behind the opponent's pad, robot-wars pit-lane style.
+ * Visible in the lobby; hidden during a bout.
  */
 
 import {
@@ -12,93 +13,50 @@ import {
   type Scene,
 } from 'three';
 import { ARENA_GAP } from '../config.js';
+import { UI, hazardStrip, plate, stencilFont } from '../ui/industrial.js';
 
 const W = 1024;
 const H = 512;
-
-function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
-}
 
 export function createTitleBanner(scene: Scene): Mesh {
   const canvas = document.createElement('canvas');
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext('2d')!;
-
-  // Charcoal fight-poster backdrop with an ember glow at the bottom.
-  roundRect(ctx, 12, 12, W - 24, H - 24, 42);
-  const bg = ctx.createLinearGradient(0, 0, 0, H);
-  bg.addColorStop(0, 'rgba(22,24,32,0.94)');
-  bg.addColorStop(1, 'rgba(38,22,12,0.94)');
-  ctx.fillStyle = bg;
-  ctx.fill();
-  const emberGlow = ctx.createRadialGradient(W / 2, H * 1.1, 40, W / 2, H * 1.1, W * 0.7);
-  emberGlow.addColorStop(0, 'rgba(255,122,24,0.5)');
-  emberGlow.addColorStop(1, 'rgba(255,122,24,0)');
-  ctx.save();
-  roundRect(ctx, 12, 12, W - 24, H - 24, 42);
-  ctx.clip();
-  ctx.fillStyle = emberGlow;
-  ctx.fillRect(0, 0, W, H);
-  ctx.restore();
-  roundRect(ctx, 12, 12, W - 24, H - 24, 42);
-  ctx.lineWidth = 5;
-  ctx.strokeStyle = 'rgba(255,160,60,0.85)';
-  ctx.stroke();
-
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
-  // Two crossed fireballs: orange (you) vs blue (them).
-  for (const [cx, hue] of [[W * 0.16, 'rgba(255,140,30,'], [W * 0.84, 'rgba(80,180,255,']] as const) {
-    const ball = ctx.createRadialGradient(cx, 140, 4, cx, 140, 60);
-    ball.addColorStop(0, `${hue}1)`);
-    ball.addColorStop(0.5, `${hue}0.55)`);
-    ball.addColorStop(1, `${hue}0)`);
-    ctx.fillStyle = ball;
-    ctx.beginPath();
-    ctx.arc(cx, 140, 60, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#2a2c36';
-    ctx.beginPath();
-    ctx.arc(cx, 140, 26, 0, Math.PI * 2);
-    ctx.fill();
-  }
+  // Smoked-steel plate with hazard rails top and bottom.
+  plate(ctx, 12, 12, W - 24, H - 24, { cut: 40, fill: 'rgba(12,13,17,0.62)', stroke: UI.amberSoft });
+  hazardStrip(ctx, 52, 40, W - 104, 26, UI.amber);
+  hazardStrip(ctx, 52, H - 66, W - 104, 26, UI.amber);
 
-  // Title with a molten gradient.
-  const fire = ctx.createLinearGradient(0, 90, 0, 220);
+  // Title: stencilled steel — FIRE in molten amber, FIGHT in arc-light blue.
+  const fire = ctx.createLinearGradient(0, 110, 0, 230);
   fire.addColorStop(0, '#fff3cf');
-  fire.addColorStop(0.5, '#ffc04d');
-  fire.addColorStop(1, '#ff7a18');
-  ctx.font = '900 132px system-ui, sans-serif';
+  fire.addColorStop(0.5, UI.emberBright);
+  fire.addColorStop(1, UI.ember);
+  ctx.font = stencilFont(128);
   ctx.fillStyle = fire;
   ctx.shadowColor = 'rgba(255,122,24,0.9)';
-  ctx.shadowBlur = 34;
-  ctx.fillText('FIRE', W / 2 - 190, 170);
+  ctx.shadowBlur = 30;
+  ctx.fillText('FIRE', W / 2 - 190, 178);
   ctx.shadowBlur = 0;
 
-  ctx.font = '900 132px system-ui, sans-serif';
-  ctx.fillStyle = '#f4f6fb';
+  ctx.fillStyle = UI.text;
   ctx.shadowColor = 'rgba(79,183,255,0.8)';
-  ctx.shadowBlur = 24;
-  ctx.fillText('FIGHT', W / 2 + 180, 170);
+  ctx.shadowBlur = 22;
+  ctx.fillText('FIGHT', W / 2 + 185, 178);
   ctx.shadowBlur = 0;
 
-  ctx.font = '700 40px system-ui, sans-serif';
-  ctx.fillStyle = 'rgba(255,220,170,0.85)';
-  ctx.fillText('flaming-fist duels at a distance', W / 2, 268);
+  ctx.font = '700 38px system-ui, sans-serif';
+  ctx.fillStyle = UI.textDim;
+  ctx.fillText('flaming-fist duels at a distance', W / 2, 272);
 
-  ctx.font = '700 36px system-ui, sans-serif';
-  ctx.fillStyle = 'rgba(255,200,140,0.9)';
-  ctx.fillText('hold trigger · ball orbits your fist', W / 2, 380);
-  ctx.fillText('punch to throw · trigger to recall', W / 2, 432);
+  ctx.font = '700 34px system-ui, sans-serif';
+  ctx.fillStyle = UI.amberSoft;
+  ctx.fillText('hold trigger · ball orbits your fist', W / 2, 352);
+  ctx.fillText('punch to throw · trigger to recall', W / 2, 402);
 
   const texture = new CanvasTexture(canvas);
   texture.minFilter = LinearFilter;

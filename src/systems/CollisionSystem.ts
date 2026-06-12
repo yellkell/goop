@@ -11,6 +11,10 @@
  *    RETURNING balls is slapped out of the air (`deflect` sent online).
  *  - Training: your flying balls vs pop-up targets (handled by marking the
  *    target; TrainingSystem owns scoring/animation).
+ *  - RETURN-PASS: a RECALLED ball that passes through a body or target on
+ *    its way home ALSO connects — once per return (`returnHit` guards it) —
+ *    and is NOT spent: it keeps homing back to its fist. Recalling through
+ *    your opponent is a real technique.
  */
 
 import { createSystem, Vector3, type Entity } from '@iwsdk/core';
@@ -48,7 +52,10 @@ export class CollisionSystem extends createSystem({
       const obj = ball.object3D;
       if (!obj || !obj.visible) continue;
       const state = ball.getValue(Fireball, 'state') ?? 0;
-      if (state !== BallState.Flying) continue;
+      const returning = state === BallState.Returning;
+      if (state !== BallState.Flying && !returning) continue;
+      // One connect per recall: a return-pass that already landed is inert.
+      if (returning && (ball.getValue(Fireball, 'returnHit') ?? 0) === 1) continue;
 
       obj.getWorldPosition(_ballPos);
       const owner = ball.getValue(Fireball, 'owner') ?? 0;
@@ -56,21 +63,22 @@ export class CollisionSystem extends createSystem({
       const damage = ball.getValue(Fireball, 'damage') ?? FIREBALL.damage;
 
       if (owner === 1) {
-        // Parry first: your roaring orbit is also your shield.
-        if (this.tryParry(ball, balls, radius)) continue;
-        this.enemyBallVsMe(ball, hitboxes, radius, damage);
+        // Parry first: your roaring orbit is also your shield. (Only flying
+        // balls can be parried — a recalled ball is already leaving.)
+        if (!returning && this.tryParry(ball, balls, radius)) continue;
+        this.enemyBallVsMe(ball, hitboxes, radius, damage, returning);
       } else if (inMatch && app.mode === 'bot') {
-        this.myBallVsOpponent(ball, hitboxes, radius, damage);
+        this.myBallVsOpponent(ball, hitboxes, radius, damage, returning);
       } else if (inTraining) {
-        this.myBallVsTargets(ball, radius);
+        this.myBallVsTargets(ball, radius, returning);
       }
       // Online (`mode === 'net'`): hits on the rival are ruled by THEIR
       // client and arrive as a `hit` message — see NetworkSystem.
     }
   }
 
-  /** An enemy ball connecting with one of my body hitboxes. */
-  private enemyBallVsMe(ball: Entity, hitboxes: Entity[], radius: number, damage: number): void {
+  /** An enemy ball (flying, or recalled through me) connecting with my body. */
+  private enemyBallVsMe(ball: Entity, hitboxes: Entity[], radius: number, damage: number, returning: boolean): void {
     for (const hitbox of hitboxes) {
       if ((hitbox.getValue(Hitbox, 'team') ?? 0) !== 0) continue;
       const hbObj = hitbox.object3D;
@@ -92,16 +100,23 @@ export class CollisionSystem extends createSystem({
       pulseHand(this.world.session, 'left', 0.7, 110);
       pulseHand(this.world.session, 'right', 0.7, 110);
 
-      this.spendBall(ball);
+      // A return-pass keeps flying home; a thrown ball is spent on contact.
+      if (returning) ball.setValue(Fireball, 'returnHit', 1);
+      else this.spendBall(ball);
       if (app.mode === 'net' && app.state === 'playing') {
-        net.send({ k: 'hit', hand: (ball.getValue(Fireball, 'hand') ?? 0) as 0 | 1, dmg: damage });
+        net.send({
+          k: 'hit',
+          hand: (ball.getValue(Fireball, 'hand') ?? 0) as 0 | 1,
+          dmg: damage,
+          ...(returning ? { ret: true } : {}),
+        });
       }
       return;
     }
   }
 
-  /** My ball connecting with the bot's body. */
-  private myBallVsOpponent(ball: Entity, hitboxes: Entity[], radius: number, damage: number): void {
+  /** My ball (flying or recalled through them) connecting with the bot. */
+  private myBallVsOpponent(ball: Entity, hitboxes: Entity[], radius: number, damage: number, returning: boolean): void {
     for (const hitbox of hitboxes) {
       if ((hitbox.getValue(Hitbox, 'team') ?? 0) !== 1) continue;
       const hbObj = hitbox.object3D;
@@ -115,13 +130,14 @@ export class CollisionSystem extends createSystem({
       spawnFireImpact(this.world, _ballPos, 0);
       sfx.hitDealt();
       app.stats.hitsLanded += 1;
-      this.spendBall(ball);
+      if (returning) ball.setValue(Fireball, 'returnHit', 1);
+      else this.spendBall(ball);
       return;
     }
   }
 
   /** My ball vs the pop-up targets: mark the hit, TrainingSystem scores it. */
-  private myBallVsTargets(ball: Entity, radius: number): void {
+  private myBallVsTargets(ball: Entity, radius: number, returning: boolean): void {
     for (const target of this.queries.targets.entities) {
       const state = target.getValue(TrainingTarget, 'state') ?? 0;
       if (state !== TargetState.Rising && state !== TargetState.Holding) continue;
@@ -137,7 +153,8 @@ export class CollisionSystem extends createSystem({
       spawnFireImpact(this.world, _ballPos, 0);
       sfx.hitDealt();
       app.stats.hitsLanded += 1;
-      this.spendBall(ball);
+      if (returning) ball.setValue(Fireball, 'returnHit', 1);
+      else this.spendBall(ball);
       return;
     }
   }
