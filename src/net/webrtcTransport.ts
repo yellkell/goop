@@ -20,7 +20,7 @@
  *   subcollections, exactly the Firestore WebRTC codelab shape.
  */
 
-import { initializeApp, type FirebaseApp } from 'firebase/app';
+import { getApp, getApps, initializeApp, type FirebaseApp } from 'firebase/app';
 import {
   addDoc,
   collection,
@@ -56,7 +56,8 @@ const CONNECT_TIMEOUT_MS = 15_000;
 let firebaseApp: FirebaseApp | undefined;
 
 function db(): Firestore {
-  firebaseApp ??= initializeApp(firebaseConfig);
+  // The leaderboard may have initialised the app already — share it.
+  firebaseApp ??= getApps().length ? getApp() : initializeApp(firebaseConfig);
   return getFirestore(firebaseApp);
 }
 

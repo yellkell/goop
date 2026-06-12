@@ -26,6 +26,7 @@ import { ballCommands, opponent } from '../combat/opponentBus.js';
 import { match } from '../combat/matchState.js';
 import { app, saveStats } from '../menu/appState.js';
 import { mirrorPos, mirrorQuat, mirrorVel, net, packPose } from '../net/client.js';
+import { myElo, myName, reportResult, rival } from '../net/leaderboard.js';
 import { setSpeakerPosition, updateListener } from '../net/voice.js';
 import type { PeerMessage, PoseTuple } from '../net/protocol.js';
 import { spawnDamagePopup, spawnFireImpact } from '../fx/effects.js';
@@ -63,12 +64,21 @@ export class NetworkSystem extends createSystem({
    */
   private graceTimer = 0;
   private lastReset = -1;
+  private sentIam = false;
 
   update(delta: number): void {
     if (app.mode !== 'net' || app.state !== 'playing') {
       // Still drain so stale packets never leak into the next bout.
       if (net.inbox.length) net.inbox.length = 0;
+      this.sentIam = false;
       return;
+    }
+
+    // Introduce myself once per bout: callsign + hidden ELO, so whoever
+    // wins can weight their leaderboard score by rival quality.
+    if (!this.sentIam) {
+      this.sentIam = true;
+      net.send({ k: 'iam', name: myName(), elo: myElo() });
     }
 
     if (match.resetCount !== this.lastReset) {
@@ -195,6 +205,10 @@ export class NetworkSystem extends createSystem({
       case 'rematch':
         match.rematchTheirs = true;
         break;
+      case 'iam':
+        rival.name = msg.name;
+        rival.elo = msg.elo;
+        break;
       case 'state':
         if (app.side === 1) this.applyHostState(msg);
         break;
@@ -221,6 +235,7 @@ export class NetworkSystem extends createSystem({
         if (win) app.stats.wins += 1;
         else app.stats.losses += 1;
         saveStats();
+        reportResult(win, rival.elo); // guest-side leaderboard update
         sfx.matchEnd(win);
       }
     }

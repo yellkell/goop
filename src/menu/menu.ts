@@ -2,9 +2,11 @@
  * The lobby: three smoked-steel plates on a shallow arc in front of the
  * player — industrial robot-wars styling, translucent so your room stays
  * visible through them. Centre = AIM TRAINING (the headline mode), left =
- * 1V1 (quick match + vs bot), right = stats & connection info. Each panel is
- * a canvas texture on a plane; MenuSystem raycasts the controllers for
- * hover + click and maps the hit UV to an action zone.
+ * 1V1 (quick match + vs bot), right = stats & connection info. A fourth
+ * plate hangs BEHIND the player: the Firebase leaderboard (1V1 score / aim
+ * training tabs) — lobby only, gone the moment a bout or run starts. Each
+ * panel is a canvas texture on a plane; MenuSystem raycasts the controllers
+ * for hover + click and maps the hit UV to an action zone.
  */
 
 import {
@@ -18,16 +20,19 @@ import {
 } from 'three';
 import { app, training } from './appState.js';
 import { GAME_TITLE } from '../config.js';
+import { leaderboard, myStats } from '../net/leaderboard.js';
 import { UI, buttonPlate, hazardStrip, plate, stencilFont } from '../ui/industrial.js';
 
-export type PanelId = 'train' | 'duel' | 'info';
+export type PanelId = 'train' | 'duel' | 'info' | 'board';
 
 export type MenuAction =
   | 'start-training'
   | 'toggle-shootback'
   | 'quick-match'
   | 'cancel-queue'
-  | 'vs-bot';
+  | 'vs-bot'
+  | 'lb-duel'
+  | 'lb-training';
 
 const PW = 512;
 const PH = 400;
@@ -160,7 +165,7 @@ function hitDuel(_u: number, v: number): MenuAction | null {
   return null;
 }
 
-/** Right — stats & how-to. Not clickable. */
+/** Right — how-to + training bests. Not clickable (W/L lives on the board). */
 function drawInfo(ctx: CanvasRenderingContext2D): void {
   panelBg(ctx, false, UI.text, GAME_TITLE);
 
@@ -179,10 +184,66 @@ function drawInfo(ctx: CanvasRenderingContext2D): void {
   ctx.font = '700 28px system-ui, sans-serif';
   ctx.fillStyle = UI.emberBright;
   ctx.fillText(
-    `${app.stats.wins}W / ${app.stats.losses}L  ·  best ${app.stats.trainingBest}${training.lastScore ? `  ·  last ${training.lastScore}` : ''}`,
+    `aim best ${app.stats.trainingBest}${training.lastScore ? `  ·  last ${training.lastScore}` : ''}  ·  scores behind you`,
     PW / 2,
     364,
   );
+}
+
+/** Behind — the Firebase leaderboard: 1V1 score / aim training tabs. */
+function drawBoard(ctx: CanvasRenderingContext2D, hover: boolean): void {
+  panelBg(ctx, hover, UI.amber, 'LEADERBOARD');
+
+  // Tab plates: 1V1 (score) | AIM TRAINING (best runs).
+  const tabs: Array<['duel' | 'training', string]> = [
+    ['duel', '1V1'],
+    ['training', 'AIM TRAINING'],
+  ];
+  const tw = (PW - 96 - 16) / 2;
+  let x = 48;
+  for (const [id, label] of tabs) {
+    const active = leaderboard.tab === id;
+    plate(ctx, x, 88, tw, 44, {
+      cut: 10,
+      fill: active ? 'rgba(255,176,0,0.18)' : 'rgba(150,150,170,0.10)',
+      stroke: active ? UI.amber : UI.steelDim,
+      rivets: false,
+    });
+    ctx.font = '700 24px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = active ? UI.amber : UI.textDim;
+    ctx.fillText(label, x + tw / 2, 110);
+    x += tw + 16;
+  }
+
+  // Ranked rows; your own entry burns ember.
+  const rows = leaderboard.tab === 'duel' ? leaderboard.duel : leaderboard.training;
+  ctx.font = '600 24px system-ui, sans-serif';
+  rows.slice(0, 6).forEach((r, i) => {
+    const y = 166 + i * 34;
+    ctx.fillStyle = r.me ? UI.emberBright : UI.textDim;
+    ctx.textAlign = 'left';
+    ctx.fillText(`${i + 1}.  ${r.name}`, 56, y);
+    ctx.textAlign = 'right';
+    ctx.fillText(String(r.value), PW - 56, y);
+  });
+  if (!rows.length) {
+    ctx.textAlign = 'center';
+    ctx.fillStyle = UI.textDim;
+    ctx.fillText(leaderboard.status || 'no entries yet', PW / 2, 230);
+  }
+
+  const mine = myStats();
+  ctx.textAlign = 'center';
+  ctx.font = '700 24px system-ui, sans-serif';
+  ctx.fillStyle = UI.amberSoft;
+  ctx.fillText(`${mine.name}  ·  score ${mine.score}  ·  aim best ${mine.training}`, PW / 2, 376);
+}
+
+function hitBoard(u: number, v: number): MenuAction | null {
+  const y = (1 - v) * PH;
+  if (y >= 82 && y <= 138) return u < 0.5 ? 'lb-duel' : 'lb-training';
+  return null;
 }
 
 // --- the A-button action panel -----------------------------------------------
@@ -290,6 +351,7 @@ export function createMenu(scene: Scene): Menu {
   const train = makePanel('train', 0.86, 0.68, drawTrain, hitTrain);
   const duel = makePanel('duel', 0.78, 0.62, drawDuel, hitDuel);
   const info = makePanel('info', 0.78, 0.62, (ctx) => drawInfo(ctx), () => null);
+  const board = makePanel('board', 1.0, 0.78, drawBoard, hitBoard);
 
   // Shallow arc in front of the player, tilted inward toward the centre.
   const y = 1.45;
@@ -298,8 +360,11 @@ export function createMenu(scene: Scene): Menu {
   duel.mesh.rotation.y = 0.48;
   info.mesh.position.set(0.84, y - 0.02, -1.02);
   info.mesh.rotation.y = -0.48;
+  // The leaderboard hangs behind you — turn around between fights.
+  board.mesh.position.set(0, 1.6, 1.5);
+  board.mesh.rotation.y = Math.PI;
 
-  const panels = [train, duel, info];
+  const panels = [train, duel, info, board];
   for (const p of panels) {
     p.redraw(false);
     group.add(p.mesh);

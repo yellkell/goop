@@ -36,6 +36,7 @@ import {
 import { match } from '../combat/matchState.js';
 import { UI } from '../ui/industrial.js';
 import { net } from '../net/client.js';
+import { leaderboard, refreshLeaderboard } from '../net/leaderboard.js';
 import * as sfx from '../audio/sfx.js';
 
 const _origin = new Vector3();
@@ -125,6 +126,12 @@ export class MenuSystem extends createSystem({}) {
       case 'vs-bot':
         app.mode = 'bot';
         app.state = 'playing';
+        break;
+      case 'lb-duel':
+        leaderboard.tab = 'duel';
+        break;
+      case 'lb-training':
+        leaderboard.tab = 'training';
         break;
     }
     this.applyState();
@@ -302,6 +309,8 @@ export class MenuSystem extends createSystem({}) {
   private applyState(): void {
     const inLobby = app.state === 'menu' || app.state === 'queueing';
     this.menu.setVisible(inLobby);
+    // Fresh board standings whenever you land back in the lobby (throttled).
+    if (inLobby) void refreshLeaderboard();
 
     // The action panel only lives inside training runs and bouts.
     if (inLobby && this.panel) {
