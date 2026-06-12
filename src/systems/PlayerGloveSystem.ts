@@ -10,6 +10,7 @@
 import { createSystem, InputComponent } from '@iwsdk/core';
 import { Quaternion, type Group } from 'three';
 import { buildGlove, setGloveLit } from '../avatar/boxer.js';
+import { BallState, Fireball } from '../components/Fireball.js';
 import { app } from '../menu/appState.js';
 
 const HANDS = ['left', 'right'] as const;
@@ -17,8 +18,24 @@ const HANDS = ['left', 'right'] as const;
 const _gripQ = new Quaternion();
 const _rayQ = new Quaternion();
 
-export class PlayerGloveSystem extends createSystem({}) {
+export class PlayerGloveSystem extends createSystem({
+  balls: { required: [Fireball] },
+}) {
   private gloves: Partial<Record<'left' | 'right', Group>> = {};
+
+  /** True while this hand's bound ball is homing back to it. */
+  private ballReturning(hand: 0 | 1): boolean {
+    for (const e of this.queries.balls.entities) {
+      if (
+        (e.getValue(Fireball, 'owner') ?? 0) === 0 &&
+        (e.getValue(Fireball, 'hand') ?? 0) === hand &&
+        (e.getValue(Fireball, 'transient') ?? 0) === 0
+      ) {
+        return (e.getValue(Fireball, 'state') ?? 0) === BallState.Returning;
+      }
+    }
+    return false;
+  }
 
   update(delta: number): void {
     const show = app.state === 'playing' || app.state === 'training';
@@ -45,12 +62,14 @@ export class PlayerGloveSystem extends createSystem({}) {
         glove.quaternion.copy(_gripQ).invert().multiply(_rayQ);
       }
 
-      // Trigger and grip are one action — either one ignites the fist.
+      // Trigger and grip are one action — either one ignites the fist. The
+      // LEDs also stay hot through a RETURN: a tapped recall keeps the hand
+      // visibly active until the ball is back in it.
       const gp = this.input.xr.gamepads[hand];
       const squeezing =
         (gp?.getButtonPressed(InputComponent.Trigger) ?? false) ||
         (gp?.getButtonPressed(InputComponent.Squeeze) ?? false);
-      setGloveLit(glove, squeezing, delta);
+      setGloveLit(glove, squeezing || this.ballReturning(hand === 'left' ? 0 : 1), delta);
 
       // A little squash while squeezing — feels grippy without physics.
       const target = squeezing ? 0.88 : 1;

@@ -119,7 +119,7 @@ export const BODY_IK = {
    * not the base of your own neck, and the torso stops blocking your view
    * of the ball at your fists.
    */
-  spineSetBack: 0.11,
+  spineSetBack: 0.16,
   headRadius: 0.13,
   chestRadius: 0.2,
   pelvisRadius: 0.17,
