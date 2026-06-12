@@ -25,7 +25,7 @@ import { app, training } from '../menu/appState.js';
 import { net } from '../net/client.js';
 import { pulseHand } from '../input/haptics.js';
 import * as sfx from '../audio/sfx.js';
-import { ARENA_BOUNDS, ARENA_GAP, FIREBALL } from '../config.js';
+import { ARENA_BOUNDS, ARENA_GAP, FIREBALL, NET } from '../config.js';
 
 const HANDS = ['left', 'right'] as const;
 type Hand = 0 | 1;
@@ -80,6 +80,12 @@ export class FireballSystem extends createSystem({
   private lastReset = -1;
   private trailAcc = new Map<Entity, number>();
   private emberAcc = 0;
+  /**
+   * Per-ball positional offset from a remote throw handoff: visual pos =
+   * authoritative trajectory + offset, decayed to zero over ~a third of a
+   * second so the launch never pops (see drainCommands / integrate Flying).
+   */
+  private netBlend = new Map<Entity, Vector3>();
 
   init(): void {
     // Your pair (orange) and the opponent's pair (blue), one per fist each.
@@ -266,6 +272,15 @@ export class FireballSystem extends createSystem({
         obj.position.x += v[0] * delta;
         obj.position.y += v[1] * delta;
         obj.position.z += v[2] * delta;
+        // Remote-throw handoff: bleed the launch offset away so the visual
+        // path eases onto the sender's authoritative trajectory.
+        const off = this.netBlend.get(ball);
+        if (off) {
+          const k = 1 - Math.exp(-NET.throwBlend * delta);
+          obj.position.addScaledVector(off, -k);
+          off.multiplyScalar(1 - k);
+          if (off.lengthSq() < 1e-6) this.netBlend.delete(ball);
+        }
         // The invisible cage ~10 yards out from the platforms: a ball that
         // reaches it bursts against the wall and dies right there.
         if (this.clampToCage(obj.position)) {
@@ -361,7 +376,19 @@ export class FireballSystem extends createSystem({
       if (!ball) continue;
       switch (cmd.type) {
         case 'throw': {
-          ball.object3D!.position.copy(cmd.pos);
+          // Don't teleport to the sender's launch point: our smoothed copy
+          // of their hand LAGS the real one, so the gap can be ~30 cm at
+          // punch speed. Keep the ball where OUR sim shows it and let
+          // `integrate` decay the offset onto the authoritative trajectory.
+          const obj = ball.object3D!;
+          _offset.copy(obj.position).sub(cmd.pos);
+          if (obj.visible && _offset.lengthSq() < 1) {
+            this.netBlend.set(ball, _offset.clone());
+          } else {
+            // Hidden or wildly out of place — snap, nothing to blend from.
+            obj.position.copy(cmd.pos);
+            this.netBlend.delete(ball);
+          }
           const v = ball.getVectorView(Fireball, 'velocity');
           v[0] = cmd.vel.x; v[1] = cmd.vel.y; v[2] = cmd.vel.z;
           ball.setValue(Fireball, 'state', BallState.Flying);
@@ -372,11 +399,13 @@ export class FireballSystem extends createSystem({
         case 'recall':
           ball.setValue(Fireball, 'state', BallState.Returning);
           ball.setValue(Fireball, 'returnHit', 0);
+          this.netBlend.delete(ball);
           break;
         case 'spend':
           // Their sim says this ball is finished (it hit us / was parried
           // on their side) — retire it where it is.
           ball.setValue(Fireball, 'state', BallState.Dead);
+          this.netBlend.delete(ball);
           break;
       }
     }
@@ -454,6 +483,7 @@ export class FireballSystem extends createSystem({
     this.visuals.get(ball)?.dispose();
     this.visuals.delete(ball);
     this.trailAcc.delete(ball);
+    this.netBlend.delete(ball);
     ball.destroy();
   }
 
@@ -482,6 +512,7 @@ export class FireballSystem extends createSystem({
       ball.setValue(Fireball, 'elapsed', 0);
       ball.setValue(Fireball, 'returnHit', 0);
     }
+    this.netBlend.clear();
     this.trackers[0].reset();
     this.trackers[1].reset();
   }

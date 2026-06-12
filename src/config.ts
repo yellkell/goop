@@ -185,9 +185,16 @@ export const TRAINING = {
 
 /** Networking. The relay server lives in /server (npm run server). */
 export const NET = {
-  poseRateHz: 20, // pose packets per second
+  poseRateHz: 30, // pose packets per second — denser input = smoother rival
   stateRateHz: 2, // host match-state echoes per second
-  smoothing: 18, // exponential smoothing rate for the remote avatar
+  smoothing: 24, // exponential smoothing rate for the remote avatar
+  /**
+   * Convergence rate for a remote throw's launch-position correction: the
+   * ball leaves from where OUR smoothed sim had it and eases onto the
+   * sender's authoritative trajectory instead of teleporting (the smoothed
+   * hand lags the real one by ~30 cm at full punch speed).
+   */
+  throwBlend: 9,
   /** ws:// URL — override with ?server=wss://host:port, else localStorage. */
   defaultPort: 8787,
 };

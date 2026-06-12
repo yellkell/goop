@@ -31,6 +31,13 @@ interface Board {
   mesh: Mesh;
   ctx: CanvasRenderingContext2D;
   tex: CanvasTexture;
+  /**
+   * Content fingerprint of the last draw. Boards are asked to refresh every
+   * frame but a canvas redraw + GPU texture upload is the single most
+   * expensive UI op we have — so each draw skips when nothing changed
+   * (the timer ticks once a second; health moves only on hits).
+   */
+  key?: string;
 }
 
 export interface Scoreboard {
@@ -137,6 +144,9 @@ export function createScoreboard(scene: Scene): Scoreboard {
     pips: number,
     timer: string,
   ): void => {
+    const key = `s|${name}|${hpFrac}|${hpText}|${pips}|${timer}`;
+    if (board.key === key) return;
+    board.key = key;
     const { ctx, tex } = board;
     header(ctx, name, neon, timer);
     // The health readout gets the only solid-ish backing on the board.
@@ -151,6 +161,9 @@ export function createScoreboard(scene: Scene): Scoreboard {
   };
 
   const drawCentre = (message: string, sub: string): void => {
+    const key = `c|${message}|${sub}`;
+    if (centre.key === key) return;
+    centre.key = key;
     const { ctx, tex } = centre;
     ctx.clearRect(0, 0, W, H);
     if (message) {
@@ -199,19 +212,24 @@ export function createScoreboard(scene: Scene): Scoreboard {
     updateTraining(hp, hpMax) {
       const timer = fmtTime(training.timeLeft);
       // Left board: score + streak.
-      const { ctx, tex } = left;
-      header(ctx, 'AIM TRAINING', UI.emberBright, timer);
-      ctx.textAlign = 'left';
-      ctx.font = stencilFont(104);
-      ctx.fillStyle = UI.text;
-      ctx.fillText(String(training.score), 52, 200);
-      ctx.font = '700 42px system-ui, sans-serif';
-      ctx.fillStyle = UI.amberSoft;
-      ctx.fillText(`streak x${training.streak}`, 52, 320);
-      ctx.textAlign = 'right';
-      ctx.fillStyle = UI.textDim;
-      ctx.fillText(`best ${Math.max(app.stats.trainingBest, training.score)}`, W - 52, 320);
-      tex.needsUpdate = true;
+      const best = Math.max(app.stats.trainingBest, training.score);
+      const key = `t|${training.score}|${training.streak}|${best}|${timer}`;
+      if (left.key !== key) {
+        left.key = key;
+        const { ctx, tex } = left;
+        header(ctx, 'AIM TRAINING', UI.emberBright, timer);
+        ctx.textAlign = 'left';
+        ctx.font = stencilFont(104);
+        ctx.fillStyle = UI.text;
+        ctx.fillText(String(training.score), 52, 200);
+        ctx.font = '700 42px system-ui, sans-serif';
+        ctx.fillStyle = UI.amberSoft;
+        ctx.fillText(`streak x${training.streak}`, 52, 320);
+        ctx.textAlign = 'right';
+        ctx.fillStyle = UI.textDim;
+        ctx.fillText(`best ${best}`, W - 52, 320);
+        tex.needsUpdate = true;
+      }
       // Right board: dodge readout (health only matters with shoot-back on).
       drawSide(
         right, 'DODGE', UI.cool,
