@@ -53,12 +53,42 @@ export function myStats(): { name: string; score: number; training: number } {
 }
 
 function localId(): string {
-  let id = localStorage.getItem('ff-player-id');
-  if (!id) {
-    id = crypto.randomUUID();
-    localStorage.setItem('ff-player-id', id);
+  try {
+    let id = localStorage.getItem('ff-player-id');
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem('ff-player-id', id);
+    }
+    return id;
+  } catch {
+    return crypto.randomUUID(); // storage unavailable — session-only identity
   }
-  return id;
+}
+
+/** Has this player typed a callsign yet? (Keyboard pops only while false.) */
+export function hasCustomName(): boolean {
+  try {
+    return !!localStorage.getItem('ff-player-name');
+  } catch {
+    return true; // storage broken — never nag
+  }
+}
+
+/**
+ * Save the typed callsign — once, shared by BOTH boards (training submits
+ * and 1v1s). Sanitised to the keyboard's own alphabet, max 12 chars.
+ */
+export function setPlayerName(raw: string): void {
+  const name = raw.replace(/[^A-Z0-9\- ]/gi, '').trim().toUpperCase().slice(0, 12);
+  if (!name) return;
+  try {
+    localStorage.setItem('ff-player-name', name);
+  } catch {
+    /* keep it for this session at least */
+  }
+  profile.name = name;
+  writeMine({}); // writeMine always carries the name
+  void refreshLeaderboard(true);
 }
 
 type FirestoreMod = typeof import('firebase/firestore');
@@ -90,7 +120,13 @@ function firestore(): Promise<Handle | null> {
 /** Load (or create) my player doc, then pull both boards. Call once at boot. */
 export function initLeaderboard(): void {
   profile.id = localId();
-  profile.name = `IRON-${profile.id.replace(/-/g, '').slice(0, 4).toUpperCase()}`;
+  let stored: string | null = null;
+  try {
+    stored = localStorage.getItem('ff-player-name');
+  } catch {
+    /* fall through to the derived callsign */
+  }
+  profile.name = stored ?? `IRON-${profile.id.replace(/-/g, '').slice(0, 4).toUpperCase()}`;
   void (async () => {
     const h = await firestore();
     if (!h) return;
@@ -102,6 +138,8 @@ export function initLeaderboard(): void {
         profile.score = (d.score as number) ?? 0;
         profile.elo = (d.elo as number) ?? 1000;
         profile.training = (d.training as number) ?? 0;
+        // A locally renamed player syncs the doc's stale callsign.
+        if ((d.name as string) !== profile.name) writeMine({});
       } else {
         await h.fs.setDoc(ref, {
           name: profile.name,

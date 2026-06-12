@@ -33,10 +33,11 @@ import {
   type MenuAction,
   type PanelId,
 } from '../menu/menu.js';
+import { createNameKeyboard, type NameKeyboard } from '../menu/keyboard.js';
 import { match } from '../combat/matchState.js';
 import { UI } from '../ui/industrial.js';
 import { net } from '../net/client.js';
-import { leaderboard, refreshLeaderboard } from '../net/leaderboard.js';
+import { hasCustomName, leaderboard, myStats, refreshLeaderboard, setPlayerName } from '../net/leaderboard.js';
 import * as sfx from '../audio/sfx.js';
 
 const _origin = new Vector3();
@@ -60,10 +61,14 @@ export class MenuSystem extends createSystem({}) {
   private panel!: ActionPanel;
   private panelKey = '';
   private wasMatchOver = false;
+  private keyboard!: NameKeyboard;
+  /** The action waiting behind the name keyboard. */
+  private kbPending: MenuAction | null = null;
 
   init(): void {
     this.menu = createMenu(this.scene);
     this.panel = createActionPanel(this.scene);
+    this.keyboard = createNameKeyboard(this.scene);
     this.pointers.left = this.makePointer();
     this.pointers.right = this.makePointer();
     this.applyState();
@@ -74,6 +79,12 @@ export class MenuSystem extends createSystem({}) {
 
     if (app.state === 'training' || app.state === 'playing') {
       this.updateActionPanel();
+      return;
+    }
+
+    // The name keyboard owns the pointers while it's up.
+    if (this.keyboard.isOpen()) {
+      this.updateKeyboard();
       return;
     }
 
@@ -107,6 +118,15 @@ export class MenuSystem extends createSystem({}) {
   private run(action: MenuAction): void {
     sfx.ensureAudio();
     sfx.uiClick();
+    // The first leaderboard-relevant act (a training run or a 1v1 queue)
+    // claims a callsign: the keyboard pops once, prefilled with the auto
+    // name, and the pending action resumes after OK. Saved forever after,
+    // shared by both boards.
+    if ((action === 'start-training' || action === 'quick-match') && !hasCustomName()) {
+      this.kbPending = action;
+      this.keyboard.open(myStats().name);
+      return;
+    }
     switch (action) {
       case 'start-training':
         app.state = 'training';
@@ -135,6 +155,30 @@ export class MenuSystem extends createSystem({}) {
         break;
     }
     this.applyState();
+  }
+
+  /** Point + trigger types on the keyboard; OK saves and resumes the action. */
+  private updateKeyboard(): void {
+    let hover: string | null = null;
+    for (const hand of ['left', 'right'] as const) {
+      const hit = this.updatePointer(hand, [this.keyboard.mesh]);
+      const id = hit?.uv ? this.keyboard.hitTest(hit.uv.x, hit.uv.y) : null;
+      if (!id) continue;
+      hover = id;
+      if (this.input.xr.gamepads[hand]?.getButtonDown(InputComponent.Trigger)) {
+        sfx.uiClick();
+        const done = this.keyboard.press(id);
+        if (done !== null) {
+          setPlayerName(done);
+          this.keyboard.close();
+          const pending = this.kbPending;
+          this.kbPending = null;
+          if (pending) this.run(pending);
+          return;
+        }
+      }
+    }
+    this.keyboard.setHover(hover);
   }
 
   // --- the A-button action panel ---------------------------------------------
@@ -312,11 +356,16 @@ export class MenuSystem extends createSystem({}) {
     // Fresh board standings whenever you land back in the lobby (throttled).
     if (inLobby) void refreshLeaderboard();
 
-    // The action panel only lives inside training runs and bouts.
+    // The action panel only lives inside training runs and bouts; the
+    // keyboard only in the lobby.
     if (inLobby && this.panel) {
       this.panel.mesh.visible = false;
       this.panelKey = '';
       this.wasMatchOver = false;
+    }
+    if (!inLobby && this.keyboard) {
+      this.keyboard.close();
+      this.kbPending = null;
     }
 
     // The title banner shows only in the lobby.
