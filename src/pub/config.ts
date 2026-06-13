@@ -115,6 +115,13 @@ export const FIGHT = {
   forfeitRadius: 1.35,
   startCountdown: 3, // seconds between both corners claimed and FIGHT
   hpMax: 100,
+  // Match format — mirrors the arena's MATCH (best of 5: first to 3 rounds).
+  // The pub SERVER holds the authoritative copies of these (server/pub.mjs);
+  // keep the two in sync.
+  winTarget: 3, // round wins needed to take the match
+  roundTime: 60, // seconds per round before higher-HP wins on time
+  roundOverDelay: 3, // pause shown after a round before the next begins
+  matchOverDelay: 6, // pause after the match before the corners free up
 } as const;
 
 /** Teleporting onto this mat (inside the pub, by the exit door) leaves the

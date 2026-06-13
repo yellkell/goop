@@ -80,23 +80,44 @@ let nextId = 1;
 let joinCount = 0;
 
 // --- fight hall lifecycle -------------------------------------------------------
-// idle → (both corners claimed) starting → (3s) fighting → (KO/forfeit) over
-// → (6s) idle. Fighters report their own hp (victim-authoritative, like the
-// arena); the server rules on the lifecycle and the winner.
+// Best of 5 (first to WIN_TARGET round wins), mirroring the arena's MATCH:
+//   idle → (both corners claimed) starting → (3s) fighting
+//   round ends on a KO (hp 0) or when ROUND_TIME runs out (higher hp wins)
+//   → roundOver (3s) → next round's fighting … until someone reaches 3 →
+//   over (6s) → idle. Fighters report their own hp (victim-authoritative,
+//   like the arena); the server rules on the round/match lifecycle.
+// Keep these in sync with FIGHT in src/pub/config.ts.
 const HP_MAX = 100;
+const WIN_TARGET = 3; // round wins to take the match (best of 5)
+const ROUND_TIME = 60; // seconds per round
+const ROUND_OVER_DELAY = 3; // seconds of round-result pause
+const MATCH_OVER_DELAY = 6; // seconds of match-result pause
 const fight = {
   phase: 'idle',
   sides: [null, null],
   hp: [HP_MAX, HP_MAX],
+  score: [0, 0],
+  round: 1,
+  roundTimer: 0,
   winner: null,
 };
 let fightTimer = null;
+let lastTimerSent = -1;
 
 function fightNet() {
-  return { phase: fight.phase, sides: fight.sides, hp: fight.hp, winner: fight.winner };
+  return {
+    phase: fight.phase,
+    sides: fight.sides,
+    hp: fight.hp,
+    score: fight.score,
+    round: fight.round,
+    roundTimer: fight.roundTimer,
+    winner: fight.winner,
+  };
 }
 
 function broadcastFight() {
+  lastTimerSent = Math.ceil(fight.roundTimer);
   broadcast({ t: 'fight', fight: fightNet() });
 }
 
@@ -106,24 +127,57 @@ function resetFight() {
   fight.phase = 'idle';
   fight.sides = [null, null];
   fight.hp = [HP_MAX, HP_MAX];
+  fight.score = [0, 0];
+  fight.round = 1;
+  fight.roundTimer = 0;
   fight.winner = null;
 }
 
-function startFightCountdown() {
+/** Both corners claimed → fresh match: zero the card, then the pre-fight 3s. */
+function startMatch() {
+  fight.score = [0, 0];
+  fight.round = 1;
+  fight.winner = null;
   fight.phase = 'starting';
   fight.hp = [HP_MAX, HP_MAX];
-  fight.winner = null;
+  fight.roundTimer = ROUND_TIME;
   broadcastFight();
   clearTimeout(fightTimer);
   fightTimer = setTimeout(() => {
-    if (fight.phase === 'starting' && fight.sides[0] && fight.sides[1]) {
-      fight.phase = 'fighting';
-      broadcastFight();
-    }
+    if (fight.phase === 'starting' && fight.sides[0] && fight.sides[1]) beginRound();
   }, 3000);
 }
 
-function endFight(winnerId) {
+/** Bell: full health, clock reset, live. */
+function beginRound() {
+  fight.phase = 'fighting';
+  fight.hp = [HP_MAX, HP_MAX];
+  fight.roundTimer = ROUND_TIME;
+  fight.winner = null;
+  broadcastFight();
+}
+
+/** A round was decided (KO or time): score it, then the next round or the match. */
+function endRound(winnerSide) {
+  if (winnerSide !== 0 && winnerSide !== 1) return;
+  fight.score[winnerSide] += 1;
+  fight.winner = fight.sides[winnerSide];
+  if (fight.score[winnerSide] >= WIN_TARGET) {
+    endMatch(fight.sides[winnerSide]);
+    return;
+  }
+  fight.phase = 'roundOver';
+  broadcastFight();
+  clearTimeout(fightTimer);
+  fightTimer = setTimeout(() => {
+    if (fight.sides[0] && fight.sides[1]) {
+      fight.round += 1;
+      beginRound();
+    }
+  }, ROUND_OVER_DELAY * 1000);
+}
+
+function endMatch(winnerId) {
   fight.phase = 'over';
   fight.winner = winnerId;
   broadcastFight();
@@ -131,20 +185,31 @@ function endFight(winnerId) {
   fightTimer = setTimeout(() => {
     resetFight();
     broadcastFight();
-  }, 6000);
+  }, MATCH_OVER_DELAY * 1000);
 }
 
 function leaveFight(id) {
   const side = fight.sides.indexOf(id);
   if (side === -1) return;
-  if (fight.phase === 'fighting' || fight.phase === 'starting') {
-    // Walked off / disconnected mid-bout: the other corner takes it.
-    endFight(fight.sides[side === 0 ? 1 : 0]);
+  if (fight.phase === 'fighting' || fight.phase === 'starting' || fight.phase === 'roundOver') {
+    // Walked off / disconnected mid-bout: forfeit the whole match.
+    endMatch(fight.sides[side === 0 ? 1 : 0]);
   } else if (fight.phase === 'idle') {
     fight.sides[side] = null;
     broadcastFight();
   }
 }
+
+// Round clock: tick only while a round is live; higher hp wins on time-out.
+setInterval(() => {
+  if (fight.phase !== 'fighting') return;
+  fight.roundTimer = Math.max(0, fight.roundTimer - 0.25);
+  if (fight.roundTimer <= 0) {
+    endRound(fight.hp[0] >= fight.hp[1] ? 0 : 1);
+  } else if (Math.ceil(fight.roundTimer) !== lastTimerSent) {
+    broadcastFight(); // push the clock only when the displayed second changes
+  }
+}, 250);
 
 const ZERO_POSE = [0, 0, 0, 0, 0, 0, 1];
 
@@ -226,7 +291,7 @@ function handleEvent(senderId, ev) {
       if (side !== -1 && fight.phase === 'fighting') {
         fight.hp[side] = ev.hp;
         if (ev.hp <= 0) {
-          endFight(fight.sides[side === 0 ? 1 : 0]);
+          endRound(side === 0 ? 1 : 0); // the OTHER corner won the round
         } else {
           broadcastFight();
         }
@@ -385,7 +450,7 @@ wss.on('connection', (ws) => {
         const side = msg.side === 1 ? 1 : 0;
         if (fight.phase === 'idle' && fight.sides[side] === null && !fight.sides.includes(myId)) {
           fight.sides[side] = myId;
-          if (fight.sides[0] && fight.sides[1]) startFightCountdown();
+          if (fight.sides[0] && fight.sides[1]) startMatch();
           else broadcastFight();
         } else {
           send(ws, { t: 'fight', fight: fightNet() });

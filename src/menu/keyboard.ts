@@ -91,9 +91,9 @@ export function createNameKeyboard(scene: Scene): NameKeyboard {
     plate(ctx, 8, 8, KW - 16, KH - 16, { cut: 26, fill: 'rgba(12,13,17,0.74)', stroke: UI.amberSoft });
     hazardStrip(ctx, 40, 28, 56, 14, UI.amber);
     ctx.textAlign = 'left';
-    ctx.font = stencilFont(28);
+    ctx.font = stencilFont(24);
     ctx.fillStyle = UI.amberSoft;
-    ctx.fillText('ENTER CALLSIGN', 112, 36);
+    ctx.fillText('ENTER YOUR BATTLE NAME', 112, 36);
 
     // The name field, with a cursor while there's room to type.
     plate(ctx, 60, 62, KW - 120, 62, { cut: 12, fill: 'rgba(20,22,28,0.9)', stroke: UI.steel, rivets: false });

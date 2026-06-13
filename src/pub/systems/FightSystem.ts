@@ -52,6 +52,7 @@ import { FIGHT } from '../config.js';
 import { pubSendEvent, pubSendRaw } from '../net.js';
 import type { FightNet, FireballNet } from '../protocol.js';
 import { bus, pub } from '../state.js';
+import { Panel } from '../panel.js';
 import { teleportPlayer } from './TeleportSystem.js';
 
 const HANDS = ['left', 'right'] as const;
@@ -146,6 +147,11 @@ export class FightSystem extends createSystem({}) {
   private bodyRig?: BoxerRig;
   private myChest = new Vector3();
   private myPelvis = new Vector3();
+  /** The arena-style match card that hangs above the opponent — only the two
+   *  fighters see it (spectators read the wall scoreboards). */
+  private matchBoard?: Panel;
+  private boardSide: 0 | 1 | -1 = -1;
+  private boardKey = '';
 
   init(): void {
     // The local fighter's body: an ember (team 0) torso wearing my avatar
@@ -251,10 +257,13 @@ export class FightSystem extends createSystem({}) {
 
     this.checkConsoles();
     this.dressRims();
+    this.updateMatchBoard();
 
     const f = pub.fight;
     const fighting = f.phase === 'fighting';
-    const live = f.phase === 'starting' || fighting;
+    // Between rounds (roundOver) the fighters stay embodied with their balls
+    // hovering — only KO-gated throws pause — so keep the body/ball sim live.
+    const live = f.phase === 'starting' || f.phase === 'roundOver' || fighting;
 
     if (this.amFighter() && live) {
       this.solveMyBody();
@@ -353,10 +362,18 @@ export class FightSystem extends createSystem({}) {
           sfx.uiClick();
           break;
         case 'fighting':
+          // Every round opens with the bell + full health + balls back at fists.
           sfx.roundBell();
           this.myHp = FIGHT.hpMax;
           if (this.amFighter() && this.myBalls) this.resetMyBalls();
           break;
+        case 'roundOver': {
+          // A round (not the match) was decided — winner takes the pip.
+          const iWon = f.winner === pub.myId;
+          if (this.amFighter()) sfx.roundEnd(iWon);
+          else sfx.roundEnd(true);
+          break;
+        }
         case 'over': {
           const iWon = f.winner === pub.myId;
           if (this.amFighter()) sfx.matchEnd(iWon);
@@ -840,6 +857,132 @@ export class FightSystem extends createSystem({}) {
     }
   }
 
+  // --- floating match card (arena-style, above the opponent) ------------------
+
+  /**
+   * Hang the match UI above and behind the OPPONENT's platform, facing me —
+   * names, health bars, round-win pips and the clock, just like a quick match.
+   * Only the two fighters get it; spectators read the wall scoreboards.
+   */
+  private updateMatchBoard(): void {
+    const side = this.mySide();
+    const f = pub.fight;
+    const show =
+      side !== -1 &&
+      pub.online &&
+      (f.phase === 'starting' || f.phase === 'fighting' || f.phase === 'roundOver' || f.phase === 'over');
+
+    if (!show) {
+      if (this.matchBoard) this.matchBoard.mesh.visible = false;
+      return;
+    }
+
+    if (!this.matchBoard) {
+      this.matchBoard = new Panel(2.8, 1.0);
+      this.scene.add(this.matchBoard.mesh);
+      this.boardSide = -1;
+    }
+    this.matchBoard.mesh.visible = true;
+
+    // Position once per side: above + behind the opponent's platform, facing me.
+    if (this.boardSide !== side) {
+      this.boardSide = side;
+      const oppZ = side === 0 ? -FIGHT.platformZ : FIGHT.platformZ;
+      const behindZ = oppZ + Math.sign(oppZ) * 1.1;
+      this.matchBoard.mesh.position.set(FIGHT.centerX, 1.95, behindZ);
+      this.matchBoard.mesh.rotation.y = side === 0 ? 0 : Math.PI; // face the fighter
+      this.boardKey = ''; // force a redraw at the new station
+    }
+
+    this.drawMatchBoard(side);
+  }
+
+  private drawMatchBoard(side: 0 | 1): void {
+    const board = this.matchBoard;
+    if (!board) return;
+    const f = pub.fight;
+    const opp = side === 0 ? 1 : 0;
+    const myName = this.nameOf(pub.myId);
+    const oppName = this.nameOf(f.sides[opp]);
+    const myHp = Math.max(0, f.hp[side]) / FIGHT.hpMax;
+    const oppHp = Math.max(0, f.hp[opp]) / FIGHT.hpMax;
+    const clk = Math.max(0, Math.ceil(f.roundTimer));
+    const headline =
+      f.phase === 'starting'
+        ? `ROUND ${f.round}`
+        : f.phase === 'fighting'
+          ? 'FIGHT!'
+          : f.phase === 'roundOver'
+            ? f.winner === pub.myId
+              ? 'ROUND WON'
+              : 'ROUND LOST'
+            : f.winner === pub.myId
+              ? 'YOU WIN'
+              : 'YOU LOSE';
+
+    // Skip the canvas redraw + GPU upload when nothing visible changed.
+    const key = `${myName}|${oppName}|${f.hp[side]}|${f.hp[opp]}|${f.score[side]}|${f.score[opp]}|${clk}|${headline}`;
+    if (key === this.boardKey) return;
+    this.boardKey = key;
+
+    board.draw((ctx, w, h) => {
+      const ember = '#ff7a18';
+      const blue = '#4fb7ff';
+
+      // Headline across the top.
+      ctx.textAlign = 'center';
+      ctx.font = `900 ${Math.round(h * 0.17)}px "Arial Black", system-ui, sans-serif`;
+      ctx.fillStyle = f.phase === 'fighting' ? '#e8352a' : '#fff3cf';
+      ctx.fillText(headline, w / 2, h * 0.17);
+
+      // One shared round clock, centred under the headline.
+      ctx.font = `900 ${Math.round(h * 0.15)}px "Arial Black", system-ui, sans-serif`;
+      ctx.fillStyle = '#e8ecf2';
+      ctx.fillText(`0:${String(clk).padStart(2, '0')}`, w / 2, h * 0.42);
+
+      const barW = w * 0.36;
+      const barH = h * 0.15;
+      const barY = h * 0.55;
+      const nameY = h * 0.45;
+      const cols: [string, string, number, number, 0 | 1][] = [
+        [myName, ember, myHp, f.score[side], 0],
+        [oppName, blue, oppHp, f.score[opp], 1],
+      ];
+      for (const [name, colour, hp, pips, col] of cols) {
+        const x = col === 0 ? w * 0.05 : w * 0.59;
+        ctx.textAlign = col === 0 ? 'left' : 'right';
+        ctx.font = `900 ${Math.round(h * 0.12)}px "Arial Black", system-ui, sans-serif`;
+        ctx.fillStyle = colour;
+        ctx.fillText(name.toUpperCase().slice(0, 12), col === 0 ? x : x + barW, nameY);
+        // Health bar — the opponent's drains from the inner edge, mirror-style.
+        ctx.fillStyle = 'rgba(172,182,198,0.25)';
+        ctx.fillRect(x, barY, barW, barH);
+        ctx.fillStyle = colour;
+        const fillW = barW * hp;
+        ctx.fillRect(col === 0 ? x : x + barW - fillW, barY, fillW, barH);
+        ctx.strokeStyle = 'rgba(232,236,242,0.6)';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(x, barY, barW, barH);
+        // Round-win pips below the bar.
+        const pipR = h * 0.045;
+        const pipY = barY + barH + h * 0.14;
+        for (let i = 0; i < FIGHT.winTarget; i++) {
+          const px = col === 0 ? x + pipR + i * pipR * 2.6 : x + barW - pipR - i * pipR * 2.6;
+          ctx.beginPath();
+          ctx.arc(px, pipY, pipR, 0, Math.PI * 2);
+          if (i < pips) {
+            ctx.fillStyle = colour;
+            ctx.fill();
+          } else {
+            ctx.strokeStyle = 'rgba(172,182,198,0.5)';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+          }
+        }
+      }
+    });
+  }
+
   private renderDisplay(): void {
     // Both scoreboards (far wall + above the door) show the same thing — the
     // IRON BALLS sign hangs above each as its own image, so no title here,
@@ -876,6 +1019,17 @@ export class FightSystem extends createSystem({}) {
         ctx.strokeRect(x, barY, barW, barH);
       }
 
+      // Round/score line between the bars (best of 5, first to FIGHT.winTarget).
+      if (f.phase !== 'idle') {
+        ctx.textAlign = 'center';
+        ctx.font = `800 ${Math.round(h * 0.12)}px "Arial Black", system-ui, sans-serif`;
+        ctx.fillStyle = '#e8ecf2';
+        ctx.fillText(`${f.score[0]}–${f.score[1]}`, w / 2, nameY + h * 0.02);
+        ctx.font = `700 ${Math.round(h * 0.07)}px "Arial Narrow", system-ui, sans-serif`;
+        ctx.fillStyle = '#9aa3b2';
+        ctx.fillText(`ROUND ${f.round} · BEST OF ${FIGHT.winTarget * 2 - 1}`, w / 2, barY + barH + h * 0.1);
+      }
+
       ctx.textAlign = 'center';
       ctx.font = `900 ${Math.round(h * 0.17)}px "Arial Black", system-ui, sans-serif`;
       const status =
@@ -885,7 +1039,9 @@ export class FightSystem extends createSystem({}) {
             ? 'FIGHTERS READY…'
             : f.phase === 'fighting'
               ? 'FIGHT!'
-              : `${this.nameOf(f.winner).toUpperCase()} WINS`;
+              : f.phase === 'roundOver'
+                ? `${this.nameOf(f.winner).toUpperCase()} TAKES THE ROUND`
+                : `${this.nameOf(f.winner).toUpperCase()} WINS`;
       ctx.fillStyle = f.phase === 'fighting' ? '#e8352a' : '#e8ecf2';
       ctx.fillText(status, w / 2, h * 0.82);
     });

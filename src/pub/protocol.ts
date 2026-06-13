@@ -67,13 +67,23 @@ export interface SnakeHi {
 }
 
 /** Fight-hall match lifecycle (server-driven). */
-export type FightPhase = 'idle' | 'starting' | 'fighting' | 'over';
+export type FightPhase = 'idle' | 'starting' | 'fighting' | 'roundOver' | 'over';
 
 export interface FightNet {
   phase: FightPhase;
   /** Player ids holding side 0 (south platform) and side 1 (north). */
   sides: [string | null, string | null];
   hp: [number, number];
+  /** Round wins so far this match — first to FIGHT.winTarget takes it. */
+  score: [number, number];
+  /** Current round number (1-based). */
+  round: number;
+  /** Seconds left in the live round (drives the match-UI clock). */
+  roundTimer: number;
+  /**
+   * During `roundOver` this is the ROUND winner; during `over` it's the MATCH
+   * winner. Null otherwise.
+   */
   winner: string | null;
 }
 
