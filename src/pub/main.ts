@@ -34,6 +34,7 @@ import { FightSystem } from './systems/FightSystem.js';
 import { PubPlayerSystem } from './systems/PubPlayerSystem.js';
 import { SnakeSystem } from './systems/SnakeSystem.js';
 import { TeleportSystem } from './systems/TeleportSystem.js';
+import { ClimbSystem } from './systems/ClimbSystem.js';
 import { FXSystem } from '../systems/FXSystem.js';
 
 const container = document.getElementById('scene-container') as HTMLDivElement;
@@ -78,6 +79,7 @@ World.create(container, {
   buildProps(world);
 
   world.registerSystem(TeleportSystem);
+  world.registerSystem(ClimbSystem);
   world.registerSystem(PubPlayerSystem);
   world.registerSystem(PropSystem);
   world.registerSystem(DartsSystem);
