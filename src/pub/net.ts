@@ -87,6 +87,7 @@ function handle(msg: PubServerMsg): void {
       break;
     case 'full':
       console.warn('[pub] room is full (12 punters max)');
+      bus.emit('full', undefined);
       break;
     case 'join':
       spawnHook?.(msg.player);
