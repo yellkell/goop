@@ -213,12 +213,20 @@ export const ACCENTS = [
   0xff8c5a, // copper
 ];
 
-/** Resolve the pub server URL: ?server= param > localStorage > same host. */
+/** The hosted pub relay (Render). Override per-session with ?server=… or by
+ *  setting localStorage 'ibb-pub-server'. */
+export const PUB_SERVER = 'wss://iron-balls-pub.onrender.com';
+
+/** Resolve the pub server URL: ?server= param > localStorage > local dev
+ *  server > the hosted Render relay. */
 export function pubServerUrl(): string {
   const param = new URLSearchParams(location.search).get('server');
   if (param) return param;
   const stored = localStorage.getItem('ibb-pub-server');
   if (stored) return stored;
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  return `${proto}://${location.hostname}:8788`;
+  // On your own machine, talk to a pub server running locally; anywhere
+  // else (Firebase Hosting, yellkell.com/ff) use the hosted relay.
+  const host = location.hostname;
+  if (host === 'localhost' || host === '127.0.0.1') return `ws://${host}:8788`;
+  return PUB_SERVER;
 }
