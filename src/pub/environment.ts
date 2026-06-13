@@ -293,8 +293,10 @@ export function buildPub(world: World): PubRefs {
 
   // The hand-made neon sign mounted on the back-bar wall (PNG if present,
   // procedural neon fallback otherwise — see signs.ts).
-  const sign = buildSign('signs/iron-balls-bar.png', 2.6, 1.17);
-  sign.position.set(0, 1.92, -D + 0.03);
+  // The PNG is a 1:1 canvas with the sign letterboxed in transparent margins,
+  // so the plane is SQUARE (a wide plane would squash the art).
+  const sign = buildSign('signs/iron-balls-bar.png', 1.6, 1.6);
+  sign.position.set(0, 1.95, -D + 0.03);
   root.add(sign);
 
   // Stools at the bar.
@@ -677,23 +679,24 @@ function buildFightHall(root: Group): {
   // spectator on either side reads the health. Each is the IRON BALLS sign
   // (PNG, neon fallback) above a health/status panel — no "FIRE FIGHT" text.
   // West: high on the far wall, facing back toward the door (+x).
-  const fightSign1 = buildSign('signs/iron-balls-bar.png', 2.8, 1.26);
-  fightSign1.position.set(hall.minX + 0.04, 3.5, 0);
+  // Signs are square (1:1 art with transparent margins) so they don't squash.
+  const fightSign1 = buildSign('signs/iron-balls-bar.png', 2.4, 2.4);
+  fightSign1.position.set(hall.minX + 0.04, 3.3, 0);
   fightSign1.rotation.y = Math.PI / 2;
   root.add(fightSign1);
   const fightDisplay = new Panel(3.2, 1.1);
-  fightDisplay.mesh.position.set(hall.minX + 0.04, 2.3, 0);
+  fightDisplay.mesh.position.set(hall.minX + 0.04, 1.95, 0);
   fightDisplay.mesh.rotation.y = Math.PI / 2;
   root.add(fightDisplay.mesh);
 
   // East: above the door you came in by, facing into the hall (−x).
   const doorMidZ = (FIGHT.door.z0 + FIGHT.door.z1) / 2;
-  const fightSign2 = buildSign('signs/iron-balls-bar.png', 2.4, 1.08);
-  fightSign2.position.set(hall.maxX - 0.04, 3.7, doorMidZ);
+  const fightSign2 = buildSign('signs/iron-balls-bar.png', 2.0, 2.0);
+  fightSign2.position.set(hall.maxX - 0.04, 3.6, doorMidZ);
   fightSign2.rotation.y = -Math.PI / 2;
   root.add(fightSign2);
   const fightDisplay2 = new Panel(3.0, 1.0);
-  fightDisplay2.mesh.position.set(hall.maxX - 0.04, 2.75, doorMidZ);
+  fightDisplay2.mesh.position.set(hall.maxX - 0.04, 2.55, doorMidZ);
   fightDisplay2.mesh.rotation.y = -Math.PI / 2;
   root.add(fightDisplay2.mesh);
 

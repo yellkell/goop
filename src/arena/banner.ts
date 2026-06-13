@@ -59,7 +59,8 @@ export function createTitleBanner(scene: Scene): Mesh {
   const texture = new CanvasTexture(canvas);
   texture.minFilter = LinearFilter;
   const material = new MeshBasicMaterial({ map: texture, transparent: true });
-  const banner = new Mesh(new PlaneGeometry(2.4, 1.2), material);
+  // Square plane — fire-fight.png is a 1:1 canvas with transparent margins.
+  const banner = new Mesh(new PlaneGeometry(2.2, 2.2), material);
   banner.name = 'title-banner';
   banner.position.set(0, 3.2, -ARENA_GAP - 1.2);
   scene.add(banner);
