@@ -25,6 +25,7 @@ import {
   TorusGeometry,
 } from 'three';
 import { IBLGradient, type World } from '@iwsdk/core';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { OCTAGON_VERTICES, PALETTE, teamColor } from '../config.js';
 import { diamondPlateTextures } from '../materials/diamondPlate.js';
 import { octagonSlab } from '../arena/octagon.js';
@@ -51,6 +52,12 @@ const amberGlow = (intensity = 1.2): MeshStandardMaterial =>
     metalness: 0.2,
     roughness: 0.4,
   });
+
+/** A box with softened edges — for upholstered/wood furniture corners. */
+function roundedBox(w: number, h: number, d: number, r = 0.04): RoundedBoxGeometry {
+  const rr = Math.min(r, Math.min(w, h, d) * 0.49);
+  return new RoundedBoxGeometry(w, h, d, 4, rr);
+}
 
 export function buildPub(world: World): PubRefs {
   const root = new Group();
@@ -756,10 +763,10 @@ function buildBanquette(centres: number[]): Group {
   g.add(plinthLip);
 
   // Continuous bench: base box + burgundy cushion, sitting on the plinth.
-  const base = new Mesh(new BoxGeometry(span, 0.32, 0.55), woodDark);
+  const base = new Mesh(roundedBox(span, 0.32, 0.55, 0.05), woodDark);
   base.position.set(midX, STEP + 0.16, PZ);
   g.add(base);
-  const cushion = new Mesh(new BoxGeometry(span - 0.04, 0.1, 0.5), pad);
+  const cushion = new Mesh(roundedBox(span - 0.04, 0.1, 0.5, 0.05), pad);
   cushion.position.set(midX, STEP + 0.37, PZ);
   g.add(cushion);
 
@@ -770,12 +777,12 @@ function buildBanquette(centres: number[]): Group {
   const nPanels = Math.max(1, Math.round(span / panelW));
   for (let i = 0; i < nPanels; i++) {
     const px = x0 + (i + 0.5) * (span / nPanels);
-    const panel = new Mesh(new BoxGeometry((span / nPanels) - 0.03, backTop - (STEP + 0.42), 0.08), pad);
+    const panel = new Mesh(roundedBox((span / nPanels) - 0.03, backTop - (STEP + 0.42), 0.08, 0.04), pad);
     panel.position.set(px, (STEP + 0.42 + backTop) / 2, backZ);
     g.add(panel);
   }
   // Capping rail along the top of the back.
-  const rail = new Mesh(new BoxGeometry(span, 0.06, 0.12), wood);
+  const rail = new Mesh(roundedBox(span, 0.06, 0.12, 0.03), wood);
   rail.position.set(midX, backTop, backZ);
   g.add(rail);
 
@@ -792,20 +799,20 @@ function buildBanquette(centres: number[]): Group {
     const pedestal = new Mesh(new CylinderGeometry(0.05, 0.14, 0.72, 8), tableMat);
     pedestal.position.set(cx, 0.36, tz);
     g.add(pedestal);
-    const top = new Mesh(new BoxGeometry(0.7, 0.05, 0.7), tableMat);
+    const top = new Mesh(roundedBox(0.7, 0.05, 0.7, 0.06), tableMat);
     top.position.set(cx, 0.74, tz);
     g.add(top);
-    const edge = new Mesh(new BoxGeometry(0.72, 0.02, 0.72), woodDark);
+    const edge = new Mesh(roundedBox(0.72, 0.02, 0.72, 0.06), woodDark);
     edge.position.set(cx, 0.765, tz);
     g.add(edge);
     // Freestanding bench across the table, facing the wall.
-    const benchBase = new Mesh(new BoxGeometry(0.9, 0.3, 0.4), woodDark);
+    const benchBase = new Mesh(roundedBox(0.9, 0.3, 0.4, 0.05), woodDark);
     benchBase.position.set(cx, 0.15, D - 1.95);
     g.add(benchBase);
-    const benchPad = new Mesh(new BoxGeometry(0.86, 0.09, 0.36), pad);
+    const benchPad = new Mesh(roundedBox(0.86, 0.09, 0.36, 0.045), pad);
     benchPad.position.set(cx, 0.35, D - 1.95);
     g.add(benchPad);
-    const benchBack = new Mesh(new BoxGeometry(0.9, 0.5, 0.08), woodDark);
+    const benchBack = new Mesh(roundedBox(0.9, 0.5, 0.08, 0.04), woodDark);
     benchBack.position.set(cx, 0.6, D - 2.13);
     g.add(benchBack);
   }
