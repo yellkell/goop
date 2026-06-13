@@ -11,7 +11,7 @@ import {
   PlaneGeometry,
   SRGBColorSpace,
 } from 'three';
-import { chamferPath, stencilFont } from '../ui/industrial.js';
+import { chamferPath, futuristicFont, stencilFont } from '../ui/industrial.js';
 
 export interface PanelLine {
   text: string;
@@ -85,6 +85,37 @@ export class Panel {
       ctx.fillText(line.text, x, y);
       y += Math.round(size * 0.42);
     }
+    this.texture.needsUpdate = true;
+  }
+
+  /**
+   * Plate-free floating text — for name labels over players' heads. Transparent
+   * background (no steel backplate), bright text with a soft glow and wide
+   * letter-spacing for a futuristic HUD read. Shrinks to fit the canvas width.
+   */
+  setLabel(text: string, colour = '#ffffff', size = 60): void {
+    const { width: w, height: h } = this.canvas;
+    const ctx = this.ctx;
+    ctx.clearRect(0, 0, w, h); // no plate — just the glyphs
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.letterSpacing = `${Math.round(size * 0.1)}px`;
+    let px = size;
+    ctx.font = futuristicFont(px);
+    while (px > 16 && ctx.measureText(text).width > w - 24) {
+      px -= 2;
+      ctx.font = futuristicFont(px);
+    }
+    const cx = w / 2;
+    const cy = h / 2;
+    // Glow pass, then a crisp core pass on top.
+    ctx.shadowColor = 'rgba(170,225,255,0.95)';
+    ctx.shadowBlur = Math.round(px * 0.55);
+    ctx.fillStyle = colour;
+    ctx.fillText(text, cx, cy);
+    ctx.shadowBlur = 0;
+    ctx.fillText(text, cx, cy);
+    ctx.letterSpacing = '0px';
     this.texture.needsUpdate = true;
   }
 

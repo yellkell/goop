@@ -26,7 +26,8 @@ import { customization } from '../menu/customization.js';
 import { PUB, pubServerUrl } from './config.js';
 import { buildPub } from './environment.js';
 import { pubConnect } from './net.js';
-import { pub } from './state.js';
+import { Panel } from './panel.js';
+import { bus, pub } from './state.js';
 import { buildProps, PropSystem } from './systems/PropSystem.js';
 import { BartenderSystem } from './systems/BartenderSystem.js';
 import { DartsSystem } from './systems/DartsSystem.js';
@@ -34,6 +35,8 @@ import { FightSystem } from './systems/FightSystem.js';
 import { PubPlayerSystem } from './systems/PubPlayerSystem.js';
 import { SnakeSystem } from './systems/SnakeSystem.js';
 import { TeleportSystem } from './systems/TeleportSystem.js';
+import { ClimbSystem } from './systems/ClimbSystem.js';
+import { FXSystem } from '../systems/FXSystem.js';
 
 const container = document.getElementById('scene-container') as HTMLDivElement;
 
@@ -51,6 +54,24 @@ function resolveName(): string {
   const generated = `PUNTER-${Math.floor(100 + Math.random() * 900)}`;
   localStorage.setItem('ibb-pub-name', generated);
   return generated;
+}
+
+let fullNotice: Panel | null = null;
+
+/** Hang a "PUB IS FULL" stencil sign at eye level just inside the door. */
+function showFullNotice(world: World): void {
+  if (fullNotice) return; // only once
+  const panel = new Panel(1.5, 0.82, 384);
+  panel.setLines([
+    { text: 'THE PUB IS FULL', size: 58, colour: '#ffb000', bold: true },
+    { text: '12 / 12 PUNTERS IN', size: 30 },
+    { text: "You're in a quiet side room —", size: 26, colour: '#aeb6c2' },
+    { text: 'come back when a stool frees up.', size: 26, colour: '#aeb6c2' },
+  ]);
+  // Just in front of the spawn (player walks in facing −z), at eye level.
+  panel.mesh.position.set(PUB.spawn.x, 1.55, PUB.spawn.z - 1.3);
+  world.scene.add(panel.mesh);
+  fullNotice = panel;
 }
 
 World.create(container, {
@@ -77,12 +98,22 @@ World.create(container, {
   buildProps(world);
 
   world.registerSystem(TeleportSystem);
+  world.registerSystem(ClimbSystem);
   world.registerSystem(PubPlayerSystem);
   world.registerSystem(PropSystem);
   world.registerSystem(DartsSystem);
   world.registerSystem(SnakeSystem);
   world.registerSystem(FightSystem);
   world.registerSystem(BartenderSystem);
+  // Animates and self-destructs transient effects (clap gesture cues, fire
+  // impacts) and drives the fire particle pools. Without it, the white clap
+  // flash spawns but never fades — leaving a permanent mark in the room.
+  world.registerSystem(FXSystem);
+
+  // If the room is full (12/12) the server turns us away and we drop into a
+  // quiet solo copy — so hang a stencil notice by the door explaining why
+  // it's empty, instead of leaving the player baffled.
+  bus.on('full', () => showFullNotice(world));
 
   // Your arena cosmetics walk in with you.
   pubConnect(pubServerUrl(), pub.myName, customization.avatar, customization.platform);

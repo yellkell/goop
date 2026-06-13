@@ -17,12 +17,14 @@ import {
   CylinderGeometry,
   DoubleSide,
   Group,
+  LatheGeometry,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
   PlaneGeometry,
   PointLight,
   TorusGeometry,
+  Vector2,
 } from 'three';
 import { IBLGradient, type World } from '@iwsdk/core';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
@@ -57,6 +59,28 @@ const amberGlow = (intensity = 1.2): MeshStandardMaterial =>
 function roundedBox(w: number, h: number, d: number, r = 0.04): RoundedBoxGeometry {
   const rr = Math.min(r, Math.min(w, h, d) * 0.49);
   return new RoundedBoxGeometry(w, h, d, 4, rr);
+}
+
+/**
+ * A round upholstered puck (stool cushion) with filleted top and bottom
+ * rims — a lathe of a rounded-corner profile, origin at the puck centre.
+ */
+function roundedPuck(radius: number, height: number, fillet = 0.025): LatheGeometry {
+  const r = Math.min(fillet, radius * 0.49, height * 0.49);
+  const hh = height / 2;
+  const pts: Vector2[] = [new Vector2(0, -hh)];
+  // Bottom rim fillet: from the flat underside out to the side wall.
+  for (let i = 0; i <= 4; i++) {
+    const a = -Math.PI / 2 + (i / 4) * (Math.PI / 2);
+    pts.push(new Vector2(radius - r + Math.cos(a) * r, -hh + r + Math.sin(a) * r));
+  }
+  // Top rim fillet: up the side wall, then in across the top.
+  for (let i = 0; i <= 4; i++) {
+    const a = (i / 4) * (Math.PI / 2);
+    pts.push(new Vector2(radius - r + Math.cos(a) * r, hh - r + Math.sin(a) * r));
+  }
+  pts.push(new Vector2(0, hh));
+  return new LatheGeometry(pts, 24);
 }
 
 export function buildPub(world: World): PubRefs {
@@ -310,7 +334,7 @@ export function buildPub(world: World): PubRefs {
     leg.position.y = 0.31;
     stool.add(leg);
     const seat = new Mesh(
-      new CylinderGeometry(0.17, 0.17, 0.06, 12),
+      roundedPuck(0.17, 0.07, 0.03),
       new MeshStandardMaterial({ color: 0x5a2a20, roughness: 0.85 }),
     );
     seat.position.y = 0.65;

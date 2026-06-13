@@ -51,6 +51,8 @@ export interface PubRefs {
 interface Events {
   connected: undefined;
   disconnected: undefined;
+  /** The room turned us away — it's already at 12/12. */
+  full: undefined;
   joined: RemotePunter;
   left: string;
   board: BoardRow[];

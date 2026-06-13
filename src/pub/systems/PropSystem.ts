@@ -21,7 +21,7 @@
 
 import { createSystem, Grabbed, OneHandGrabbable, type Entity, type World } from '@iwsdk/core';
 import { Group, Quaternion, Raycaster, Vector3 } from 'three';
-import { deflect, throwWhoosh, wallThud } from '../../audio/sfx.js';
+import { dartFloor, dartStick, glassClink, glassTap, throwWhoosh } from '../../audio/sfx.js';
 import { GLASS, PROP_PHYS, PUB, SURFACES } from '../config.js';
 import { pubSendRaw } from '../net.js';
 import type { PropKind, QuatT, Vec3T } from '../protocol.js';
@@ -342,12 +342,12 @@ export class PropSystem extends createSystem({
     if (p.x > wx || p.x < -wx) {
       p.x = Math.max(-wx, Math.min(wx, p.x));
       rec.vel.x *= -PROP_PHYS.restitution;
-      deflect();
+      glassTap(true);
     }
     if (p.z > wz || p.z < -wz) {
       p.z = Math.max(-wz, Math.min(wz, p.z));
       rec.vel.z *= -PROP_PHYS.restitution;
-      deflect();
+      glassTap(true);
     }
     if (p.y > PUB.ceiling - 0.08) {
       p.y = PUB.ceiling - 0.08;
@@ -373,7 +373,7 @@ export class PropSystem extends createSystem({
         rec.vel.y = -rec.vel.y * PROP_PHYS.restitution;
         rec.vel.x *= 0.6;
         rec.vel.z *= 0.6;
-        deflect();
+        glassTap(true);
       }
     }
 
@@ -406,6 +406,9 @@ export class PropSystem extends createSystem({
       }
     }
     if (bestTop !== null) p.y = bestTop;
+    // Glass-on-glass clinks; glass-on-surface gives a soft tap.
+    if (bestTop !== null) glassClink();
+    else glassTap(false);
 
     rec.mode = 'rest';
     rec.vel.set(0, 0, 0);
@@ -444,7 +447,7 @@ export class PropSystem extends createSystem({
       p.z = Math.max(-PUB.halfDepth + 0.1, Math.min(PUB.halfDepth - 0.1, p.z));
       rec.mesh.quaternion.setFromAxisAngle(_a.set(0, 0, 1), Math.PI / 2);
       rec.mode = 'rest';
-      deflect();
+      dartFloor();
       this.sendSettle(rec);
     }
   }
@@ -456,7 +459,7 @@ export class PropSystem extends createSystem({
     rec.stuckTimer = 0;
     rec.fadeTimer = 0;
     rec.mode = 'stuck';
-    wallThud();
+    dartStick();
     this.stream(rec, 1); // push the final stuck transform immediately
 
     if (surface === 'dartboard' && uv) {
@@ -517,7 +520,7 @@ export class PropSystem extends createSystem({
     rec.mode = 'rest';
     rec.entity.addComponent(OneHandGrabbable, { rotate: true });
     if (animate) {
-      deflect(); // a little glass clink as it's set down
+      glassTap(false); // a soft glass clink as it's set down
       setGlassFill(rec.mesh, 0);
       if (!this.fills.some((p) => p.rec === rec)) this.fills.push({ rec, f: 0 });
     } else {

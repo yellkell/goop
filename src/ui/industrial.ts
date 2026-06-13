@@ -29,6 +29,12 @@ export function stencilFont(px: number): string {
   return `900 ${px}px 'Arial Black', 'Arial Narrow', system-ui, sans-serif`;
 }
 
+/** Futuristic HUD type — prefers a sci-fi face if the device has one, else a
+ *  clean techy monospace. Pair with wide letter-spacing + a glow. */
+export function futuristicFont(px: number, weight = 600): string {
+  return `${weight} ${px}px 'Orbitron', 'Michroma', 'Eurostile', 'Rajdhani', ui-monospace, 'Segoe UI', system-ui, sans-serif`;
+}
+
 /** A rectangle with cut (chamfered) corners — the panel silhouette. */
 export function chamferPath(
   ctx: CanvasRenderingContext2D,

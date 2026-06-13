@@ -23,6 +23,12 @@ export function onSnap(fn: (poses: SnapPoses) => void): void {
   snapHook = fn;
 }
 
+/** Called with each inbound voice frame: (senderId, opus frame bytes). */
+let voiceHook: ((id: string, frame: ArrayBuffer) => void) | null = null;
+export function onVoice(fn: (id: string, frame: ArrayBuffer) => void): void {
+  voiceHook = fn;
+}
+
 export function pubConnect(url: string, name: string, av = '', pf = ''): void {
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
   try {
@@ -31,13 +37,19 @@ export function pubConnect(url: string, name: string, av = '', pf = ''): void {
     console.warn('[pub] cannot open WebSocket to', url);
     return;
   }
+  ws.binaryType = 'arraybuffer'; // voice frames ride as binary alongside the JSON
 
   ws.onopen = () => pubSendRaw({ t: 'hello', name, av, pf });
 
   ws.onmessage = (e) => {
+    // Binary payloads are voice frames; everything else is JSON game traffic.
+    if (typeof e.data !== 'string') {
+      handleVoice(e.data as ArrayBuffer);
+      return;
+    }
     let msg: PubServerMsg;
     try {
-      msg = JSON.parse(String(e.data)) as PubServerMsg;
+      msg = JSON.parse(e.data) as PubServerMsg;
     } catch {
       return;
     }
@@ -75,6 +87,7 @@ function handle(msg: PubServerMsg): void {
       break;
     case 'full':
       console.warn('[pub] room is full (12 punters max)');
+      bus.emit('full', undefined);
       break;
     case 'join':
       spawnHook?.(msg.player);
@@ -148,8 +161,27 @@ function handle(msg: PubServerMsg): void {
   }
 }
 
+/**
+ * A voice frame off the wire: [1-byte id length][ascii sender id][opus frame].
+ * The server prepends the sender so we can route it to the right panner.
+ */
+function handleVoice(buf: ArrayBuffer): void {
+  if (!voiceHook || buf.byteLength < 2) return;
+  const bytes = new Uint8Array(buf);
+  const idLen = bytes[0];
+  if (buf.byteLength < 1 + idLen + 8) return;
+  let id = '';
+  for (let i = 0; i < idLen; i++) id += String.fromCharCode(bytes[1 + i]);
+  voiceHook(id, buf.slice(1 + idLen));
+}
+
 export function pubSendRaw(msg: PubClientMsg): void {
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+}
+
+/** Ship one local Opus voice frame to the server (binary). */
+export function pubSendVoice(frame: ArrayBuffer): void {
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(frame);
 }
 
 export function pubSendEvent(ev: PubEvent): void {

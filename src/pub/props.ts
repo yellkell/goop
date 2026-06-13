@@ -46,6 +46,10 @@ export function buildPintGlass(): Group {
     roughness: 0.08,
     transparent: true,
     opacity: 0.3,
+    // Don't write depth: a transparent wall must never occlude the beer
+    // behind it. Without this the column sorts in front at some head angles
+    // and depth-rejects the beer fragments, so the pint appears to vanish.
+    depthWrite: false,
   });
   const wall = new Mesh(
     new CylinderGeometry(GLASS.radiusTop, GLASS.radiusBottom, GLASS.height, 12, 1, true),
@@ -56,7 +60,7 @@ export function buildPintGlass(): Group {
 
   const base = new Mesh(
     new CylinderGeometry(GLASS.radiusBottom, GLASS.radiusBottom * 1.04, 0.012, 12),
-    new MeshStandardMaterial({ color: 0xaebccb, metalness: 0.15, roughness: 0.15, transparent: true, opacity: 0.55 }),
+    new MeshStandardMaterial({ color: 0xaebccb, metalness: 0.15, roughness: 0.15, transparent: true, opacity: 0.55, depthWrite: false }),
   );
   base.position.y = 0.006;
   g.add(base);
@@ -85,6 +89,10 @@ export function buildPintGlass(): Group {
   g.add(head);
 
   g.add(grabProxy(0.085, GLASS.height / 2));
+  // Scale the whole pint up uniformly about its base (origin), so it still
+  // sits flush on the surface. Stacking/snapping (GLASS.stackRise/stackSnap)
+  // are pre-scaled to match.
+  g.scale.setScalar(GLASS.scale);
   return g;
 }
 
