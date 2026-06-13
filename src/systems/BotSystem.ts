@@ -132,6 +132,7 @@ export class BotSystem extends createSystem({
       const gz = z + (winding ? 0.16 : -0.18); // wind back, guard forward
       opponent.handPos[hand].lerp(_tmp.set(gx, gy, gz), Math.min(1, delta * 9));
       opponent.handQuat[hand].copy(opponent.headQuat);
+      opponent.fisting[hand] = false;
     }
   }
 

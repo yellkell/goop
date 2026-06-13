@@ -27,6 +27,7 @@ import { GameStateSystem } from './systems/GameStateSystem.js';
 import { MenuSystem } from './systems/MenuSystem.js';
 import { PlayerFeedbackSystem } from './systems/PlayerFeedbackSystem.js';
 import { PlayerGloveSystem } from './systems/PlayerGloveSystem.js';
+import { PlayerGestureSystem } from './systems/PlayerGestureSystem.js';
 import { FXSystem } from './systems/FXSystem.js';
 
 const container = document.getElementById('scene-container') as HTMLDivElement;
@@ -75,6 +76,7 @@ World.create(container, {
   world.registerSystem(MenuSystem);
   world.registerSystem(PlayerFeedbackSystem);
   world.registerSystem(PlayerGloveSystem);
+  world.registerSystem(PlayerGestureSystem);
   world.registerSystem(FXSystem);
 
   // eslint-disable-next-line no-console

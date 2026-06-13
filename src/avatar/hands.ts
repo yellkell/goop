@@ -10,7 +10,7 @@
  * grip/ray alignment and fireball anchors all carry over unchanged.
  */
 
-import { BoxGeometry, Color, Group, Mesh, MeshStandardMaterial } from 'three';
+import { BoxGeometry, Color, Group, Mesh, MeshStandardMaterial, Quaternion, Vector3 } from 'three';
 import { PALETTE } from '../config.js';
 
 interface HandJoints {
@@ -19,12 +19,24 @@ interface HandJoints {
   thumb: [Group, Group];
 }
 
+export type HandIndex = 0 | 1;
+
+export const HAND_VISUAL_SCALE = 1.18;
+
+const HAND_FORWARD_AXIS = new Vector3(0, 0, 1);
+
+export const HAND_ADDUCTION: [Quaternion, Quaternion] = [
+  new Quaternion().setFromAxisAngle(HAND_FORWARD_AXIS, Math.PI / 2),
+  new Quaternion().setFromAxisAngle(HAND_FORWARD_AXIS, -Math.PI / 2),
+];
+
 /**
  * Build one hand. `side` mirrors the thumb: +1 = left hand (thumb on +x),
  * -1 = right hand (thumb on -x).
  */
 export function buildHand(side: 1 | -1): Group {
   const hand = new Group();
+  hand.scale.setScalar(HAND_VISUAL_SCALE);
 
   const mat = new MeshStandardMaterial({
     color: 0x15171c, // near-black steel at rest

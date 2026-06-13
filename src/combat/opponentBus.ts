@@ -18,6 +18,7 @@ export interface OpponentPose {
   handQuat: [Quaternion, Quaternion];
   /** Their trigger-held flags — drives the orbit visual on their balls. */
   orbiting: [boolean, boolean];
+  fisting: [boolean, boolean];
 }
 
 export const opponent: OpponentPose = {
@@ -27,6 +28,7 @@ export const opponent: OpponentPose = {
   handPos: [new Vector3(-0.25, 1.1, -3.2), new Vector3(0.25, 1.1, -3.2)],
   handQuat: [new Quaternion(), new Quaternion()],
   orbiting: [false, false],
+  fisting: [false, false],
 };
 
 /**

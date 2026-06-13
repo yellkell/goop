@@ -173,7 +173,7 @@ export const PLATFORM = {
 export const BOUNDARY = {
   wallHeight: 1.5, // barrier wall height above the platform
   warnDistance: 0.3, // walls start glowing when the head is this close (m)
-  drainPerSec: 28, // hp/s while your head is outside the rim
+  drainPerSec: 38, // hp/s while your head is outside the rim
   graceDepth: 0.06, // head may poke this far past the rim before draining
 };
 

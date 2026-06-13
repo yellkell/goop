@@ -120,6 +120,7 @@ export class NetworkSystem extends createSystem({
 
     const hands: [PoseTuple, PoseTuple] = [headPose, headPose];
     const orbit: [boolean, boolean] = [false, false];
+    const fist: [boolean, boolean] = [false, false];
     for (const hand of [0, 1] as const) {
       // Fist position from the grip, orientation from the pointing ray — the
       // frame our own gloves are aimed in, so their mirror of us matches.
@@ -135,9 +136,12 @@ export class NetworkSystem extends createSystem({
       orbit[hand] =
         (gp?.getButtonPressed(InputComponent.Trigger) ?? false) ||
         (gp?.getButtonPressed(InputComponent.Squeeze) ?? false);
+      fist[hand] =
+        (gp?.getButtonPressed(InputComponent.Squeeze) ?? false) &&
+        !(gp?.getButtonPressed(InputComponent.Trigger) ?? false);
     }
 
-    net.send({ k: 'pose', head: headPose, left: hands[0], right: hands[1], orbit, hp: this.myHp });
+    net.send({ k: 'pose', head: headPose, left: hands[0], right: hands[1], orbit, fist, hp: this.myHp });
   }
 
   // --- incoming ------------------------------------------------------------
@@ -156,6 +160,8 @@ export class NetworkSystem extends createSystem({
         // theirs — their flags map straight onto their balls.
         opponent.orbiting[0] = msg.orbit[0];
         opponent.orbiting[1] = msg.orbit[1];
+        opponent.fisting[0] = msg.fist?.[0] ?? false;
+        opponent.fisting[1] = msg.fist?.[1] ?? false;
         this.setTheirHp(msg.hp);
         target.fresh = true;
         break;

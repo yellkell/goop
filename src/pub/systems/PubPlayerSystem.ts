@@ -9,7 +9,7 @@
 import { createSystem, InputComponent } from '@iwsdk/core';
 import { Color, Group, MeshStandardMaterial, Quaternion, Vector3 } from 'three';
 import { buildBoxer } from '../../avatar/boxer.js';
-import { buildHand, setHandCurl } from '../../avatar/hands.js';
+import { buildHand, HAND_ADDUCTION, setHandCurl } from '../../avatar/hands.js';
 import { applyAvatarSkin, avatarSkin } from '../../avatar/skins.js';
 import { customization } from '../../menu/customization.js';
 import { solveTorso } from '../../avatar/boxer.js';
@@ -138,12 +138,12 @@ export class PubPlayerSystem extends createSystem({}) {
         _chest,
         _pelvis,
       );
-      for (const [tuple, glove] of [
-        [punter.left, rig.gloves[0]],
-        [punter.right, rig.gloves[1]],
-      ] as const) {
+      for (const hand of [0, 1] as const) {
+        const tuple = hand === 0 ? punter.left : punter.right;
+        const glove = rig.gloves[hand];
         _pos.set(tuple[0], tuple[1], tuple[2]);
         _quat.set(tuple[3], tuple[4], tuple[5], tuple[6]);
+        _quat.multiply(HAND_ADDUCTION[hand]);
         glove.position.lerp(_pos, k);
         glove.quaternion.slerp(_quat, k);
       }
@@ -201,6 +201,7 @@ export class PubPlayerSystem extends createSystem({}) {
     if (!grips.left || !grips.right) return;
     for (const hand of ['left', 'right'] as const) {
       const glove = buildHand(hand === 'left' ? 1 : -1);
+      glove.quaternion.copy(HAND_ADDUCTION[hand === 'left' ? 0 : 1]);
       retintLocal(glove, pub.myAccent);
       applyAvatarSkin(glove, avatarSkin(customization.avatar)); // your skin walks in too
       grips[hand].add(glove);

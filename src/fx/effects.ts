@@ -24,11 +24,12 @@ import { teamColor } from '../config.js';
 const SHARD_GEO = new IcosahedronGeometry(0.025, 0);
 const POPUP_GEO = new PlaneGeometry(0.26, 0.13);
 
-/** "20" etc. rendered once per distinct damage value, then reused. */
-const popupTextures = new Map<number, CanvasTexture>();
+/** Popup text rendered once per distinct label/style, then reused. */
+const popupTextures = new Map<string, CanvasTexture>();
 
-function damageTexture(dmg: number): CanvasTexture {
-  let tex = popupTextures.get(dmg);
+function popupTexture(text: string, fill: string, glow: string): CanvasTexture {
+  const key = `${text}|${fill}|${glow}`;
+  let tex = popupTextures.get(key);
   if (tex) return tex;
   const canvas = document.createElement('canvas');
   canvas.width = 256;
@@ -39,23 +40,23 @@ function damageTexture(dmg: number): CanvasTexture {
   ctx.font = `900 96px 'Arial Black', system-ui, sans-serif`;
   ctx.lineWidth = 14;
   ctx.strokeStyle = 'rgba(10,11,14,0.95)';
-  ctx.strokeText(String(dmg), 128, 68);
-  ctx.fillStyle = '#ff1605';
-  ctx.shadowColor = 'rgba(255,30,10,1)';
+  ctx.strokeText(text, 128, 68);
+  ctx.fillStyle = fill;
+  ctx.shadowColor = glow;
   ctx.shadowBlur = 22;
-  ctx.fillText(String(dmg), 128, 68);
+  ctx.fillText(text, 128, 68);
   tex = new CanvasTexture(canvas);
   tex.minFilter = LinearFilter;
-  popupTextures.set(dmg, tex);
+  popupTextures.set(key, tex);
   return tex;
 }
 
-/** A little red damage number that pops at the impact, rises and fades. */
-export function spawnDamagePopup(world: World, pos: Vector3, dmg: number): void {
+/** A billboard popup that pops at the impact, rises and fades. */
+export function spawnPopup(world: World, pos: Vector3, text: string, fill = '#ff1605', glow = 'rgba(255,30,10,1)'): void {
   const mesh = new Mesh(
     POPUP_GEO,
     new MeshBasicMaterial({
-      map: damageTexture(dmg),
+      map: popupTexture(text, fill, glow),
       transparent: true,
       depthTest: false, // reads through the avatar it just hit
       depthWrite: false,
@@ -66,6 +67,24 @@ export function spawnDamagePopup(world: World, pos: Vector3, dmg: number): void 
   e.object3D!.position.copy(pos);
   e.object3D!.position.y += 0.1;
   e.addComponent(Effect, { kind: EffectKind.Popup, life: 0.9, baseScale: 1 });
+}
+
+/** A little red damage number that pops at the impact, rises and fades. */
+export function spawnDamagePopup(world: World, pos: Vector3, dmg: number): void {
+  spawnPopup(world, pos, String(dmg));
+}
+
+/** Small white confirmation flash for social hand gestures. */
+export function spawnGestureCue(world: World, pos: Vector3, scale = 0.28): void {
+  const flash = glowSprite(0xffffff, scale);
+  const fe = world.createTransformEntity(flash);
+  fe.object3D!.position.copy(pos);
+  fe.addComponent(Effect, { kind: EffectKind.Flash, life: 0.14, baseScale: scale });
+
+  const ring = glowSprite(0xffffff, scale * 0.65, 0.75);
+  const re = world.createTransformEntity(ring);
+  re.object3D!.position.copy(pos);
+  re.addComponent(Effect, { kind: EffectKind.Ring, life: 0.22, baseScale: scale * 0.55 });
 }
 
 /**
