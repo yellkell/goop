@@ -152,15 +152,20 @@ export const TELEPORT = {
   arcStep: 0.035, // seconds of simulated flight per arc sample
 };
 
+/** Overall pint-glass size multiplier — proper big-hander pub pints. */
+const GLASS_SCALE = 1.8;
+
 /** Pint glass dimensions — used by the mesh, stacking and physics alike. */
 export const GLASS = {
+  /** Uniform scale applied to the built glass mesh (buildPintGlass). */
+  scale: GLASS_SCALE,
   radiusTop: 0.042,
   radiusBottom: 0.034,
   height: 0.15,
   /** Vertical offset when stacked on another glass (they nest a little). */
-  stackRise: 0.12,
+  stackRise: 0.12 * GLASS_SCALE,
   /** Max XZ distance for a settling glass to snap onto one below. */
-  stackSnap: 0.07,
+  stackSnap: 0.07 * GLASS_SCALE,
 };
 
 /** Shared-prop physics (owner-side simulation). */

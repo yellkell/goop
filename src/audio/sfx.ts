@@ -262,6 +262,43 @@ export function wallThud(): void {
   clank(180, 0.08, 0.3, 0.01);
 }
 
+// --- pub prop impacts: glass and steel sound NOTHING alike ------------------
+
+/**
+ * Glass on a hard surface — a bright, quick 'tink' of high near-pure partials
+ * (not the inharmonic ring of struck steel). `hard` is a real bounce; soft is
+ * a glass merely set down.
+ */
+export function glassTap(hard = false): void {
+  const g = hard ? 0.16 : 0.1;
+  tone({ freq: 2600, type: 'sine', dur: hard ? 0.22 : 0.15, gain: g });
+  tone({ freq: 3900, type: 'sine', dur: hard ? 0.14 : 0.09, gain: g * 0.5, delay: 0.004 });
+  tone({ freq: 5200, type: 'sine', dur: 0.05, gain: g * 0.3 });
+  whooshNoise(0.025, g * 0.4, 6500, 3000); // the glassy attack tick
+}
+
+/** Glass meeting glass — a stacked pint clinking onto another. Brighter, two-tone. */
+export function glassClink(): void {
+  tone({ freq: 3000, type: 'sine', dur: 0.2, gain: 0.14 });
+  tone({ freq: 4550, type: 'sine', dur: 0.12, gain: 0.07, delay: 0.006 });
+  tone({ freq: 6100, type: 'sine', dur: 0.05, gain: 0.04 });
+  whooshNoise(0.02, 0.28, 7500, 3500);
+}
+
+/** A steel dart clattering down on the floor — light metal tink + a low rattle. */
+export function dartFloor(): void {
+  clank(900, 0.1, 0.12);
+  clank(1400, 0.05, 0.07, 0.03); // the barrel's second bounce
+  tone({ freq: 150, to: 80, type: 'triangle', dur: 0.05, gain: 0.06 });
+}
+
+/** A dart biting into the cork board — a soft, dull thock, no ring. */
+export function dartStick(): void {
+  tone({ freq: 320, to: 150, type: 'sine', dur: 0.06, gain: 0.16 });
+  whooshNoise(0.04, 0.12, 1300, 320);
+}
+
+
 /** UI: a relay snapping closed. */
 export function uiClick(): void {
   clank(1500, 0.05, 0.04);

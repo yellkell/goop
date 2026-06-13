@@ -89,6 +89,10 @@ export function buildPintGlass(): Group {
   g.add(head);
 
   g.add(grabProxy(0.085, GLASS.height / 2));
+  // Scale the whole pint up uniformly about its base (origin), so it still
+  // sits flush on the surface. Stacking/snapping (GLASS.stackRise/stackSnap)
+  // are pre-scaled to match.
+  g.scale.setScalar(GLASS.scale);
   return g;
 }
 
