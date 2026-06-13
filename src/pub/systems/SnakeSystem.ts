@@ -83,7 +83,9 @@ export class SnakeSystem extends createSystem({}) {
           this.phase = 'attract';
         }
       }),
-      bus.on('snakeHi', () => this.renderHiPanel()),
+      bus.on('snakeHi', () => {
+        if (this.phase === 'attract') this.drawAttract();
+      }),
       bus.on('gameEvent', ({ from, ev }) => {
         if (ev.e !== 'SNAKE_STATE' || from === pub.myId) return;
         this.phase = 'watching';
@@ -95,7 +97,6 @@ export class SnakeSystem extends createSystem({}) {
       }),
     );
 
-    this.renderHiPanel();
     this.drawAttract();
   }
 
@@ -291,7 +292,6 @@ export class SnakeSystem extends createSystem({}) {
     } else if (this.score > this.localHi().score) {
       localStorage.setItem('ibb-pub-snake-hi', JSON.stringify({ name: pub.myName || 'YOU', score: this.score }));
       pub.snakeHi = this.localHi();
-      this.renderHiPanel();
     }
   }
 
@@ -373,18 +373,18 @@ export class SnakeSystem extends createSystem({}) {
       ctx.fillStyle = '#e8352a';
       ctx.font = '900 30px "Courier New", monospace';
       ctx.fillText('GAME OVER', W / 2, H / 2 + 10);
+      const hi = this.hi();
+      ctx.font = 'bold 18px "Courier New", monospace';
+      ctx.fillStyle = this.score >= hi.score && this.score > 0 ? '#ffb000' : '#9ee8a0';
+      ctx.fillText(
+        this.score >= hi.score && this.score > 0
+          ? 'NEW HOUSE RECORD!'
+          : `HI ${hi.score} — ${hi.name.slice(0, 10).toUpperCase()}`,
+        W / 2,
+        H / 2 + 40,
+      );
     }
     this.texture.needsUpdate = true;
-  }
-
-  private renderHiPanel(): void {
-    const panel = pub.refs?.hiScorePanel;
-    if (!panel) return;
-    const hi = this.hi();
-    panel.setLines([
-      { text: 'IRON SNAKE HI-SCORE', size: 36, colour: '#39ff14', bold: true },
-      { text: `${hi.score}  —  ${hi.name.slice(0, 14).toUpperCase()}`, size: 40, colour: '#e8ecf2', bold: true },
-    ]);
   }
 
   // Desktop testing: arrows steer, Enter starts (when standing close enough).

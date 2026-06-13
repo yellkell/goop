@@ -453,12 +453,6 @@ export function buildPub(world: World): PubRefs {
   cabinet.rotation.y = Math.PI / 4;
   root.add(cabinet);
 
-  const hiScorePanel = new Panel(0.9, 0.3);
-  // Above and behind the cabinet on the same diagonal, clear of the marquee.
-  hiScorePanel.mesh.position.set(-4.55, 2.2, -2.95);
-  hiScorePanel.mesh.rotation.y = Math.PI / 4;
-  root.add(hiScorePanel.mesh);
-
   // --- pint glass home slots on the bar -------------------------------------------
   const glassSlots: [number, number, number][] = [];
   // One row along the counter front — all 8 start under the bar and the
@@ -468,7 +462,7 @@ export function buildPub(world: World): PubRefs {
   }
 
   // --- the fight hall through the west door ---------------------------------
-  const { consolePanels, fightDisplay } = buildFightHall(root);
+  const { consolePanels, fightDisplay, fightRims } = buildFightHall(root);
 
   world.scene.add(root);
 
@@ -482,11 +476,11 @@ export function buildPub(world: World): PubRefs {
     dartsBoardPanel,
     arcadeScreen: screen,
     arcadePos,
-    hiScorePanel,
     arcadeCabinet: cabinet,
     snakeStick: stick,
     consolePanels,
     fightDisplay,
+    fightRims,
   };
 }
 
@@ -497,7 +491,7 @@ export function buildPub(world: World): PubRefs {
  * the floor marking the (5-yard) ball cage so the crowd knows where the
  * fire stops.
  */
-function buildFightHall(root: Group): { consolePanels: [Panel, Panel]; fightDisplay: Panel } {
+function buildFightHall(root: Group): { consolePanels: [Panel, Panel]; fightDisplay: Panel; fightRims: [Mesh, Mesh] } {
   const hall = FIGHT.hall;
   const cx = (hall.minX + hall.maxX) / 2;
   const w = hall.maxX - hall.minX;
@@ -613,6 +607,7 @@ function buildFightHall(root: Group): { consolePanels: [Panel, Panel]; fightDisp
 
   // The two octagonal platforms — the arena's own footprint and colours.
   const consolePanels: Panel[] = [];
+  const fightRims: Mesh[] = [];
   for (const side of [0, 1] as const) {
     const z = side === 0 ? FIGHT.platformZ : -FIGHT.platformZ;
     const accent = teamColor(side);
@@ -642,6 +637,7 @@ function buildFightHall(root: Group): { consolePanels: [Panel, Panel]; fightDisp
     rim.position.set(FIGHT.centerX, -FIGHT.pitDepth + 0.005, z);
     rim.rotation.y = slab.rotation.y;
     root.add(rim);
+    fightRims.push(rim);
 
     // Claim console: steel pedestal + angled panel, between platform and door.
     const [px, , pz] = FIGHT.consoles[side];
@@ -680,7 +676,7 @@ function buildFightHall(root: Group): { consolePanels: [Panel, Panel]; fightDisp
   fightDisplay.mesh.rotation.y = Math.PI / 2;
   root.add(fightDisplay.mesh);
 
-  return { consolePanels: [consolePanels[0], consolePanels[1]], fightDisplay };
+  return { consolePanels: [consolePanels[0], consolePanels[1]], fightDisplay, fightRims: [fightRims[0], fightRims[1]] };
 }
 
 /** A booth: padded bench against the south wall + a steel pedestal table. */

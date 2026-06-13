@@ -21,6 +21,7 @@
 
 import { SessionMode, World } from '@iwsdk/core';
 import { initFirePools } from '../fx/fire.js';
+import { customization } from '../menu/customization.js';
 import { PUB, pubServerUrl } from './config.js';
 import { buildPub } from './environment.js';
 import { pubConnect } from './net.js';
@@ -41,6 +42,9 @@ function resolveName(): string {
     localStorage.setItem('ibb-pub-name', param.slice(0, 14));
     return param.slice(0, 14);
   }
+  // The callsign typed in the FIRE FIGHT arena carries over.
+  const arena = localStorage.getItem('ff-player-name');
+  if (arena) return arena.slice(0, 14);
   const stored = localStorage.getItem('ibb-pub-name');
   if (stored) return stored;
   const generated = `PUNTER-${Math.floor(100 + Math.random() * 900)}`;
@@ -79,7 +83,8 @@ World.create(container, {
   world.registerSystem(FightSystem);
   world.registerSystem(BartenderSystem);
 
-  pubConnect(pubServerUrl(), pub.myName);
+  // Your arena cosmetics walk in with you.
+  pubConnect(pubServerUrl(), pub.myName, customization.avatar, customization.platform);
 
   // eslint-disable-next-line no-console
   console.info('[IRON BALLS PUB] Doors open. Mind the low beams.');

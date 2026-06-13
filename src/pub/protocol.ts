@@ -48,6 +48,9 @@ export interface PubPlayerNet {
   head: PoseTuple;
   left: PoseTuple;
   right: PoseTuple;
+  /** Main-game cosmetics carried into the pub (skin ids). */
+  av?: string;
+  pf?: string;
 }
 
 export interface BoardRow {
@@ -103,7 +106,7 @@ export type PubEvent =
   | { e: 'SNAKE_OVER'; score: number };
 
 export type PubClientMsg =
-  | { t: 'hello'; name: string }
+  | { t: 'hello'; name: string; av?: string; pf?: string }
   | { t: 'pose'; head: PoseTuple; left: PoseTuple; right: PoseTuple }
   /** I want to hold prop `id` (fresh grab or a mid-air catch). */
   | { t: 'grab'; id: number }
