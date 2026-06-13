@@ -699,38 +699,43 @@ export class FightSystem extends createSystem({}) {
   }
 
   private renderDisplay(): void {
-    const panel = pub.refs?.fightDisplay;
-    if (!panel) return;
+    // Both scoreboards (far wall + above the door) show the same thing — the
+    // IRON BALLS sign hangs above each as its own image, so no title here,
+    // just the two health bars and the status line, laid out by fraction so
+    // it fits whatever panel height it's drawn on.
+    for (const panel of [pub.refs?.fightDisplay, pub.refs?.fightDisplay2]) {
+      if (panel) this.drawBoard(panel);
+    }
+  }
+
+  private drawBoard(panel: import('../panel.js').Panel): void {
     const f = pub.fight;
     panel.draw((ctx, w, h) => {
-      ctx.textAlign = 'center';
-      ctx.font = '900 120px "Arial Black", system-ui, sans-serif';
-      ctx.fillStyle = '#ffb000';
-      ctx.fillText('FIRE FIGHT', w / 2, 150);
-
       const names = [this.nameOf(f.sides[0]), this.nameOf(f.sides[1])];
       const colours = ['#ff7a18', '#4fb7ff'];
-      const barW = w * 0.38;
+      const barW = w * 0.4;
+      const nameY = h * 0.28;
+      const barY = h * 0.38;
+      const barH = h * 0.2;
       for (const side of [0, 1] as const) {
-        const x = side === 0 ? w * 0.06 : w * 0.56;
+        const x = side === 0 ? w * 0.05 : w * 0.55;
         ctx.textAlign = side === 0 ? 'left' : 'right';
-        ctx.font = '900 64px "Arial Black", system-ui, sans-serif';
+        ctx.font = `900 ${Math.round(h * 0.14)}px "Arial Black", system-ui, sans-serif`;
         ctx.fillStyle = colours[side];
-        ctx.fillText(names[side].toUpperCase().slice(0, 12), side === 0 ? x : x + barW, 280);
-        // HP bar.
+        ctx.fillText(names[side].toUpperCase().slice(0, 12), side === 0 ? x : x + barW, nameY);
         ctx.fillStyle = 'rgba(172,182,198,0.25)';
-        ctx.fillRect(x, 320, barW, 52);
+        ctx.fillRect(x, barY, barW, barH);
         const hp = Math.max(0, f.hp[side]) / FIGHT.hpMax;
         ctx.fillStyle = colours[side];
         const fillW = barW * hp;
-        ctx.fillRect(side === 0 ? x : x + barW - fillW, 320, fillW, 52);
+        ctx.fillRect(side === 0 ? x : x + barW - fillW, barY, fillW, barH);
         ctx.strokeStyle = 'rgba(232,236,242,0.6)';
         ctx.lineWidth = 3;
-        ctx.strokeRect(x, 320, barW, 52);
+        ctx.strokeRect(x, barY, barW, barH);
       }
 
       ctx.textAlign = 'center';
-      ctx.font = '900 72px "Arial Black", system-ui, sans-serif';
+      ctx.font = `900 ${Math.round(h * 0.17)}px "Arial Black", system-ui, sans-serif`;
       const status =
         f.phase === 'idle'
           ? 'CHALLENGERS WANTED'
@@ -740,7 +745,7 @@ export class FightSystem extends createSystem({}) {
               ? 'FIGHT!'
               : `${this.nameOf(f.winner).toUpperCase()} WINS`;
       ctx.fillStyle = f.phase === 'fighting' ? '#e8352a' : '#e8ecf2';
-      ctx.fillText(status, w / 2, h - 130);
+      ctx.fillText(status, w / 2, h * 0.82);
     });
   }
 }

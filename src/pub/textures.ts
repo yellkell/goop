@@ -79,6 +79,59 @@ export function steelWallTexture(repeat: [number, number] = [3, 1.5]): CanvasTex
   );
 }
 
+/** Stained wood with plank seams + grain streaks — booth/table timber. */
+export function woodTexture(base = '#6b4526', repeat: [number, number] = [2, 1]): CanvasTexture {
+  return makeCanvasTexture(
+    256,
+    (ctx, s) => {
+      ctx.fillStyle = base;
+      ctx.fillRect(0, 0, s, s);
+      // Long grain streaks.
+      for (let i = 0; i < 140; i++) {
+        const y = Math.random() * s;
+        const dark = Math.random() < 0.5;
+        ctx.strokeStyle = dark ? 'rgba(0,0,0,0.10)' : 'rgba(255,210,160,0.06)';
+        ctx.lineWidth = 0.5 + Math.random() * 1.5;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.bezierCurveTo(s * 0.33, y + (Math.random() - 0.5) * 6, s * 0.66, y + (Math.random() - 0.5) * 6, s, y + (Math.random() - 0.5) * 4);
+        ctx.stroke();
+      }
+      // Plank seams every quarter.
+      ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+      ctx.lineWidth = 2;
+      for (let p = 1; p < 4; p++) {
+        ctx.beginPath();
+        ctx.moveTo(0, (p * s) / 4);
+        ctx.lineTo(s, (p * s) / 4);
+        ctx.stroke();
+      }
+    },
+    repeat,
+  );
+}
+
+/** Tufted upholstery — a fine woven speckle over a flat colour. */
+export function fabricTexture(base = '#4e1f2d', repeat: [number, number] = [3, 1]): CanvasTexture {
+  return makeCanvasTexture(
+    128,
+    (ctx, s) => {
+      ctx.fillStyle = base;
+      ctx.fillRect(0, 0, s, s);
+      // Cross-hatch weave.
+      ctx.strokeStyle = 'rgba(0,0,0,0.06)';
+      ctx.lineWidth = 1;
+      for (let i = 0; i < s; i += 3) {
+        ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, s); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(s, i); ctx.stroke();
+      }
+      ctx.fillStyle = 'rgba(255,255,255,0.04)';
+      for (let i = 0; i < 600; i++) ctx.fillRect(Math.random() * s, Math.random() * s, 1, 1);
+    },
+    repeat,
+  );
+}
+
 /** Dark cork — the blast zone around the dartboard, pre-pocked. */
 export function corkTexture(): CanvasTexture {
   return makeCanvasTexture(512, (ctx, s) => {
