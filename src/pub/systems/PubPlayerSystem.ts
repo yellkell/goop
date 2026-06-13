@@ -14,6 +14,7 @@ import { applyAvatarSkin, avatarSkin } from '../../avatar/skins.js';
 import { customization } from '../../menu/customization.js';
 import { solveTorso } from '../../avatar/boxer.js';
 import { PALETTE, teamColor } from '../../config.js';
+import { saloonEntry } from '../../audio/sfx.js';
 import { onSnap, onSpawn, pubSendRaw } from '../net.js';
 import { Panel } from '../panel.js';
 import type { PoseTuple, PubPlayerNet } from '../protocol.js';
@@ -181,6 +182,7 @@ export class PubPlayerSystem extends createSystem({}) {
     };
     pub.punters.set(p.id, punter);
     bus.emit('joined', punter);
+    saloonEntry(); // swinging doors — someone just walked in
   }
 
   private despawn(id: string): void {
