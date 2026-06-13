@@ -9,7 +9,8 @@
 
 import { createSystem, InputComponent } from '@iwsdk/core';
 import { Quaternion, type Group } from 'three';
-import { buildGlove, setGloveLit } from '../avatar/boxer.js';
+import { setGloveLit } from '../avatar/boxer.js';
+import { buildHand, setHandCurl } from '../avatar/hands.js';
 import { applyAvatarSkin, avatarSkin } from '../avatar/skins.js';
 import { BallState, Fireball } from '../components/Fireball.js';
 import { app } from '../menu/appState.js';
@@ -47,7 +48,7 @@ export class PlayerGloveSystem extends createSystem({
 
       let glove = this.gloves[hand];
       if (!glove) {
-        glove = buildGlove(0);
+        glove = buildHand(hand === 'left' ? 1 : -1);
         glove.name = `player-glove-${hand}`;
         applyAvatarSkin(glove, avatarSkin(customization.avatar));
         grip.add(glove);
@@ -66,18 +67,22 @@ export class PlayerGloveSystem extends createSystem({
       }
 
       // Trigger and grip are one action — either one ignites the fist. The
-      // LEDs also stay hot through a RETURN: a tapped recall keeps the hand
-      // visibly active until the ball is back in it.
+      // white bloom also stays hot through a RETURN: a tapped recall keeps
+      // the hand visibly active until the ball is back in it.
       const gp = this.input.xr.gamepads[hand];
-      const squeezing =
-        (gp?.getButtonPressed(InputComponent.Trigger) ?? false) ||
-        (gp?.getButtonPressed(InputComponent.Squeeze) ?? false);
+      const trig = gp?.getButtonValue(InputComponent.Trigger) ?? 0;
+      const sq = gp?.getButtonValue(InputComponent.Squeeze) ?? 0;
+      const squeezing = trig > 0.5 || sq > 0.5;
       setGloveLit(glove, squeezing || this.ballReturning(hand === 'left' ? 0 : 1), delta);
 
-      // A little squash while squeezing — feels grippy without physics.
-      const target = squeezing ? 0.88 : 1;
-      const s = glove.scale.x + (target - glove.scale.x) * Math.min(1, delta * 14);
-      glove.scale.setScalar(s);
+      // Fingers track the real squeeze: trigger curls the index, grip the
+      // rest, thumb tucks across as either closes.
+      setHandCurl(
+        glove,
+        Math.max(trig, sq * 0.6),
+        Math.max(sq, trig * 0.45),
+        0.35 + Math.max(trig, sq) * 0.55,
+      );
     }
   }
 }

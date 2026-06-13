@@ -91,6 +91,11 @@ export function applyAvatarSkin(root: Object3D, skin: AvatarSkin): void {
       case 'trim':
         m.color.setHex(skin.trim);
         break;
+      case 'hand':
+        // The hands tint to the skin's steel but stay near-black at rest;
+        // the white active bloom is owned by setGloveLit.
+        m.color.setHex(skin.chassis);
+        break;
       case 'glow':
         if (m.userData.litIntensity !== undefined) break; // team LED — leave it
         m.color.setHex(skin.accent);
