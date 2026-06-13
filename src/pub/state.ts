@@ -44,6 +44,8 @@ export interface PubRefs {
   /** Fight hall: claim console panels (side 0, side 1) + the big display. */
   consolePanels: [Panel, Panel];
   fightDisplay: Panel;
+  /** Mirror scoreboard above the door — same health, other side of the pit. */
+  fightDisplay2: Panel;
 }
 
 interface Events {

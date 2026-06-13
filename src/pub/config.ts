@@ -44,7 +44,7 @@ export const PUB = {
   // beside the counter. Bull at 1.73 m, oche 2.37 m out into the room.
   darts: {
     wallZ: -HALF_D,
-    boardX: 3.8, // east of the bottle shelf (bottles span x ±2.3)
+    boardX: 4.3, // well east of the bottle shelf (bottles span x ±2.3)
     boardY: 1.6,
     boardZ: -HALF_D + 0.04, // proud of the north wall
     boardRadius: 0.42, // oversized house board, filling its cork circle

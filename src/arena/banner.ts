@@ -10,6 +10,8 @@ import {
   Mesh,
   MeshBasicMaterial,
   PlaneGeometry,
+  SRGBColorSpace,
+  TextureLoader,
   type Scene,
 } from 'three';
 import { ARENA_GAP } from '../config.js';
@@ -56,12 +58,27 @@ export function createTitleBanner(scene: Scene): Mesh {
 
   const texture = new CanvasTexture(canvas);
   texture.minFilter = LinearFilter;
-  const banner = new Mesh(
-    new PlaneGeometry(2.4, 1.2),
-    new MeshBasicMaterial({ map: texture, transparent: true }),
-  );
+  const material = new MeshBasicMaterial({ map: texture, transparent: true });
+  const banner = new Mesh(new PlaneGeometry(2.4, 1.2), material);
   banner.name = 'title-banner';
   banner.position.set(0, 3.2, -ARENA_GAP - 1.2);
   scene.add(banner);
+
+  // Prefer the hand-made sign art if it's been committed to public/signs/;
+  // the stencil canvas above is the fallback until then.
+  new TextureLoader().load(
+    'signs/fire-fight.png',
+    (tex) => {
+      tex.colorSpace = SRGBColorSpace;
+      tex.minFilter = LinearFilter;
+      material.map?.dispose();
+      material.map = tex;
+      material.needsUpdate = true;
+    },
+    undefined,
+    () => {
+      /* no PNG yet — keep the stencil banner */
+    },
+  );
   return banner;
 }

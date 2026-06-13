@@ -404,7 +404,7 @@ export function buildPub(world: World): PubRefs {
   // The house dart BOX: an always-stocked open crate on a tall table beside
   // the oche (darts fly back here, so it never runs dry).
   const rackSlots: [number, number, number][] = [];
-  const boxX = darts.boardX + 0.8;
+  const boxX = darts.boardX - 0.85; // toward the bar side, clear of the wall
   const boxZ = darts.ocheZ;
   const tallLeg = new Mesh(new CylinderGeometry(0.04, 0.11, 1.13, 8), gunmetal(0.3));
   tallLeg.position.set(boxX, 0.565, boxZ);
@@ -439,7 +439,7 @@ export function buildPub(world: World): PubRefs {
 
   // Leaderboard panel on the wall, between the board and the bar.
   const dartsBoardPanel = new Panel(0.85, 0.7);
-  dartsBoardPanel.mesh.position.set(darts.boardX - 0.85, 1.7, darts.wallZ + 0.02);
+  dartsBoardPanel.mesh.position.set(darts.boardX - 1.15, 1.7, darts.wallZ + 0.02);
   root.add(dartsBoardPanel.mesh);
 
   // --- IRON SNAKE arcade cabinet (north-west corner) -----------------------------
@@ -459,7 +459,7 @@ export function buildPub(world: World): PubRefs {
   }
 
   // --- the fight hall through the west door ---------------------------------
-  const { consolePanels, fightDisplay, fightRims } = buildFightHall(root);
+  const { consolePanels, fightDisplay, fightDisplay2, fightRims } = buildFightHall(root);
 
   world.scene.add(root);
 
@@ -477,6 +477,7 @@ export function buildPub(world: World): PubRefs {
     snakeStick: stick,
     consolePanels,
     fightDisplay,
+    fightDisplay2,
     fightRims,
   };
 }
@@ -488,7 +489,12 @@ export function buildPub(world: World): PubRefs {
  * the floor marking the (5-yard) ball cage so the crowd knows where the
  * fire stops.
  */
-function buildFightHall(root: Group): { consolePanels: [Panel, Panel]; fightDisplay: Panel; fightRims: [Mesh, Mesh] } {
+function buildFightHall(root: Group): {
+  consolePanels: [Panel, Panel];
+  fightDisplay: Panel;
+  fightDisplay2: Panel;
+  fightRims: [Mesh, Mesh];
+} {
   const hall = FIGHT.hall;
   const cx = (hall.minX + hall.maxX) / 2;
   const w = hall.maxX - hall.minX;
@@ -667,13 +673,36 @@ function buildFightHall(root: Group): { consolePanels: [Panel, Panel]; fightDisp
     root.add(line);
   }
 
-  // Big match display on the far wall.
-  const fightDisplay = new Panel(3.2, 1.5);
-  fightDisplay.mesh.position.set(hall.minX + 0.03, 2.6, 0);
+  // TWO match scoreboards facing opposite ways across the pit, so a
+  // spectator on either side reads the health. Each is the IRON BALLS sign
+  // (PNG, neon fallback) above a health/status panel — no "FIRE FIGHT" text.
+  // West: high on the far wall, facing back toward the door (+x).
+  const fightSign1 = buildSign('signs/iron-balls-bar.png', 2.8, 1.26);
+  fightSign1.position.set(hall.minX + 0.04, 3.5, 0);
+  fightSign1.rotation.y = Math.PI / 2;
+  root.add(fightSign1);
+  const fightDisplay = new Panel(3.2, 1.1);
+  fightDisplay.mesh.position.set(hall.minX + 0.04, 2.3, 0);
   fightDisplay.mesh.rotation.y = Math.PI / 2;
   root.add(fightDisplay.mesh);
 
-  return { consolePanels: [consolePanels[0], consolePanels[1]], fightDisplay, fightRims: [fightRims[0], fightRims[1]] };
+  // East: above the door you came in by, facing into the hall (−x).
+  const doorMidZ = (FIGHT.door.z0 + FIGHT.door.z1) / 2;
+  const fightSign2 = buildSign('signs/iron-balls-bar.png', 2.4, 1.08);
+  fightSign2.position.set(hall.maxX - 0.04, 3.7, doorMidZ);
+  fightSign2.rotation.y = -Math.PI / 2;
+  root.add(fightSign2);
+  const fightDisplay2 = new Panel(3.0, 1.0);
+  fightDisplay2.mesh.position.set(hall.maxX - 0.04, 2.75, doorMidZ);
+  fightDisplay2.mesh.rotation.y = -Math.PI / 2;
+  root.add(fightDisplay2.mesh);
+
+  return {
+    consolePanels: [consolePanels[0], consolePanels[1]],
+    fightDisplay,
+    fightDisplay2,
+    fightRims: [fightRims[0], fightRims[1]],
+  };
 }
 
 /**

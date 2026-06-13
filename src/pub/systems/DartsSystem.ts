@@ -94,15 +94,9 @@ export class DartsSystem extends createSystem({}) {
       .sort((a, b) => b.score - a.score)
       .slice(0, 9);
     panel.draw((ctx, w) => {
-      ctx.font = '900 44px "Arial Black", system-ui, sans-serif';
-      ctx.fillStyle = '#ffb000';
-      ctx.textAlign = 'left';
-      ctx.fillText('HOUSE DARTS', 28, 62);
-      ctx.fillStyle = 'rgba(172,182,198,0.5)';
-      ctx.fillRect(28, 78, w - 56, 3);
-      ctx.font = '28px "Arial Narrow", system-ui, sans-serif';
+      ctx.font = '30px "Arial Narrow", system-ui, sans-serif';
       top.forEach((row, i) => {
-        const y = 124 + i * 40;
+        const y = 64 + i * 42;
         ctx.fillStyle = `#${row.accent.toString(16).padStart(6, '0')}`;
         ctx.beginPath();
         ctx.arc(40, y - 9, 9, 0, Math.PI * 2);
@@ -116,7 +110,7 @@ export class DartsSystem extends createSystem({}) {
       if (top.length === 0) {
         ctx.fillStyle = 'rgba(232,236,242,0.55)';
         ctx.textAlign = 'left';
-        ctx.fillText('no arrows thrown yet', 28, 124);
+        ctx.fillText('no arrows thrown yet', 28, 64);
       }
     });
   }

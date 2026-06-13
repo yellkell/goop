@@ -501,8 +501,11 @@ export class PropSystem extends createSystem({
     });
   }
 
-  /** A fresh pint lands on the bar, visible and grabbable. */
-  private activateGlass(rec: PropRec): void {
+  /** A fresh pint lands on the bar, visible and grabbable. `animate` runs
+   *  the pour-rise (the barkeep just brought THIS one out); off = already
+   *  full (a late joiner adopting glasses the barkeep poured before they
+   *  arrived — those must NOT all re-fill at once). */
+  private activateGlass(rec: PropRec, animate = true): void {
     if (rec.active) return;
     rec.active = true;
     rec.mesh.visible = true;
@@ -510,10 +513,13 @@ export class PropSystem extends createSystem({
     rec.mesh.quaternion.identity();
     rec.mode = 'rest';
     rec.entity.addComponent(OneHandGrabbable, { rotate: true });
-    deflect(); // a little glass clink as it's set down
-    // Freshly set down = freshly pulled: the pint rises in the glass.
-    setGlassFill(rec.mesh, 0);
-    if (!this.fills.some((p) => p.rec === rec)) this.fills.push({ rec, f: 0 });
+    if (animate) {
+      deflect(); // a little glass clink as it's set down
+      setGlassFill(rec.mesh, 0);
+      if (!this.fills.some((p) => p.rec === rec)) this.fills.push({ rec, f: 0 });
+    } else {
+      setGlassFill(rec.mesh, 1);
+    }
   }
 
   /** On welcome: place every prop where the room already has it. */
@@ -521,9 +527,9 @@ export class PropSystem extends createSystem({
     for (const [id, net] of pub.props) {
       const rec = byId.get(id);
       if (!rec) continue;
-      // Glasses the barkeep has already brought out appear instantly for a
-      // late joiner; the rest stay in the back.
-      if (net.active && !rec.active) this.activateGlass(rec);
+      // Glasses already out appear instantly FULL for a late joiner — no
+      // batch fill animation. Only glasses poured while you're here rise.
+      if (net.active && !rec.active) this.activateGlass(rec, false);
       if (!rec.active) continue;
       if (net.pos && net.quat) {
         rec.mesh.position.set(net.pos[0], net.pos[1], net.pos[2]);
