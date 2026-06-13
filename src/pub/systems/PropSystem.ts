@@ -306,6 +306,8 @@ export class PropSystem extends createSystem({
       const last = rec.ring[rec.ring.length - 1];
       const dt = Math.max(last.t - first.t, 1 / 90);
       rec.vel.copy(last.pos).sub(first.pos).divideScalar(dt);
+      // Darts get a wrist-flick boost so they leave the hand with zip.
+      if (rec.kind === 'dart') rec.vel.multiplyScalar(PROP_PHYS.dartThrowGain);
       const cap = rec.kind === 'dart' ? PROP_PHYS.dartMaxSpeed : PROP_PHYS.maxThrowSpeed;
       if (rec.vel.length() > cap) rec.vel.setLength(cap);
     } else {
@@ -320,7 +322,8 @@ export class PropSystem extends createSystem({
   // --- owner-side flight simulation --------------------------------------------
 
   private stepFlight(rec: PropRec, delta: number): void {
-    rec.vel.y -= PROP_PHYS.gravity * delta;
+    // Darts are light and fast — they drop less than a heavy pint glass.
+    rec.vel.y -= (rec.kind === 'dart' ? PROP_PHYS.dartGravity : PROP_PHYS.gravity) * delta;
     const step = _b.copy(rec.vel).multiplyScalar(delta);
     const p = rec.mesh.position;
 

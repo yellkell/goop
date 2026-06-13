@@ -169,7 +169,11 @@ export const PROP_PHYS = {
   maxThrowSpeed: 16, // m/s cap on release velocity
   restitution: 0.32, // glass bounce energy retention
   settleSpeed: 0.6, // below this on contact a glass settles
-  dartMaxSpeed: 18,
+  dartMaxSpeed: 26, // darts fly faster + flatter than a lobbed glass
+  /** Release-velocity boost for darts — a flick of the wrist gets real zip. */
+  dartThrowGain: 1.55,
+  /** Darts feel light and fast: less drop than a heavy pint glass. */
+  dartGravity: 6.0,
   dartStuckLifetime: 6, // seconds a dart stays in the board
   dartFadeTime: 0.5,
   streamHz: 20, // owner transform stream rate

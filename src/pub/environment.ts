@@ -32,11 +32,7 @@ import { FIGHT, PUB } from './config.js';
 import { Panel } from './panel.js';
 import { buildSign } from './signs.js';
 import type { PubRefs } from './state.js';
-import { corkTexture, dartboardTexture, steelWallTexture } from './textures.js';
-
-// Warm furnishing tones for the seating — wood + burgundy, like the reference.
-const WOOD = 0x6b4526;
-const BURGUNDY = 0x4e1f2d;
+import { corkTexture, dartboardTexture, fabricTexture, steelWallTexture, woodTexture } from './textures.js';
 
 function rgba(hex: number, a = 1): [number, number, number, number] {
   const c = new Color(hex);
@@ -543,27 +539,47 @@ function buildFightHall(root: Group): {
   pitWall(cage.maxZ - cage.minZ, cage.minX, 0, Math.PI / 2);
   pitWall(cage.maxZ - cage.minZ, cage.maxX, 0, -Math.PI / 2);
 
-  // Bench stands: two rows around three sides (consoles own the east side).
+  // Bench stands: TWO TIERS around three sides (consoles own the east side).
+  // The front row sits low at the pit rim; the back row is raised on a riser
+  // so the crowd behind sees over the heads in front — a little stadium rake.
   const benchSteel = darkSteel();
-  const benchPad = new MeshStandardMaterial({ color: 0x5a2a20, roughness: 0.85 });
-  const bench = (len: number, x: number, z: number, ry: number): void => {
+  const riserMat = new MeshStandardMaterial({ map: steelWallTexture([6, 1]), metalness: 0.7, roughness: 0.6 });
+  const benchPad = new MeshStandardMaterial({ map: fabricTexture('#5a2a20', [6, 1]), roughness: 0.85 });
+  const bench = (len: number, x: number, z: number, ry: number, lift: number): void => {
     const seat = new Mesh(new BoxGeometry(len, 0.42, 0.38), benchSteel);
-    seat.position.set(x, 0.21, z);
+    seat.position.set(x, 0.21 + lift, z);
     seat.rotation.y = ry;
     root.add(seat);
     const cushion = new Mesh(new BoxGeometry(len, 0.06, 0.34), benchPad);
-    cushion.position.set(x, 0.45, z);
+    cushion.position.set(x, 0.45 + lift, z);
     cushion.rotation.y = ry;
     root.add(cushion);
   };
-  const rows = [0.55, 1.35]; // offsets back from the pit rim
-  for (const off of rows) {
-    const sideLen = cage.maxX - cage.minX - 1.2;
-    const midX = (cage.minX + cage.maxX) / 2;
-    bench(sideLen, midX, cage.minZ - off, 0); // north stand
-    bench(sideLen, midX, cage.maxZ + off, 0); // south stand
-    bench(cage.maxZ - cage.minZ - 1.2, cage.minX - off, 0, Math.PI / 2); // west stand
-  }
+  // A step deck from the floor up to the back-row seat foot.
+  const riser = (len: number, x: number, z: number, ry: number, height: number, depth: number): void => {
+    const step = new Mesh(new BoxGeometry(len, height, depth), riserMat);
+    step.position.set(x, height / 2, z);
+    step.rotation.y = ry;
+    root.add(step);
+  };
+  const FRONT = 0.7; // offset of the low front row from the rim
+  const BACK = 1.65; // offset of the raised back row
+  const LIFT = 0.45; // how high the back tier rides
+  const sideLen = cage.maxX - cage.minX - 1.2;
+  const westLen = cage.maxZ - cage.minZ - 1.2;
+  const midX = (cage.minX + cage.maxX) / 2;
+  // Risers under the back tier (one long step per side).
+  riser(sideLen + 0.4, midX, cage.minZ - BACK + 0.05, 0, LIFT, 0.95);
+  riser(sideLen + 0.4, midX, cage.maxZ + BACK - 0.05, 0, LIFT, 0.95);
+  riser(westLen + 0.4, cage.minX - BACK + 0.05, 0, Math.PI / 2, LIFT, 0.95);
+  // Front (low) tier.
+  bench(sideLen, midX, cage.minZ - FRONT, 0, 0);
+  bench(sideLen, midX, cage.maxZ + FRONT, 0, 0);
+  bench(westLen, cage.minX - FRONT, 0, Math.PI / 2, 0);
+  // Back (raised) tier.
+  bench(sideLen, midX, cage.minZ - BACK, 0, LIFT);
+  bench(sideLen, midX, cage.maxZ + BACK, 0, LIFT);
+  bench(westLen, cage.minX - BACK, 0, Math.PI / 2, LIFT);
 
   const ceiling = new Mesh(
     new PlaneGeometry(w, d),
@@ -719,10 +735,10 @@ function buildBanquette(centres: number[]): Group {
   const D = PUB.halfDepth;
   const g = new Group();
   g.name = 'banquette';
-  const wood = new MeshStandardMaterial({ color: WOOD, roughness: 0.7, metalness: 0.05 });
-  const woodDark = new MeshStandardMaterial({ color: 0x4a2f1a, roughness: 0.75 });
-  const pad = new MeshStandardMaterial({ color: BURGUNDY, roughness: 0.85 });
-  const tableMat = new MeshStandardMaterial({ color: 0x241a16, roughness: 0.5, metalness: 0.3 });
+  const wood = new MeshStandardMaterial({ map: woodTexture('#6b4526', [3, 1]), roughness: 0.7, metalness: 0.05 });
+  const woodDark = new MeshStandardMaterial({ map: woodTexture('#4a2f1a', [2, 1]), roughness: 0.75 });
+  const pad = new MeshStandardMaterial({ map: fabricTexture('#4e1f2d', [4, 1]), roughness: 0.9 });
+  const tableMat = new MeshStandardMaterial({ map: woodTexture('#2a1d16', [1, 1]), roughness: 0.5, metalness: 0.25 });
 
   const x0 = centres[0] - 1.0;
   const x1 = centres[centres.length - 1] + 1.0;
