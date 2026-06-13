@@ -350,7 +350,14 @@ export function buildPub(world: World): PubRefs {
     head.position.set(cx, ex.height, D - 0.04);
     root.add(head);
     const exitSign = new Panel(0.7, 0.16, 384);
-    exitSign.setLines([{ text: 'EXIT → ARENA', size: 40, colour: '#ffb000', bold: true }]);
+    // Centre the label on the plate (setLines baselined it low / clipped).
+    exitSign.draw((ctx, w, h) => {
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = "900 34px 'Arial Black', system-ui, sans-serif";
+      ctx.fillStyle = '#ffb000';
+      ctx.fillText('EXIT → ARENA', w / 2, h / 2);
+    });
     exitSign.mesh.position.set(cx, ex.height + 0.18, D - 0.05);
     exitSign.mesh.rotation.y = Math.PI;
     root.add(exitSign.mesh);
@@ -704,22 +711,25 @@ function buildFightHall(root: Group): {
   // West: high on the far wall, facing back toward the door (+x).
   // Signs are square (1:1 art with transparent margins) so they don't squash.
   const fightSign1 = buildSign('signs/iron-balls-bar.png', 2.4, 2.4);
-  fightSign1.position.set(hall.minX + 0.04, 3.3, 0);
+  fightSign1.position.set(hall.minX + 0.04, 3.45, 0);
   fightSign1.rotation.y = Math.PI / 2;
   root.add(fightSign1);
   const fightDisplay = new Panel(3.2, 1.1);
-  fightDisplay.mesh.position.set(hall.minX + 0.04, 1.95, 0);
+  // Panel pushed 0.1 m PROUD of the sign (toward the viewer) so the two
+  // coplanar planes stop z-fighting where they overlapped.
+  fightDisplay.mesh.position.set(hall.minX + 0.14, 1.95, 0);
   fightDisplay.mesh.rotation.y = Math.PI / 2;
   root.add(fightDisplay.mesh);
 
   // East: above the door you came in by, facing into the hall (−x).
   const doorMidZ = (FIGHT.door.z0 + FIGHT.door.z1) / 2;
   const fightSign2 = buildSign('signs/iron-balls-bar.png', 2.0, 2.0);
-  fightSign2.position.set(hall.maxX - 0.04, 3.6, doorMidZ);
+  fightSign2.position.set(hall.maxX - 0.04, 3.8, doorMidZ);
   fightSign2.rotation.y = -Math.PI / 2;
   root.add(fightSign2);
   const fightDisplay2 = new Panel(3.0, 1.0);
-  fightDisplay2.mesh.position.set(hall.maxX - 0.04, 2.55, doorMidZ);
+  // Proud of the sign, and lifted clear of the door opening above it.
+  fightDisplay2.mesh.position.set(hall.maxX - 0.14, 2.75, doorMidZ);
   fightDisplay2.mesh.rotation.y = -Math.PI / 2;
   root.add(fightDisplay2.mesh);
 
@@ -855,13 +865,12 @@ function buildArcadeCabinet(): { cabinet: Group; screen: Mesh; stick: Group } {
       roughness: 0.4,
     }),
   );
-  marquee.position.set(0, 1.84, 0.21);
-  cabinet.add(marquee);
+  marquee.position.set(0, 1.86, 0.26); // proud of the body face (0.30) so the
+  cabinet.add(marquee);                //  marquee/body fronts don't z-fight
   const marqueeText = new Panel(0.6, 0.2);
   marqueeText.setLines([{ text: 'IRON SNAKE', size: 60, colour: '#39ff14', bold: true }]);
-  // Sit the text clearly PROUD of the marquee face (front at z 0.30) so the
-  // green text and the metal panel stop z-fighting at the top of the cabinet.
-  marqueeText.mesh.position.set(0, 1.84, 0.315);
+  // Sit the text clearly PROUD of the marquee face (front now at z 0.35).
+  marqueeText.mesh.position.set(0, 1.86, 0.36);
   cabinet.add(marqueeText.mesh);
 
   // Screen: angled back CRT face, pushed PROUD of the body — the tilt used
