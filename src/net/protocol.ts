@@ -14,7 +14,15 @@ export type PoseTuple = [number, number, number, number, number, number, number]
 
 export type PeerMessage =
   /** ~20 Hz body pose: head, left hand, right hand, trigger-orbit flags, hp. */
-  | { k: 'pose'; head: PoseTuple; left: PoseTuple; right: PoseTuple; orbit: [boolean, boolean]; hp: number }
+  | {
+      k: 'pose';
+      head: PoseTuple;
+      left: PoseTuple;
+      right: PoseTuple;
+      orbit: [boolean, boolean];
+      fist?: [boolean, boolean];
+      hp: number;
+    }
   /** I punched my `hand` ball: it left from `pos` with velocity `vel`. */
   | { k: 'throw'; hand: 0 | 1; pos: [number, number, number]; vel: [number, number, number] }
   /** I recalled my `hand` ball. */

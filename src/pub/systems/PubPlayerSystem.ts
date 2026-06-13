@@ -9,12 +9,14 @@
 import { createSystem, InputComponent } from '@iwsdk/core';
 import { Color, Group, MeshStandardMaterial, Quaternion, Vector3 } from 'three';
 import { buildBoxer } from '../../avatar/boxer.js';
-import { buildHand, setHandCurl } from '../../avatar/hands.js';
+import { buildHand, HAND_ADDUCTION, setHandCurl } from '../../avatar/hands.js';
 import { applyAvatarSkin, avatarSkin } from '../../avatar/skins.js';
 import { customization } from '../../menu/customization.js';
 import { solveTorso } from '../../avatar/boxer.js';
 import { PALETTE, teamColor } from '../../config.js';
-import { saloonEntry } from '../../audio/sfx.js';
+import { spawnGestureCue } from '../../fx/effects.js';
+import { pulseHand } from '../../input/haptics.js';
+import { clap, saloonEntry } from '../../audio/sfx.js';
 import { onSnap, onSpawn, pubSendRaw } from '../net.js';
 import { Panel } from '../panel.js';
 import type { PoseTuple, PubPlayerNet } from '../protocol.js';
@@ -22,6 +24,10 @@ import { bus, pub, type RemotePunter } from '../state.js';
 
 const SEND_INTERVAL = 0.05; // 20 Hz
 const EASE = 14; // exponential smoothing rate for remote pose targets
+const CLAP_DISTANCE = 0.16;
+const CLAP_CLOSING_SPEED = 0.75;
+const CLAP_COMBINED_SPEED = 1.1;
+const CLAP_COOLDOWN = 0.55;
 
 const _pos = new Vector3();
 const _quat = new Quaternion();
@@ -30,6 +36,9 @@ const _headQ = new Quaternion();
 const _chest = new Vector3();
 const _pelvis = new Vector3();
 const _cam = new Vector3();
+const _left = new Vector3();
+const _right = new Vector3();
+const _mid = new Vector3();
 
 function packWorldPose(obj: { getWorldPosition(v: Vector3): Vector3; getWorldQuaternion(q: Quaternion): Quaternion }): PoseTuple {
   obj.getWorldPosition(_pos);
@@ -67,6 +76,11 @@ export class PubPlayerSystem extends createSystem({}) {
   private sendTimer = 0;
   private localGloves: Group[] = [];
   private localGlovesAttached = false;
+  private prevLeft = new Vector3();
+  private prevRight = new Vector3();
+  private prevDistance = 0;
+  private hasPrevHands = false;
+  private clapCooldown = 0;
 
   init(): void {
     onSpawn((p) => this.spawn(p));
@@ -91,6 +105,7 @@ export class PubPlayerSystem extends createSystem({}) {
 
   update(delta: number): void {
     this.attachLocalGloves();
+    this.tryLocalClap(delta);
 
     // Your fingers track your real squeeze (trigger = index, grip = rest).
     (['left', 'right'] as const).forEach((hand, i) => {
@@ -138,12 +153,12 @@ export class PubPlayerSystem extends createSystem({}) {
         _chest,
         _pelvis,
       );
-      for (const [tuple, glove] of [
-        [punter.left, rig.gloves[0]],
-        [punter.right, rig.gloves[1]],
-      ] as const) {
+      for (const hand of [0, 1] as const) {
+        const tuple = hand === 0 ? punter.left : punter.right;
+        const glove = rig.gloves[hand];
         _pos.set(tuple[0], tuple[1], tuple[2]);
         _quat.set(tuple[3], tuple[4], tuple[5], tuple[6]);
+        _quat.multiply(HAND_ADDUCTION[hand]);
         glove.position.lerp(_pos, k);
         glove.quaternion.slerp(_quat, k);
       }
@@ -201,12 +216,62 @@ export class PubPlayerSystem extends createSystem({}) {
     if (!grips.left || !grips.right) return;
     for (const hand of ['left', 'right'] as const) {
       const glove = buildHand(hand === 'left' ? 1 : -1);
+      glove.quaternion.copy(HAND_ADDUCTION[hand === 'left' ? 0 : 1]);
       retintLocal(glove, pub.myAccent);
       applyAvatarSkin(glove, avatarSkin(customization.avatar)); // your skin walks in too
       grips[hand].add(glove);
       this.localGloves.push(glove);
     }
     this.localGlovesAttached = true;
+  }
+
+  private tryLocalClap(delta: number): void {
+    const leftGrip = this.player.gripSpaces.left;
+    const rightGrip = this.player.gripSpaces.right;
+    if (!leftGrip || !rightGrip) {
+      this.hasPrevHands = false;
+      return;
+    }
+
+    leftGrip.getWorldPosition(_left);
+    rightGrip.getWorldPosition(_right);
+    this.clapCooldown = Math.max(0, this.clapCooldown - delta);
+
+    if (
+      this.hasPrevHands &&
+      this.clapCooldown <= 0 &&
+      delta > 0 &&
+      !this.anyPressed(InputComponent.Trigger) &&
+      !this.anyPressed(InputComponent.Squeeze)
+    ) {
+      const distance = _left.distanceTo(_right);
+      const closingSpeed = (this.prevDistance - distance) / delta;
+      const leftSpeed = _left.distanceTo(this.prevLeft) / delta;
+      const rightSpeed = _right.distanceTo(this.prevRight) / delta;
+      if (
+        distance <= CLAP_DISTANCE &&
+        (closingSpeed >= CLAP_CLOSING_SPEED || leftSpeed + rightSpeed >= CLAP_COMBINED_SPEED)
+      ) {
+        _mid.copy(_left).add(_right).multiplyScalar(0.5);
+        spawnGestureCue(this.world, _mid, 0.3);
+        clap();
+        pulseHand(this.world.session, 'left', 0.35, 55);
+        pulseHand(this.world.session, 'right', 0.35, 55);
+        this.clapCooldown = CLAP_COOLDOWN;
+      }
+    }
+
+    this.prevLeft.copy(_left);
+    this.prevRight.copy(_right);
+    this.prevDistance = _left.distanceTo(_right);
+    this.hasPrevHands = true;
+  }
+
+  private anyPressed(button: string): boolean {
+    return (
+      (this.input.xr.gamepads.left?.getButtonPressed(button) ?? false) ||
+      (this.input.xr.gamepads.right?.getButtonPressed(button) ?? false)
+    );
   }
 }
 

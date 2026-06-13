@@ -24,6 +24,7 @@ import { Health } from '../components/Health.js';
 import { feedback } from '../fx/feedback.js';
 import { app } from '../menu/appState.js';
 import { match } from '../combat/matchState.js';
+import { pulseHand } from '../input/haptics.js';
 import * as sfx from '../audio/sfx.js';
 import { BOUNDARY, OCTAGON_VERTICES, PALETTE } from '../config.js';
 
@@ -141,10 +142,13 @@ export class BoundarySystem extends createSystem({
       if (this.drainTick >= 0.2) {
         this.drainTick = 0;
         this.drain(BOUNDARY.drainPerSec * 0.2);
-        feedback.playerHitFlash = Math.max(feedback.playerHitFlash, 0.7);
+        feedback.playerHitFlash = Math.max(feedback.playerHitFlash, 1);
         feedback.srcX = 0; feedback.srcY = -1; feedback.srcZ = 0;
+        sfx.boundaryBuzz(1);
+        pulseHand(this.world.session, 'left', 0.75, 140);
+        pulseHand(this.world.session, 'right', 0.75, 140);
       }
-      if (!this.wasOutside) sfx.hitTaken();
+      if (!this.wasOutside) sfx.boundaryBuzz(1);
     } else {
       for (const e of this.edges) e.mat.color.setHex(PALETTE.ember);
       this.drainTick = 0;

@@ -10,7 +10,7 @@
 import { createSystem, InputComponent } from '@iwsdk/core';
 import { Quaternion, type Group } from 'three';
 import { setGloveLit } from '../avatar/boxer.js';
-import { buildHand, setHandCurl } from '../avatar/hands.js';
+import { buildHand, HAND_ADDUCTION, setHandCurl } from '../avatar/hands.js';
 import { applyAvatarSkin, avatarSkin } from '../avatar/skins.js';
 import { BallState, Fireball } from '../components/Fireball.js';
 import { app } from '../menu/appState.js';
@@ -63,7 +63,7 @@ export class PlayerGloveSystem extends createSystem({
       if (ray) {
         grip.getWorldQuaternion(_gripQ);
         ray.getWorldQuaternion(_rayQ);
-        glove.quaternion.copy(_gripQ).invert().multiply(_rayQ);
+        glove.quaternion.copy(_gripQ).invert().multiply(_rayQ).multiply(HAND_ADDUCTION[hand === 'left' ? 0 : 1]);
       }
 
       // Trigger and grip are one action — either one ignites the fist. The

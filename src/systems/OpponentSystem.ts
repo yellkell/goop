@@ -9,7 +9,7 @@
 import { createSystem, Vector3, type Entity } from '@iwsdk/core';
 import { Object3D } from 'three';
 import { buildBoxer, setGloveLit, solveTorso, type BoxerRig } from '../avatar/boxer.js';
-import { setHandCurl } from '../avatar/hands.js';
+import { HAND_ADDUCTION, setHandCurl } from '../avatar/hands.js';
 import {
   OPPONENT_DEFAULT_AVATAR,
   OPPONENT_DEFAULT_PLATFORM,
@@ -98,13 +98,19 @@ export class OpponentSystem extends createSystem({
     solveTorso(rig, opponent.headPos, opponent.headQuat, 0, -ARENA_GAP, _chest, _pelvis);
     for (const hand of [0, 1] as const) {
       rig.gloves[hand].position.copy(opponent.handPos[hand]);
-      rig.gloves[hand].quaternion.copy(opponent.handQuat[hand]);
+      rig.gloves[hand].quaternion.copy(opponent.handQuat[hand]).multiply(HAND_ADDUCTION[hand]);
       // Their squeeze turns their hand white — the tell that fire is winding
       // up, even on a behind-the-back lob — and it stays hot through a
       // recall until the ball is back in it. Fingers fist up when active.
       const active = opponent.orbiting[hand] || this.ballReturning(hand);
+      const fisting = opponent.fisting[hand];
       setGloveLit(rig.gloves[hand], active, delta);
-      setHandCurl(rig.gloves[hand], active ? 1 : 0.35, active ? 1 : 0.4, active ? 0.9 : 0.45);
+      setHandCurl(
+        rig.gloves[hand],
+        active || fisting ? 1 : 0.35,
+        active || fisting ? 1 : 0.4,
+        active || fisting ? 0.9 : 0.45,
+      );
     }
 
     this.hitboxes.head?.object3D?.position.copy(opponent.headPos);
