@@ -16,8 +16,10 @@ import { solveTorso } from '../../avatar/boxer.js';
 import { PALETTE, teamColor } from '../../config.js';
 import { spawnGestureCue } from '../../fx/effects.js';
 import { pulseHand } from '../../input/haptics.js';
-import { clap, saloonEntry } from '../../audio/sfx.js';
-import { onSnap, onSpawn, pubSendRaw } from '../net.js';
+import { clap, micToggle, saloonEntry } from '../../audio/sfx.js';
+import { onSnap, onSpawn, onVoice, pubSendRaw, pubSendVoice } from '../net.js';
+import { startVoiceCapture, toggleVoiceMuted } from '../voice/capture.js';
+import { isSpeaking, pushVoiceFrame, removeVoiceSpeaker, setVoiceSpeakerPosition, updateVoiceListener } from '../voice/playback.js';
 import { Panel } from '../panel.js';
 import type { PoseTuple, PubPlayerNet } from '../protocol.js';
 import { bus, pub, type RemotePunter } from '../state.js';
@@ -39,6 +41,7 @@ const _cam = new Vector3();
 const _left = new Vector3();
 const _right = new Vector3();
 const _mid = new Vector3();
+const _camQ = new Quaternion();
 
 function packWorldPose(obj: { getWorldPosition(v: Vector3): Vector3; getWorldQuaternion(q: Quaternion): Quaternion }): PoseTuple {
   obj.getWorldPosition(_pos);
@@ -84,6 +87,11 @@ export class PubPlayerSystem extends createSystem({}) {
 
   init(): void {
     onSpawn((p) => this.spawn(p));
+    // Spatial voice: stream our mic, and play every punter's frames through a
+    // panner pinned to their head (positioned each frame in update()). The
+    // server applies the match bubble, so we just send and play.
+    void startVoiceCapture((frame) => pubSendVoice(frame));
+    onVoice((id, frame) => pushVoiceFrame(id, frame));
     onSnap((poses) => {
       for (const [id, head, left, right] of poses) {
         const punter = pub.punters.get(id);
@@ -131,10 +139,21 @@ export class PubPlayerSystem extends createSystem({}) {
       }
     }
 
+    // --- voice ---------------------------------------------------------------
+    // Left Y toggles your mic. Keep the audio listener on your camera so the
+    // room pans correctly even when you're alone (speakers track heads below).
+    if (this.input.xr.gamepads.left?.getButtonDown(InputComponent.Y_Button)) {
+      const muted = toggleVoiceMuted();
+      micToggle(!muted);
+      pulseHand(this.world.session, 'left', 0.25, muted ? 30 : 60);
+    }
+    this.camera.getWorldPosition(_cam);
+    this.camera.getWorldQuaternion(_camQ);
+    updateVoiceListener(_cam, _camQ);
+
     // --- remote punters -----------------------------------------------------
     if (pub.punters.size === 0) return;
     const k = 1 - Math.exp(-EASE * delta);
-    this.camera.getWorldPosition(_cam);
 
     for (const punter of pub.punters.values()) {
       const rig = punter.rig;
@@ -162,10 +181,14 @@ export class PubPlayerSystem extends createSystem({}) {
         glove.position.lerp(_pos, k);
         glove.quaternion.slerp(_quat, k);
       }
-      // Name tag floats over the helmet, facing you.
+      // Their voice comes from their head.
+      setVoiceSpeakerPosition(punter.id, rig.head.position);
+      // Name tag floats over the helmet, facing you — and swells a touch while
+      // they're talking so you can see who has the floor.
       punter.nameTag.mesh.position.copy(rig.head.position);
       punter.nameTag.mesh.position.y += 0.38;
       punter.nameTag.mesh.lookAt(_cam);
+      punter.nameTag.mesh.scale.setScalar(isSpeaking(punter.id) ? 1.12 : 1);
     }
   }
 
@@ -206,6 +229,7 @@ export class PubPlayerSystem extends createSystem({}) {
     for (const part of punter.rig.all) this.scene.remove(part);
     this.scene.remove(punter.nameTag.mesh);
     punter.nameTag.dispose();
+    removeVoiceSpeaker(id);
     pub.punters.delete(id);
   }
 

@@ -160,3 +160,17 @@ export type PubServerMsg =
 
 export const PUB_MAX_PLAYERS = 12;
 export const PUB_TICK_MS = 50; // 20 Hz pose snapshots
+
+/**
+ * VOICE CHAT rides this same socket as BINARY frames (everything above is
+ * JSON text). Spatial Opus voice, fanned out by the server with the match
+ * bubble applied — while a bout is live each fighter hears only their
+ * opponent, never the bar; spectators hear everyone.
+ *
+ *   client → server :  [8-byte LE float64 timestamp µs][opus frame]
+ *   server → client :  [1-byte id length][ascii sender id]<the above>
+ *
+ * See src/pub/voice/ (capture + spatial playback) and relayVoice/canHear in
+ * server/pub.mjs.
+ */
+export const PUB_VOICE_SAMPLE_RATE = 48000;

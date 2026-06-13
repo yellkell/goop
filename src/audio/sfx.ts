@@ -188,6 +188,12 @@ export function catchBall(): void {
   tone({ freq: 140, to: 88, type: 'triangle', dur: 0.08, gain: 0.18 });
 }
 
+/** Mic toggle: a short up-blip when opening, a duller down-blip when muting. */
+export function micToggle(on: boolean): void {
+  clank(on ? 1300 : 700, 0.05, 0.05);
+  tone({ freq: on ? 520 : 360, to: on ? 760 : 240, type: 'sine', dur: 0.08, gain: 0.12 });
+}
+
 /** Your ball lands on the opponent — anvil ring over a heavy body. */
 export function hitDealt(): void {
   clank(540, 0.26, 0.35);

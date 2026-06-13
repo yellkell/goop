@@ -138,6 +138,15 @@ and three things to actually do:
   fixed: the meshes now carry fat invisible grab proxies so they are actually
   grabbable), regulation scoring off the board texture's UVs, score popups,
   and a server-owned leaderboard.
+- **Directional voice chat** — open-mic spatial voice for the whole room.
+  Each punter's voice comes from where their iron skull stands (HRTF panner on
+  their head, listener on your camera) and falls off with distance, so the bar
+  has a natural hubbub. Opus frames (WebCodecs) ride the pub WebSocket as
+  binary; the server fans them out and enforces the **match bubble** — while a
+  bout is live the two fighters hear ONLY each other, not the crowd, until the
+  match ends, while spectators still hear everyone (so a fight is fun to watch).
+  Left **Y** mutes your mic; a punter's name tag swells while they're talking.
+  See `src/pub/voice/` and `relayVoice`/`canHear` in `server/pub.mjs`.
 - **IRON SNAKE** — an arcade cabinet in the corner. One player at a time
   (trigger to claim, then steer with the cabinet's own joystick — put your
   hand on the red ball and push; arrows/Enter on desktop), everyone sees the
