@@ -7,26 +7,28 @@
  */
 
 import { createSystem } from '@iwsdk/core';
+import { CanvasTexture, LinearFilter, Mesh, MeshBasicMaterial, PlaneGeometry, Quaternion, SRGBColorSpace } from 'three';
 import { uiClick } from '../../audio/sfx.js';
-import { Panel } from '../panel.js';
 import type { BoardRow } from '../protocol.js';
 import { pubSendEvent } from '../net.js';
 import { bus, pub } from '../state.js';
 
 interface Popup {
-  panel: Panel;
+  mesh: Mesh;
+  mat: MeshBasicMaterial;
   life: number;
 }
 
 export class DartsSystem extends createSystem({}) {
   private popups: Popup[] = [];
   private localBoard = new Map<string, BoardRow>();
+  private _camQ = new Quaternion();
 
   init(): void {
     this.cleanupFuncs.push(
       bus.on('dartScored', ({ segment, score }) => {
         uiClick();
-        this.showPopup(pub.myName || 'YOU', pub.myAccent, segment, score);
+        this.showPopup(pub.myAccent, score);
         if (pub.online) {
           pubSendEvent({ e: 'DART_HIT', segment, score });
         } else {
@@ -36,7 +38,7 @@ export class DartsSystem extends createSystem({}) {
       bus.on('gameEvent', ({ from, ev }) => {
         if (ev.e !== 'DART_HIT' || from === pub.myId) return;
         const punter = pub.punters.get(from);
-        this.showPopup(punter?.name ?? '???', punter?.accent ?? 0x9aa7bd, ev.segment, ev.score);
+        this.showPopup(punter?.accent ?? 0x9aa7bd, ev.score);
       }),
       bus.on('board', (rows) => this.renderBoard(rows)),
     );
@@ -44,32 +46,54 @@ export class DartsSystem extends createSystem({}) {
   }
 
   update(delta: number): void {
+    if (this.popups.length) this.camera.getWorldQuaternion(this._camQ);
     for (let i = this.popups.length - 1; i >= 0; i--) {
       const p = this.popups[i];
       p.life -= delta;
-      p.panel.mesh.position.y += delta * 0.1;
+      p.mesh.position.y += delta * 0.28; // drift up
+      p.mesh.quaternion.copy(this._camQ); // billboard — always readable
+      p.mat.opacity = Math.min(1, p.life * 1.5); // fade out at the end
       if (p.life <= 0) {
-        this.scene.remove(p.panel.mesh);
-        p.panel.dispose();
+        this.scene.remove(p.mesh);
+        p.mat.map?.dispose();
+        p.mat.dispose();
+        p.mesh.geometry.dispose();
         this.popups.splice(i, 1);
       }
     }
   }
 
-  private showPopup(name: string, accent: number, segment: string, score: number): void {
+  /** A flicked-up score NUMBER at the board — just the points, no panel,
+   *  billboarded to the thrower, tinted to whoever landed it. */
+  private showPopup(accent: number, score: number): void {
     const refs = pub.refs;
     if (!refs) return;
-    const panel = new Panel(0.65, 0.14, 448);
     const hex = `#${accent.toString(16).padStart(6, '0')}`;
-    panel.setLines([
-      { text: `${name.toUpperCase()} — ${segment} — ${score} PTS`, size: 34, colour: hex, bold: true },
-    ]);
-    panel.mesh.position.copy(refs.dartboard.position);
-    panel.mesh.position.y += 0.62;
-    panel.mesh.position.x -= 0.1;
-    panel.mesh.rotation.y = -Math.PI / 2;
-    this.scene.add(panel.mesh);
-    this.popups.push({ panel, life: 2.0 });
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 160;
+    const ctx = canvas.getContext('2d')!;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = "900 110px 'Arial Black', system-ui, sans-serif";
+    ctx.lineWidth = 14;
+    ctx.strokeStyle = 'rgba(8,9,12,0.92)';
+    ctx.strokeText(String(score), 128, 84);
+    ctx.fillStyle = hex;
+    ctx.shadowColor = hex;
+    ctx.shadowBlur = 26;
+    ctx.fillText(String(score), 128, 84);
+    const tex = new CanvasTexture(canvas);
+    tex.colorSpace = SRGBColorSpace;
+    tex.minFilter = LinearFilter;
+    const mat = new MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false });
+    const mesh = new Mesh(new PlaneGeometry(0.34, 0.21), mat);
+    mesh.renderOrder = 60; // always on top, never hidden behind the board
+    mesh.position.copy(refs.dartboard.position);
+    mesh.position.z += 0.18; // proud of the board, toward the throwers
+    mesh.position.y += 0.12;
+    this.scene.add(mesh);
+    this.popups.push({ mesh, mat, life: 1.6 });
   }
 
   private localScore(score: number): void {
