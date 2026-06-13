@@ -82,21 +82,27 @@ export function buildHand(side: 1 | -1): Group {
   tMid.add(tSeg2);
 
   hand.userData.joints = { fingers, thumb: [tRoot, tMid] } satisfies HandJoints;
+  // Hands that nobody drives (remote punters, the barkeep, the mirror)
+  // rest in a natural half-relaxed pose instead of rigor-mortis flat.
+  setHandCurl(hand, 0.25, 0.3, 0.45);
   return hand;
 }
 
 /**
  * Pose the fingers: 0 = straight, 1 = full fist. `index` follows the
  * trigger, `others` the grip, `thumb` tucks across as either squeezes.
+ * Curl is NEGATIVE x rotation: knuckles point -Z and the palm faces -Y,
+ * so fingers fold downward toward the palm (positive bent them backwards
+ * — genuinely horrifying).
  */
 export function setHandCurl(hand: Group, index: number, others: number, thumb: number): void {
   const joints = hand.userData.joints as HandJoints | undefined;
   if (!joints) return;
   joints.fingers.forEach((f, i) => {
     const c = i === 0 ? index : others;
-    f[0].rotation.x = c * 1.15;
-    f[1].rotation.x = c * 1.35;
+    f[0].rotation.x = -c * 1.15;
+    f[1].rotation.x = -c * 1.35;
   });
-  joints.thumb[0].rotation.x = thumb * 0.7;
-  joints.thumb[1].rotation.x = thumb * 0.8;
+  joints.thumb[0].rotation.x = -thumb * 0.7;
+  joints.thumb[1].rotation.x = -thumb * 0.8;
 }
