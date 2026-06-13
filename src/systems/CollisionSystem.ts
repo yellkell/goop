@@ -150,8 +150,9 @@ export class CollisionSystem extends createSystem({
       if (state !== TargetState.Rising && state !== TargetState.Holding) continue;
       const tObj = target.object3D;
       if (!tObj) continue;
+      // Hit the target where it actually IS — a rising target used to count
+      // as fully raised (its hitbox sat at upY) before it visually got there.
       tObj.getWorldPosition(_otherPos);
-      _otherPos.y = target.getValue(TrainingTarget, 'upY') ?? _otherPos.y;
       const reach = radius + (target.getValue(TrainingTarget, 'radius') ?? 0.18);
       if (_ballPos.distanceToSquared(_otherPos) > reach * reach) continue;
 

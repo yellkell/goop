@@ -25,7 +25,7 @@ import { deflect, throwWhoosh, wallThud } from '../../audio/sfx.js';
 import { GLASS, PROP_PHYS, PUB, SURFACES } from '../config.js';
 import { pubSendRaw } from '../net.js';
 import type { PropKind, QuatT, Vec3T } from '../protocol.js';
-import { buildDart, buildPintGlass, fadeOpacity, restoreOpacity } from '../props.js';
+import { buildDart, buildPintGlass, fadeOpacity, restoreOpacity, setGlassFill } from '../props.js';
 import { bus, pub } from '../state.js';
 import { scoreFromUV } from '../textures.js';
 
@@ -72,11 +72,16 @@ export function buildProps(world: World): void {
   const refs = pub.refs!;
   let id = 0;
   for (const slot of refs.glassSlots) {
-    // The pub opens with `glassStart` pints out; the rest wait in the back
-    // until the barkeep brings them round (up to glassMax).
+    // Every pint starts EMPTY, parked under the counter; the barkeep pulls
+    // them out one at a time between his other jobs and pours on arrival.
     const active = id < PUB.glassStart;
     addProp(world, id++, 'glass', buildPintGlass(), slot, active, (mesh) => {
-      mesh.position.set(...slot);
+      if (active) {
+        mesh.position.set(...slot);
+      } else {
+        mesh.position.set(slot[0], 0.55, PUB.bar.z - 0.35); // under-bar shelf
+        setGlassFill(mesh, 0);
+      }
     });
   }
   for (const slot of refs.dartRackSlots) {
@@ -97,7 +102,9 @@ function addProp(
   place: (mesh: Group) => void,
 ): void {
   place(mesh);
-  mesh.visible = active;
+  // Inactive glasses stay VISIBLE — empties stocked under the counter —
+  // just ungrabbable until the barkeep brings them out.
+  mesh.visible = active || kind === 'glass';
   world.scene.add(mesh);
   const entity = world.createTransformEntity(mesh);
   // Inactive glasses get their grab handle only when they come out — the
@@ -135,6 +142,8 @@ export class PropSystem extends createSystem({
 }) {
   /** Glasses announced by the barkeep, landing after the delivery delay. */
   private pendingGlasses: { rec: PropRec; t: number }[] = [];
+  /** Fresh pours mid-rise (fill 0 → 1 over a few seconds). */
+  private fills: { rec: PropRec; f: number }[] = [];
   private offlineRestock = 0;
 
   init(): void {
@@ -188,6 +197,14 @@ export class PropSystem extends createSystem({
   }
 
   update(delta: number): void {
+    // Fresh pours settle: the amber rises over ~3 s, head last.
+    for (let i = this.fills.length - 1; i >= 0; i--) {
+      const p = this.fills[i];
+      p.f += delta / 3;
+      setGlassFill(p.rec.mesh, p.f);
+      if (p.f >= 1) this.fills.splice(i, 1);
+    }
+
     // Glasses in transit from the back land once the barkeep gets there.
     for (let i = this.pendingGlasses.length - 1; i >= 0; i--) {
       const p = this.pendingGlasses[i];
@@ -490,6 +507,9 @@ export class PropSystem extends createSystem({
     rec.mode = 'rest';
     rec.entity.addComponent(OneHandGrabbable, { rotate: true });
     deflect(); // a little glass clink as it's set down
+    // Freshly set down = freshly pulled: the pint rises in the glass.
+    setGlassFill(rec.mesh, 0);
+    if (!this.fills.some((p) => p.rec === rec)) this.fills.push({ rec, f: 0 });
   }
 
   /** On welcome: place every prop where the room already has it. */

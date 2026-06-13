@@ -48,7 +48,8 @@ export const app: {
   mode: 'bot',
   side: 0,
   netStatus: 'not connected',
-  shootBack: localStorage.getItem('ff-shootback') !== '0',
+  // Off unless the player has explicitly switched it on.
+  shootBack: localStorage.getItem('ff-shootback') === '1',
   stats: loadStats(),
 };
 

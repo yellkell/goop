@@ -242,9 +242,11 @@ export class FightSystem extends createSystem({}) {
       } else if (f.sides[side] === null && f.phase === 'idle' && !this.amFighter()) {
         pubSendRaw({ t: 'claim-fight', side });
         sfx.uiClick();
-        // Take your corner: feet on the platform, facing your opponent.
+        // Take your corner: feet on the platform, DOWN in the pit, facing
+        // your opponent. (Any later teleport restores stands level.)
         const z = side === 0 ? FIGHT.platformZ : -FIGHT.platformZ;
         teleportPlayer(this.player as XROrigin, FIGHT.centerX, z, side === 0 ? Math.PI : 0);
+        (this.player as XROrigin).position.y = -FIGHT.pitDepth;
       }
       return;
     }
@@ -424,9 +426,10 @@ export class FightSystem extends createSystem({}) {
             break;
           }
           ball.elapsed += delta;
-          if (ball.elapsed >= FIREBALL.lifetime || ball.pos.y <= FIREBALL.radius) {
+          // The duel floor is the PIT floor, a level below the stands.
+          if (ball.elapsed >= FIREBALL.lifetime || ball.pos.y <= FIREBALL.radius - FIGHT.pitDepth) {
             ball.state = DEAD;
-            ball.pos.y = Math.max(ball.pos.y, FIREBALL.radius);
+            ball.pos.y = Math.max(ball.pos.y, FIREBALL.radius - FIGHT.pitDepth);
           }
           break;
         }
@@ -438,8 +441,8 @@ export class FightSystem extends createSystem({}) {
           break;
         }
         case DEAD:
-          if (ball.pos.y > FIREBALL.radius) {
-            ball.pos.y = Math.max(FIREBALL.radius, ball.pos.y - 2.5 * delta);
+          if (ball.pos.y > FIREBALL.radius - FIGHT.pitDepth) {
+            ball.pos.y = Math.max(FIREBALL.radius - FIGHT.pitDepth, ball.pos.y - 2.5 * delta);
           }
           break;
       }

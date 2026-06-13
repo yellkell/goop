@@ -176,10 +176,18 @@ export class MenuSystem extends createSystem({}) {
       case 'lb-training':
         leaderboard.tab = 'training';
         break;
-      case 'open-pub':
-        // The social area ships from its own branch as its own deployment.
-        window.location.assign(pubUrl());
+      case 'open-pub': {
+        // Navigating WHILE an immersive session is live hangs the browser —
+        // end the XR session first, then hop pages.
+        const go = (): void => window.location.assign(pubUrl());
+        const session = this.world.session as XRSession | undefined;
+        if (session) {
+          void Promise.resolve(session.end()).then(go, go);
+        } else {
+          go();
+        }
         break;
+      }
       case 'open-custom':
         customization.open = true;
         this.ensureMirror();
