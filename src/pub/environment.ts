@@ -495,7 +495,7 @@ export function buildPub(world: World): PubRefs {
   }
 
   // --- the fight hall through the west door ---------------------------------
-  const { consolePanels, fightDisplay, fightDisplay2, fightRims } = buildFightHall(root);
+  const { consolePanels, fightDisplay, fightDisplay2, fightRims, fightSlabs } = buildFightHall(root);
 
   world.scene.add(root);
 
@@ -515,6 +515,7 @@ export function buildPub(world: World): PubRefs {
     fightDisplay,
     fightDisplay2,
     fightRims,
+    fightSlabs,
   };
 }
 
@@ -530,6 +531,7 @@ function buildFightHall(root: Group): {
   fightDisplay: Panel;
   fightDisplay2: Panel;
   fightRims: [Mesh, Mesh];
+  fightSlabs: [Mesh, Mesh];
 } {
   const hall = FIGHT.hall;
   const cx = (hall.minX + hall.maxX) / 2;
@@ -667,20 +669,27 @@ function buildFightHall(root: Group): {
   // The two octagonal platforms — the arena's own footprint and colours.
   const consolePanels: Panel[] = [];
   const fightRims: Mesh[] = [];
+  const fightSlabs: Mesh[] = [];
   for (const side of [0, 1] as const) {
     const z = side === 0 ? FIGHT.platformZ : -FIGHT.platformZ;
     const accent = teamColor(side);
     // Platforms live INSIDE the pit, their tops flush with the pit floor —
-    // fighters stand a level below the crowd, stadium-style.
+    // fighters stand a level below the crowd, stadium-style. The slab carries
+    // a low corner-coloured underglow that FightSystem re-tints to whichever
+    // platform skin the claimant picked in customisation (dressRims).
+    const slabMat = gunmetal(0.3);
+    slabMat.emissive.setHex(accent);
+    slabMat.emissiveIntensity = 0.22;
     const slab = new Mesh(
       octagonSlab(OCTAGON_VERTICES as [number, number][], FIGHT.platformThickness),
-      gunmetal(0.3),
+      slabMat,
     );
     slab.position.set(FIGHT.centerX, -FIGHT.pitDepth - FIGHT.platformThickness, z);
     // The octagon's straight front edge faces −z; side 0 (south) must face north.
     if (side === 0) slab.rotation.y = 0;
     else slab.rotation.y = Math.PI;
     root.add(slab);
+    fightSlabs.push(slab);
     // Glowing rim outline at pit-floor level in the corner colour.
     const rim = new Mesh(
       octagonSlab(OCTAGON_VERTICES as [number, number][], 0.02),
@@ -762,6 +771,7 @@ function buildFightHall(root: Group): {
     fightDisplay,
     fightDisplay2,
     fightRims: [fightRims[0], fightRims[1]],
+    fightSlabs: [fightSlabs[0], fightSlabs[1]],
   };
 }
 

@@ -26,9 +26,11 @@ import { bus, pub, type RemotePunter } from '../state.js';
 
 const SEND_INTERVAL = 0.05; // 20 Hz
 const EASE = 14; // exponential smoothing rate for remote pose targets
-const CLAP_DISTANCE = 0.16;
-const CLAP_CLOSING_SPEED = 0.75;
-const CLAP_COMBINED_SPEED = 1.1;
+const CLAP_DISTANCE = 0.15;
+// Hands have to come together with real intent — a slow drift between resting
+// hands shouldn't read as applause.
+const CLAP_CLOSING_SPEED = 1.3;
+const CLAP_COMBINED_SPEED = 1.9;
 const CLAP_COOLDOWN = 0.55;
 
 const _pos = new Vector3();
@@ -85,14 +87,19 @@ export class PubPlayerSystem extends createSystem({}) {
   private hasPrevHands = false;
   private clapCooldown = 0;
   private voiceStarted = false;
+  /** A mic request is in flight (await getUserMedia). */
+  private voiceStarting = false;
+  /** Seconds to wait before re-asking for the mic after a failed attempt. */
+  private voiceRetryCooldown = 0;
 
   init(): void {
     onSpawn((p) => this.spawn(p));
     // Spatial voice: play every punter's frames through a panner pinned to
-    // their head (positioned each frame in update()). The server applies the
-    // match bubble, so we just play what we're sent. Our OWN mic capture is
-    // started lazily on the first controller press (startVoice) — getUserMedia
-    // and the audio graph need a real user gesture to come alive in VR.
+    // their head (positioned each frame in update()). The server fans voice to
+    // the whole room — fighters and crowd alike — so we just play what we're
+    // sent. Our OWN mic capture is started lazily on the first controller press
+    // (startVoice) — getUserMedia and the audio graph need a real user gesture
+    // to come alive in VR.
     onVoice((id, frame) => pushVoiceFrame(id, frame));
     onSnap((poses) => {
       for (const [id, head, left, right] of poses) {
@@ -115,6 +122,7 @@ export class PubPlayerSystem extends createSystem({}) {
 
   update(delta: number): void {
     this.attachLocalGloves();
+    this.voiceRetryCooldown = Math.max(0, this.voiceRetryCooldown - delta);
     this.startVoiceOnFirstPress();
     this.tryLocalClap(delta);
 
@@ -227,17 +235,25 @@ export class PubPlayerSystem extends createSystem({}) {
   }
 
   /**
-   * Bring the mic online on the first trigger/squeeze. Browsers gate
-   * getUserMedia and the WebAudio graph behind a genuine user gesture; the
-   * controller press is ours. Runs once.
+   * Bring the mic online on a trigger/squeeze. Browsers gate getUserMedia and
+   * the WebAudio graph behind a genuine user gesture; the controller press is
+   * ours. The mic permission granted in the FIRE FIGHT arena does NOT carry
+   * into the pub page (different document), so the pub asks for it afresh — and
+   * if that first ask is denied or races the immersive session, we keep trying
+   * on later presses (every ~2s) so the player gets another prompt rather than
+   * being stuck silent forever.
    */
   private startVoiceOnFirstPress(): void {
-    if (this.voiceStarted) return;
+    if (this.voiceStarted || this.voiceStarting) return;
+    if (this.voiceRetryCooldown > 0) return;
     if (!this.anyPressed(InputComponent.Trigger) && !this.anyPressed(InputComponent.Squeeze)) return;
-    this.voiceStarted = true;
+    this.voiceStarting = true;
     void startVoiceCapture((frame) => pubSendVoice(frame)).then((ok) => {
+      this.voiceStarting = false;
+      this.voiceStarted = ok; // only a real success locks it in
+      if (!ok) this.voiceRetryCooldown = 2; // let them try again on the next press
       // eslint-disable-next-line no-console
-      console.info(ok ? '[pub voice] mic live' : '[pub voice] mic unavailable (permission/WebCodecs)');
+      console.info(ok ? '[pub voice] mic live' : '[pub voice] mic unavailable (permission?) — will retry on next press');
     });
   }
 
@@ -295,7 +311,7 @@ export class PubPlayerSystem extends createSystem({}) {
         (closingSpeed >= CLAP_CLOSING_SPEED || leftSpeed + rightSpeed >= CLAP_COMBINED_SPEED)
       ) {
         _mid.copy(_left).add(_right).multiplyScalar(0.5);
-        spawnGestureCue(this.world, _mid, 0.3);
+        spawnGestureCue(this.world, _mid, 0.14); // small, quick spark — not a flashbang
         clap();
         pulseHand(this.world.session, 'left', 0.35, 55);
         pulseHand(this.world.session, 'right', 0.35, 55);

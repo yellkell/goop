@@ -1,32 +1,35 @@
 /**
- * Local microphone capture for pub voice chat. Grabs the mic, encodes it to
- * Opus with WebCodecs (low-latency, frame-aligned — unlike MediaRecorder),
- * and hands each compressed frame to a sender callback that ships it over the
- * pub WebSocket. The server fans frames out (and enforces the match bubble —
- * fighters only hear their opponent), so this side just streams whenever the
- * mic is live and unmuted.
+ * Local microphone capture for pub voice chat — PLAIN WEB AUDIO, no WebCodecs.
  *
- * WebCodecs (AudioEncoder, MediaStreamTrackProcessor, EncodedAudioChunk) is
- * not in the TS DOM lib, so the constructors are reached through globalThis
- * and the per-frame objects are loosely typed — the shapes are stable in the
- * Chromium-based headset browsers we target. If the API is missing we simply
- * report failure and the pub runs silent.
+ * The arena's 1:1 voice rides WebRTC, where the browser encodes the mic with
+ * native Opus for free. The pub fans voice out to up to 12 punters through the
+ * room WebSocket, so it can't lean on a peer connection — and the previous
+ * WebCodecs (AudioEncoder/MediaStreamTrackProcessor) path proved unreliable on
+ * the headset browsers (mic worked in a quick match but was dead in the pub).
+ *
+ * So we capture the mic the old-fashioned, universally-supported way: a WebAudio
+ * graph taps the mic, downsamples to ~16 kHz and ships small Int16 PCM frames.
+ * Playback (voice/playback.ts) feeds those straight into the SAME HRTF panner
+ * graph the arena uses for the rival's voice.
+ *
+ * Wire frame: [8-byte float64 LE sample rate][Int16 LE mono PCM]. The server
+ * prepends the sender id and relays the bytes verbatim to the whole room, so
+ * nothing on the server or in the protocol has to change.
  */
 
-/** Receives one Opus frame: [8-byte float64 µs timestamp][opus payload]. */
+import { audioContext } from '../../audio/sfx.js';
+
+/** Receives one PCM voice frame ready for the wire. */
 export type VoiceSender = (frame: ArrayBuffer) => void;
 
-const SAMPLE_RATE = 48000;
-const BITRATE = 24000; // plenty for speech; keeps the relay light
+const TARGET_RATE = 16000; // speech band — keeps the relay light
+const FRAME_SAMPLES = 2048; // ScriptProcessor block size at the context rate
+const SILENCE_RMS = 0.006; // below this it's room tone; don't send a frame
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const G = globalThis as any;
-
-let track: MediaStreamTrack | null = null;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let encoder: any = null;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let reader: any = null;
+let stream: MediaStream | null = null;
+let source: MediaStreamAudioSourceNode | null = null;
+let processor: ScriptProcessorNode | null = null;
+let sink: GainNode | null = null;
 let running = false;
 let muted = false;
 let sender: VoiceSender | null = null;
@@ -47,17 +50,29 @@ export function toggleVoiceMuted(): boolean {
 }
 
 /**
- * Ask for the mic and start streaming Opus frames. Resolves true once live,
- * false if WebCodecs is unavailable or the user denies permission. Safe to
- * call more than once — only the first start takes effect.
+ * Ask for the mic and start streaming PCM frames. Resolves true once live,
+ * false if there's no audio context, getUserMedia is unavailable, or the user
+ * denies permission. Safe to call more than once — only the first start takes.
  */
 export async function startVoiceCapture(send: VoiceSender): Promise<boolean> {
   if (running) return true;
-  if (!G.AudioEncoder || !G.MediaStreamTrackProcessor) {
-    console.warn('[pub voice] WebCodecs capture unavailable — mic disabled');
+  const ctx = audioContext();
+  if (!ctx) {
+    console.warn('[pub voice] no audio context — mic disabled');
     return false;
   }
-  let stream: MediaStream;
+  if (ctx.state === 'suspended') {
+    try {
+      await ctx.resume();
+    } catch {
+      /* a gesture will resume it shortly */
+    }
+  }
+  if (!navigator.mediaDevices?.getUserMedia) {
+    console.warn('[pub voice] getUserMedia unavailable — mic disabled');
+    return false;
+  }
+
   try {
     stream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
@@ -68,70 +83,56 @@ export async function startVoiceCapture(send: VoiceSender): Promise<boolean> {
   }
 
   sender = send;
-  track = stream.getAudioTracks()[0] ?? null;
-  if (!track) return false;
+  source = ctx.createMediaStreamSource(stream);
 
-  encoder = new G.AudioEncoder({
-    output: (chunk: unknown) => emit(chunk),
-    error: (e: Error) => console.warn('[pub voice] encoder error', e),
-  });
-  encoder.configure({ codec: 'opus', sampleRate: SAMPLE_RATE, numberOfChannels: 1, bitrate: BITRATE });
+  // ScriptProcessorNode is deprecated but rock-solid across the headset
+  // browsers, and needs no separate worklet module to bundle.
+  processor = ctx.createScriptProcessor(FRAME_SAMPLES, 1, 1);
+  const inRate = ctx.sampleRate;
+  const factor = Math.max(1, Math.round(inRate / TARGET_RATE));
+  const outRate = inRate / factor;
 
-  const processor = new G.MediaStreamTrackProcessor({ track });
-  reader = processor.readable.getReader();
+  processor.onaudioprocess = (e: AudioProcessingEvent): void => {
+    if (muted || !sender) return;
+    const input = e.inputBuffer.getChannelData(0);
+    const outLen = Math.floor(input.length / factor);
+    if (outLen === 0) return;
+    const pcm = new Int16Array(outLen);
+    let sumSq = 0;
+    for (let i = 0; i < outLen; i++) {
+      // Box-average each group of `factor` samples — a cheap anti-alias.
+      let acc = 0;
+      for (let j = 0; j < factor; j++) acc += input[i * factor + j];
+      const s = acc / factor;
+      sumSq += s * s;
+      pcm[i] = Math.max(-32768, Math.min(32767, Math.round(s * 32767)));
+    }
+    // Don't flood the relay with silence — only send when someone's talking.
+    if (Math.sqrt(sumSq / outLen) < SILENCE_RMS) return;
+    const out = new ArrayBuffer(8 + pcm.byteLength);
+    new DataView(out).setFloat64(0, outRate, true);
+    new Int16Array(out, 8).set(pcm);
+    sender(out);
+  };
+
+  // Pull the graph without echoing the mic back into the room (silent sink).
+  sink = ctx.createGain();
+  sink.gain.value = 0;
+  source.connect(processor).connect(sink).connect(ctx.destination);
   running = true;
-  void pump();
   return true;
-}
-
-async function pump(): Promise<void> {
-  while (running && reader) {
-    let result: { value: unknown; done: boolean };
-    try {
-      result = await reader.read();
-    } catch {
-      break;
-    }
-    if (result.done) break;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const audioData = result.value as any; // AudioData
-    if (!muted && encoder && encoder.state === 'configured') {
-      try {
-        encoder.encode(audioData);
-      } catch {
-        /* a dropped frame is harmless */
-      }
-    }
-    audioData.close();
-  }
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function emit(chunk: any): void {
-  if (!sender) return;
-  const payload = new Uint8Array(chunk.byteLength);
-  chunk.copyTo(payload);
-  const out = new ArrayBuffer(8 + payload.byteLength);
-  new DataView(out).setFloat64(0, chunk.timestamp || 0, true);
-  new Uint8Array(out, 8).set(payload);
-  sender(out);
 }
 
 export function stopVoiceCapture(): void {
   running = false;
-  try {
-    reader?.cancel();
-  } catch {
-    /* already gone */
-  }
-  try {
-    encoder?.close();
-  } catch {
-    /* already closed */
-  }
-  track?.stop();
-  reader = null;
-  encoder = null;
-  track = null;
+  if (processor) processor.onaudioprocess = null;
+  source?.disconnect();
+  processor?.disconnect();
+  sink?.disconnect();
+  for (const t of stream?.getTracks() ?? []) t.stop();
+  source = null;
+  processor = null;
+  sink = null;
+  stream = null;
   sender = null;
 }

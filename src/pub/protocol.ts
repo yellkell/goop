@@ -67,13 +67,23 @@ export interface SnakeHi {
 }
 
 /** Fight-hall match lifecycle (server-driven). */
-export type FightPhase = 'idle' | 'starting' | 'fighting' | 'over';
+export type FightPhase = 'idle' | 'starting' | 'fighting' | 'roundOver' | 'over';
 
 export interface FightNet {
   phase: FightPhase;
   /** Player ids holding side 0 (south platform) and side 1 (north). */
   sides: [string | null, string | null];
   hp: [number, number];
+  /** Round wins so far this match — first to FIGHT.winTarget takes it. */
+  score: [number, number];
+  /** Current round number (1-based). */
+  round: number;
+  /** Seconds left in the live round (drives the match-UI clock). */
+  roundTimer: number;
+  /**
+   * During `roundOver` this is the ROUND winner; during `over` it's the MATCH
+   * winner. Null otherwise.
+   */
   winner: string | null;
 }
 
@@ -89,10 +99,16 @@ export type PubEvent =
   | { e: 'DARTS_RESET' }
   /** Fighter streaming both fireballs (~20 Hz) so the crowd sees the duel. */
   | { e: 'FIGHT_FB'; balls: [FireballNet, FireballNet] }
-  /** Victim-authoritative: YOUR ball `ball` hit me — it's spent. */
-  | { e: 'FIGHT_HIT'; ball: 0 | 1 }
+  /**
+   * Victim-authoritative: YOUR ball `ball` hit me — it's spent. `ret` marks a
+   * RETURN-PASS connect (a recalled ball caught me on its way home): it keeps
+   * homing instead of dying, exactly like the arena's recall-through technique.
+   */
+  | { e: 'FIGHT_HIT'; ball: 0 | 1; ret?: boolean }
   /** I parried your ball `ball` out of the air. */
   | { e: 'FIGHT_DEFLECT'; ball: 0 | 1 }
+  /** Your ball `ball` clashed mid-air with one of mine — both are spent. */
+  | { e: 'FIGHT_CLASH'; ball: 0 | 1 }
   /** Fighter reporting their own hp after taking a hit. */
   | { e: 'FIGHT_HP'; hp: number }
   /** Streamed by the player at the arcade machine so spectators see the screen. */
@@ -163,14 +179,15 @@ export const PUB_TICK_MS = 50; // 20 Hz pose snapshots
 
 /**
  * VOICE CHAT rides this same socket as BINARY frames (everything above is
- * JSON text). Spatial Opus voice, fanned out by the server with the match
- * bubble applied — while a bout is live each fighter hears only their
- * opponent, never the bar; spectators hear everyone.
+ * JSON text). Spatial voice — plain Int16 PCM, NOT Opus/WebCodecs, which was
+ * unreliable on the headset browsers — fanned out by the server to the WHOLE
+ * room: fighters and crowd alike always hear everyone (the open pub never goes
+ * quiet, even mid-bout). Spatial falloff in the client keeps distance readable.
  *
- *   client → server :  [8-byte LE float64 timestamp µs][opus frame]
+ *   client → server :  [8-byte LE float64 sample rate][Int16 LE mono PCM]
  *   server → client :  [1-byte id length][ascii sender id]<the above>
  *
- * See src/pub/voice/ (capture + spatial playback) and relayVoice/canHear in
+ * See src/pub/voice/ (capture + spatial playback) and relayVoice in
  * server/pub.mjs.
  */
 export const PUB_VOICE_SAMPLE_RATE = 48000;

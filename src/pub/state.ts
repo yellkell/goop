@@ -41,6 +41,9 @@ export interface PubRefs {
   snakeStick: Group;
   /** Fight hall: each platform's glowing rim — re-skinned per claimant. */
   fightRims: [Mesh, Mesh];
+  /** Fight hall: each platform's slab — its underglow follows the claimant's
+   *  chosen platform skin (alongside the rim). */
+  fightSlabs: [Mesh, Mesh];
   /** Fight hall: claim console panels (side 0, side 1) + the big display. */
   consolePanels: [Panel, Panel];
   fightDisplay: Panel;
@@ -101,6 +104,14 @@ export const pub = {
   board: [] as BoardRow[],
   snakeHi: { name: '—', score: 0 } as SnakeHi,
   snakePlayer: null as string | null,
-  fight: { phase: 'idle', sides: [null, null], hp: [100, 100], winner: null } as FightNet,
+  fight: {
+    phase: 'idle',
+    sides: [null, null],
+    hp: [100, 100],
+    score: [0, 0],
+    round: 1,
+    roundTimer: 0,
+    winner: null,
+  } as FightNet,
   refs: null as PubRefs | null,
 };
