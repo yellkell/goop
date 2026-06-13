@@ -6,10 +6,10 @@
  * unique accent tint (assigned by join order) and a name tag.
  */
 
-import { createSystem } from '@iwsdk/core';
+import { createSystem, InputComponent } from '@iwsdk/core';
 import { Color, Group, MeshStandardMaterial, Quaternion, Vector3 } from 'three';
 import { buildBoxer } from '../../avatar/boxer.js';
-import { buildHand } from '../../avatar/hands.js';
+import { buildHand, setHandCurl } from '../../avatar/hands.js';
 import { solveTorso } from '../../avatar/boxer.js';
 import { PALETTE, teamColor } from '../../config.js';
 import { onSnap, onSpawn, pubSendRaw } from '../net.js';
@@ -88,6 +88,16 @@ export class PubPlayerSystem extends createSystem({}) {
 
   update(delta: number): void {
     this.attachLocalGloves();
+
+    // Your fingers track your real squeeze (trigger = index, grip = rest).
+    (['left', 'right'] as const).forEach((hand, i) => {
+      const glove = this.localGloves[i];
+      const gp = this.input.xr.gamepads[hand];
+      if (!glove || !gp) return;
+      const trig = gp.getButtonValue(InputComponent.Trigger);
+      const sq = gp.getButtonValue(InputComponent.Squeeze);
+      setHandCurl(glove, Math.max(trig, sq * 0.6), Math.max(sq, trig * 0.45), 0.35 + Math.max(trig, sq) * 0.55);
+    });
 
     // --- outbound pose ------------------------------------------------------
     if (pub.online) {

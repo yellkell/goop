@@ -84,10 +84,14 @@ export function buildProps(world: World): void {
       }
     });
   }
+  let dartIdx = 0;
   for (const slot of refs.dartRackSlots) {
+    const lean = dartIdx++;
     addProp(world, id++, 'dart', buildDart(), slot, true, (mesh) => {
       mesh.position.set(...slot);
-      mesh.rotation.z = Math.PI / 2; // lying across the rack ledge
+      // Standing tip-down in the box, flights up, each leaning a touch its
+      // own way so the bundle reads as loose darts rather than soldiers.
+      mesh.rotation.set(Math.PI - 0.12 + (lean % 2) * 0.1, 0, ((lean % 3) - 1) * 0.14);
     });
   }
 }

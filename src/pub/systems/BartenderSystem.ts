@@ -25,7 +25,6 @@ import {
 import { buildBoxer, type BoxerRig } from '../../avatar/boxer.js';
 import { PALETTE } from '../../config.js';
 import { PUB } from '../config.js';
-import { Panel } from '../panel.js';
 import { buildPintGlass } from '../props.js';
 import { bus, pub } from '../state.js';
 import { retintRig } from './PubPlayerSystem.js';
@@ -55,7 +54,6 @@ export class BartenderSystem extends createSystem({}) {
   private rig!: BoxerRig;
   private carryGlass!: Group;
   private pourStream!: Mesh;
-  private nameTag!: Panel;
 
   private task: Task | null = null;
   private taskTimer = 0;
@@ -145,12 +143,6 @@ export class BartenderSystem extends createSystem({}) {
     this.pourStream.visible = false;
     this.scene.add(this.pourStream);
 
-    this.nameTag = new Panel(0.6, 0.11, 384);
-    this.nameTag.setLines([
-      { text: "UNIT-86 'THE LANDLORD'", size: 26, colour: '#ffb000', bold: true },
-    ]);
-    this.scene.add(this.nameTag.mesh);
-
     this.scene.add(this.root);
   }
 
@@ -183,11 +175,6 @@ export class BartenderSystem extends createSystem({}) {
 
     // Head: glance at the nearest punter, otherwise mind the bar.
     this.aimHead(delta);
-
-    // Name tag rides over the helmet, facing the local player.
-    this.camera.getWorldPosition(_punter);
-    this.nameTag.mesh.position.set(this.root.position.x, 1.95, this.root.position.z);
-    this.nameTag.mesh.lookAt(_punter);
   }
 
   // --- the work rota -----------------------------------------------------------

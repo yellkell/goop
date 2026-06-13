@@ -316,8 +316,9 @@ export function buildPub(world: World): PubRefs {
     root.add(buildBooth(bx));
   }
 
-  // Back-to-back island in the middle of the floor: groups of four each way.
-  root.add(buildSeatingIsland(-1.6, 1.5));
+  // The banquette bank: back-to-back benches mid-floor, parallel to the
+  // booths, with the darts corridor kept clear to the east.
+  root.add(buildBanquetteBank(-1.5, 1.4, 3.2));
 
   // --- the EXIT — the door you came in through (south wall, west end).
   // Teleport onto its hazard mat and you're back at the main menu.
@@ -430,11 +431,12 @@ export function buildPub(world: World): PubRefs {
   const lip = new Mesh(new BoxGeometry(0.46, 0.015, 0.36), amberGlow(0.3));
   lip.position.set(boxX, 1.285, boxZ);
   root.add(lip);
-  // Dart home slots: two rows of three inside the crate.
+  // Dart home slots: two rows of three STANDING in the crate, flights up,
+  // poking above the lip so the box visibly holds darts.
   for (let i = 0; i < darts.rackSlots; i++) {
     const col = i % 3;
     const row = Math.floor(i / 3);
-    rackSlots.push([boxX - 0.12 + col * 0.12, 1.22, boxZ - 0.08 + row * 0.16]);
+    rackSlots.push([boxX - 0.12 + col * 0.12, 1.3, boxZ - 0.08 + row * 0.16]);
   }
 
   // Leaderboard panel left of the board.
@@ -715,52 +717,57 @@ function buildBooth(x: number): Group {
 }
 
 /**
- * Back-to-back island seating: two padded benches sharing a steel spine,
- * each side with its own table and pair of stools — groups of four facing
- * each way. Tables match the island entries in SURFACES.
+ * The banquette bank: a long back-to-back bench spine running EAST–WEST,
+ * parallel to the wall booths — exactly how a real pub fills its middle
+ * floor. Each side gets two pedestal tables with a pair of stools across,
+ * so every table seats a group of four (two on the banquette, two on
+ * stools), and proper aisles form on both sides. Tables match the island
+ * entries in SURFACES (config.ts).
  */
-function buildSeatingIsland(x: number, zSpine: number): Group {
-  const island = new Group();
+function buildBanquetteBank(cx: number, zSpine: number, length: number): Group {
+  const bank = new Group();
   const pad = new MeshStandardMaterial({ color: 0x5a2a20, roughness: 0.85 });
 
-  // The shared backrest spine.
-  const spine = new Mesh(new BoxGeometry(1.4, 1.1, 0.1), pad);
-  spine.position.set(x, 0.55, zSpine);
-  island.add(spine);
-  const spineTrim = new Mesh(new BoxGeometry(1.4, 0.04, 0.12), amberGlow(0.3));
-  spineTrim.position.set(x, 1.12, zSpine);
-  island.add(spineTrim);
+  // The shared backrest spine, full length.
+  const spine = new Mesh(new BoxGeometry(length, 1.1, 0.1), pad);
+  spine.position.set(cx, 0.55, zSpine);
+  bank.add(spine);
+  const spineTrim = new Mesh(new BoxGeometry(length, 0.04, 0.12), amberGlow(0.3));
+  spineTrim.position.set(cx, 1.12, zSpine);
+  bank.add(spineTrim);
 
   for (const side of [-1, 1]) {
-    // Bench off each face of the spine.
-    const seatBase = new Mesh(new BoxGeometry(1.4, 0.42, 0.46), darkSteel());
-    seatBase.position.set(x, 0.21, zSpine + side * 0.28);
-    island.add(seatBase);
-    const cushion = new Mesh(new BoxGeometry(1.36, 0.08, 0.42), pad);
-    cushion.position.set(x, 0.46, zSpine + side * 0.28);
-    island.add(cushion);
-    // Table across from each bench.
-    const tz = zSpine + side * 0.72;
-    const pedestal = new Mesh(new CylinderGeometry(0.05, 0.16, 0.76, 8), gunmetal(0.3));
-    pedestal.position.set(x, 0.38, tz);
-    island.add(pedestal);
-    const tabletop = new Mesh(new BoxGeometry(0.9, 0.04, 0.4), gunmetal(0.25));
-    tabletop.position.set(x, 0.76, tz);
-    island.add(tabletop);
-    // Two stools on the far side of the table.
-    for (const sx of [-0.35, 0.35]) {
-      const stool = new Group();
-      stool.position.set(x + sx, 0, zSpine + side * 1.12);
-      const leg = new Mesh(new CylinderGeometry(0.03, 0.05, 0.62, 8), gunmetal(0.3));
-      leg.position.y = 0.31;
-      stool.add(leg);
-      const seat = new Mesh(new CylinderGeometry(0.17, 0.17, 0.06, 12), pad);
-      seat.position.y = 0.65;
-      stool.add(seat);
-      island.add(stool);
+    // Full-length bench off each face of the spine.
+    const seatBase = new Mesh(new BoxGeometry(length, 0.42, 0.46), darkSteel());
+    seatBase.position.set(cx, 0.21, zSpine + side * 0.28);
+    bank.add(seatBase);
+    const cushion = new Mesh(new BoxGeometry(length - 0.04, 0.08, 0.42), pad);
+    cushion.position.set(cx, 0.46, zSpine + side * 0.28);
+    bank.add(cushion);
+
+    // Two tables per side, stools across from each.
+    for (const tx of [cx - 0.8, cx + 0.8]) {
+      const tz = zSpine + side * 0.78;
+      const pedestal = new Mesh(new CylinderGeometry(0.05, 0.16, 0.76, 8), gunmetal(0.3));
+      pedestal.position.set(tx, 0.38, tz);
+      bank.add(pedestal);
+      const tabletop = new Mesh(new BoxGeometry(0.7, 0.04, 0.45), gunmetal(0.25));
+      tabletop.position.set(tx, 0.76, tz);
+      bank.add(tabletop);
+      for (const sx of [-0.22, 0.22]) {
+        const stool = new Group();
+        stool.position.set(tx + sx, 0, zSpine + side * 1.1);
+        const leg = new Mesh(new CylinderGeometry(0.03, 0.05, 0.62, 8), gunmetal(0.3));
+        leg.position.y = 0.31;
+        stool.add(leg);
+        const seat = new Mesh(new CylinderGeometry(0.17, 0.17, 0.06, 12), pad);
+        seat.position.y = 0.65;
+        stool.add(seat);
+        bank.add(stool);
+      }
     }
   }
-  return island;
+  return bank;
 }
 
 /** Classic upright cabinet: marquee, angled screen, control deck, side art. */
@@ -806,9 +813,10 @@ function buildArcadeCabinet(): { cabinet: Group; screen: Mesh; stick: Group } {
   marqueeText.mesh.position.set(0, 1.84, 0.301);
   cabinet.add(marqueeText.mesh);
 
-  // Screen: angled back CRT face. The SnakeSystem owns its canvas texture.
+  // Screen: angled back CRT face, pushed PROUD of the body — the tilt used
+  // to sink the top half of the screen inside the cabinet box.
   const bezel = new Mesh(new BoxGeometry(0.56, 0.46, 0.06), darkSteel());
-  bezel.position.set(0, 1.42, 0.27);
+  bezel.position.set(0, 1.42, 0.34);
   bezel.rotation.x = -0.18;
   cabinet.add(bezel);
   const screen = new Mesh(
@@ -816,7 +824,7 @@ function buildArcadeCabinet(): { cabinet: Group; screen: Mesh; stick: Group } {
     new MeshBasicMaterial({ color: 0x041204 }),
   );
   screen.name = 'snake-screen';
-  screen.position.set(0, 1.42, 0.302);
+  screen.position.set(0, 1.42, 0.372);
   screen.rotation.x = -0.18;
   cabinet.add(screen);
 

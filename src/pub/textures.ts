@@ -96,15 +96,19 @@ export function corkTexture(): CanvasTexture {
 
 // --- Dartboard ---------------------------------------------------------------
 
-/** Standard segment order clockwise from the top (20 at 12 o'clock). */
-export const DART_SEGMENTS = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
-
-// Ring radii as fractions of board radius — shared by drawing and scoring.
-const BULLSEYE_R = 0.035;
-const BULL_R = 0.08;
-const TRIPLE_IN = 0.45;
-const TRIPLE_OUT = 0.5;
-const DOUBLE_IN = 0.92;
+/**
+ * The house board: a big, readable bullseye TARGET — concentric rings worth
+ * 50 / 25 / 20 / 10 / 5 from the centre out. No regulation segments, no
+ * triple-twenty arithmetic: what you see is what you score. Shared ring
+ * fractions keep `scoreFromUV` exact.
+ */
+const RINGS: Array<{ r: number; score: number; fill: string }> = [
+  { r: 0.06, score: 50, fill: '#cf2030' }, // bullseye
+  { r: 0.18, score: 25, fill: '#e8e0d0' },
+  { r: 0.42, score: 20, fill: '#cf2030' },
+  { r: 0.7, score: 10, fill: '#e8e0d0' },
+  { r: 1.0, score: 5, fill: '#cf2030' },
+];
 const RIM_PX = 6; // dead rim pixels on the 512 canvas
 
 export function dartboardTexture(): CanvasTexture {
@@ -113,70 +117,45 @@ export function dartboardTexture(): CanvasTexture {
     const R = s / 2 - RIM_PX;
     ctx.fillStyle = '#0a0a0a';
     ctx.fillRect(0, 0, s, s);
-    const seg = (Math.PI * 2) / 20;
-    for (let i = 0; i < 20; i++) {
-      const start = -Math.PI / 2 + i * seg - seg / 2;
-      const end = start + seg;
-      const dark = i % 2 === 0;
-      const rings: Array<[number, number, string]> = [
-        [BULL_R, TRIPLE_IN, dark ? '#111111' : '#e8e0d0'],
-        [TRIPLE_IN, TRIPLE_OUT, dark ? '#cf2030' : '#1f8a3f'],
-        [TRIPLE_OUT, DOUBLE_IN, dark ? '#111111' : '#e8e0d0'],
-        [DOUBLE_IN, 1.0, dark ? '#cf2030' : '#1f8a3f'],
-      ];
-      for (const [r0, r1, fill] of rings) {
-        ctx.beginPath();
-        ctx.arc(c, c, R * r1, start, end);
-        ctx.arc(c, c, R * r0, end, start, true);
-        ctx.closePath();
-        ctx.fillStyle = fill;
-        ctx.fill();
-      }
-      const mid = start + seg / 2;
-      ctx.fillStyle = '#e8e0d0';
-      ctx.font = 'bold 26px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(String(DART_SEGMENTS[i]), c + Math.cos(mid) * R * 0.97, c + Math.sin(mid) * R * 0.97);
-    }
-    ctx.beginPath();
-    ctx.arc(c, c, R * BULL_R, 0, Math.PI * 2);
-    ctx.fillStyle = '#1f8a3f';
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(c, c, R * BULLSEYE_R, 0, Math.PI * 2);
-    ctx.fillStyle = '#cf2030';
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(200,200,200,0.5)';
-    ctx.lineWidth = 1.5;
-    for (const r of [BULL_R, TRIPLE_IN, TRIPLE_OUT, DOUBLE_IN, 1.0]) {
+    // Paint outside-in so each smaller ring sits on top.
+    for (let i = RINGS.length - 1; i >= 0; i--) {
       ctx.beginPath();
-      ctx.arc(c, c, R * r, 0, Math.PI * 2);
+      ctx.arc(c, c, R * RINGS[i].r, 0, Math.PI * 2);
+      ctx.fillStyle = RINGS[i].fill;
+      ctx.fill();
+    }
+    ctx.strokeStyle = 'rgba(20,20,20,0.7)';
+    ctx.lineWidth = 3;
+    for (const ring of RINGS) {
+      ctx.beginPath();
+      ctx.arc(c, c, R * ring.r, 0, Math.PI * 2);
       ctx.stroke();
+    }
+    // Ring values printed straight onto the bands (skip the tiny bullseye).
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (let i = 1; i < RINGS.length; i++) {
+      const mid = (RINGS[i - 1].r + RINGS[i].r) / 2;
+      const dark = RINGS[i].fill !== '#e8e0d0';
+      ctx.fillStyle = dark ? '#e8e0d0' : '#1a1a1a';
+      ctx.font = `bold ${i === 1 ? 22 : 30}px sans-serif`;
+      for (const ang of [-Math.PI / 2, Math.PI / 2, 0, Math.PI]) {
+        ctx.fillText(String(RINGS[i].score), c + Math.cos(ang) * R * mid, c + Math.sin(ang) * R * mid);
+      }
     }
   });
 }
 
-/**
- * Score from board-local UV (0..1, v up). Matches `dartboardTexture` exactly:
- * same segment order, same ring fractions.
- */
+/** Score from board-local UV (0..1). Radius-only — matches the rings above. */
 export function scoreFromUV(u: number, v: number): { score: number; segment: string } {
   const dx = u - 0.5;
   const dy = v - 0.5;
   const r = Math.sqrt(dx * dx + dy * dy) / (0.5 * (1 - RIM_PX / 256));
   if (r > 1.0) return { score: 0, segment: 'MISS' };
-  if (r <= BULLSEYE_R) return { score: 50, segment: 'BULLSEYE' };
-  if (r <= BULL_R) return { score: 25, segment: 'BULL' };
-  // Canvas y grows downward, UV v grows upward — flip dy to get canvas angle.
-  const angle = Math.atan2(-dy, dx);
-  const seg = (Math.PI * 2) / 20;
-  let rel = angle + Math.PI / 2 + seg / 2;
-  while (rel < 0) rel += Math.PI * 2;
-  while (rel >= Math.PI * 2) rel -= Math.PI * 2;
-  const idx = Math.floor(rel / seg) % 20;
-  const base = DART_SEGMENTS[idx];
-  if (r > TRIPLE_IN && r <= TRIPLE_OUT) return { score: base * 3, segment: `TRIPLE ${base}` };
-  if (r > DOUBLE_IN) return { score: base * 2, segment: `DOUBLE ${base}` };
-  return { score: base, segment: `${base}` };
+  for (const ring of RINGS) {
+    if (r <= ring.r) {
+      return { score: ring.score, segment: ring.score === 50 ? 'BULLSEYE' : String(ring.score) };
+    }
+  }
+  return { score: 0, segment: 'MISS' };
 }

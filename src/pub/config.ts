@@ -47,7 +47,7 @@ export const PUB = {
     boardX: HALF_W - 0.04, // proud of the wall on its cabinet
     boardY: 1.73,
     boardZ: 0.6,
-    boardRadius: 0.2255, // regulation 451 mm board
+    boardRadius: 0.42, // oversized house board, filling its cork circle
     surroundRadius: 0.45, // cork blast zone around it
     ocheX: HALF_W - 0.04 - 2.37,
     rackSlots: 6,
@@ -57,7 +57,8 @@ export const PUB = {
    *  its mat and you're back at the FIRE FIGHT main menu. */
   exit: { x0: -4.8, x1: -4.0, height: 2.1 },
 
-  spawn: { x: -0.5, y: 0, z: 1.6 },
+  // Open floor east of the banquette bank (the old spot is now furniture).
+  spawn: { x: 1.3, y: 0, z: 0.8 },
 
   /** Glasses on the bar at opening time — they ALL start under the counter;
    *  the barkeep brings each one out between his other jobs. */
@@ -192,9 +193,12 @@ export const SURFACES: Surface[] = [
   { y: 0.78, minX: -3.45, maxX: -2.55, minZ: HALF_D - 1.15, maxZ: HALF_D - 0.25 },
   { y: 0.78, minX: -0.45, maxX: 0.45, minZ: HALF_D - 1.15, maxZ: HALF_D - 0.25 },
   { y: 0.78, minX: 2.55, maxX: 3.45, minZ: HALF_D - 1.15, maxZ: HALF_D - 0.25 },
-  // The back-to-back island tables (environment.ts buildSeatingIsland).
-  { y: 0.78, minX: -2.05, maxX: -1.15, minZ: 0.58, maxZ: 0.98 },
-  { y: 0.78, minX: -2.05, maxX: -1.15, minZ: 2.02, maxZ: 2.42 },
+  // The banquette-bank tables (environment.ts buildBanquetteBank: spine at
+  // x -1.5 / z 1.4, tables at x ±0.8 off centre, z ±0.78 off the spine).
+  { y: 0.78, minX: -2.65, maxX: -1.95, minZ: 0.395, maxZ: 0.845 },
+  { y: 0.78, minX: -1.05, maxX: -0.35, minZ: 0.395, maxZ: 0.845 },
+  { y: 0.78, minX: -2.65, maxX: -1.95, minZ: 1.955, maxZ: 2.405 },
+  { y: 0.78, minX: -1.05, maxX: -0.35, minZ: 1.955, maxZ: 2.405 },
 ];
 
 /** Accent colours cycled by join order — distinct fire tints per punter. */
