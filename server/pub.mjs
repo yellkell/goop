@@ -214,28 +214,16 @@ setInterval(() => {
 const ZERO_POSE = [0, 0, 0, 0, 0, 0, 1];
 
 // --- voice routing --------------------------------------------------------------
-// Spatial voice rides this same socket as binary Opus frames. The server fans
-// them out and enforces the MATCH BUBBLE: while a bout is live (starting or
-// fighting), each fighter hears ONLY their opponent — not the bar. The crowd
-// still hears everyone, including the fighters, so a match is fun to spectate.
-function canHear(recipientId, senderId) {
-  if (fight.phase === 'starting' || fight.phase === 'fighting') {
-    const side = fight.sides.indexOf(recipientId);
-    if (side !== -1) {
-      // Recipient is a fighter: only their opponent's voice reaches them.
-      return senderId === fight.sides[side === 0 ? 1 : 0];
-    }
-  }
-  return true; // spectators (and the idle/over phases) hear the whole room
-}
-
+// Spatial voice rides this same socket as binary PCM frames. The server fans
+// each frame out to the WHOLE room — fighters and crowd alike always hear
+// everyone (the open pub never goes quiet, even mid-bout). Spatial falloff in
+// the client keeps distant voices distant.
 function relayVoice(senderId, payload) {
   if (!players.has(senderId)) return;
   const idBuf = Buffer.from(senderId, 'ascii');
   const out = Buffer.concat([Buffer.from([idBuf.length]), idBuf, payload]);
   for (const [rid, r] of players) {
     if (rid === senderId) continue;
-    if (!canHear(rid, senderId)) continue;
     if (r.ws.readyState === r.ws.OPEN) r.ws.send(out, { binary: true });
   }
 }

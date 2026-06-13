@@ -180,14 +180,14 @@ export const PUB_TICK_MS = 50; // 20 Hz pose snapshots
 /**
  * VOICE CHAT rides this same socket as BINARY frames (everything above is
  * JSON text). Spatial voice — plain Int16 PCM, NOT Opus/WebCodecs, which was
- * unreliable on the headset browsers — fanned out by the server with the match
- * bubble applied: while a bout is live each fighter hears only their opponent,
- * never the bar; spectators hear everyone.
+ * unreliable on the headset browsers — fanned out by the server to the WHOLE
+ * room: fighters and crowd alike always hear everyone (the open pub never goes
+ * quiet, even mid-bout). Spatial falloff in the client keeps distance readable.
  *
  *   client → server :  [8-byte LE float64 sample rate][Int16 LE mono PCM]
  *   server → client :  [1-byte id length][ascii sender id]<the above>
  *
- * See src/pub/voice/ (capture + spatial playback) and relayVoice/canHear in
+ * See src/pub/voice/ (capture + spatial playback) and relayVoice in
  * server/pub.mjs.
  */
 export const PUB_VOICE_SAMPLE_RATE = 48000;

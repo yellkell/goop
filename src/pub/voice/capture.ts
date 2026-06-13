@@ -13,8 +13,8 @@
  * graph the arena uses for the rival's voice.
  *
  * Wire frame: [8-byte float64 LE sample rate][Int16 LE mono PCM]. The server
- * prepends the sender id and relays the bytes verbatim (match bubble applied),
- * so nothing on the server or in the protocol has to change.
+ * prepends the sender id and relays the bytes verbatim to the whole room, so
+ * nothing on the server or in the protocol has to change.
  */
 
 import { audioContext } from '../../audio/sfx.js';

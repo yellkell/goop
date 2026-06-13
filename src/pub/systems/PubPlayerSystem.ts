@@ -95,10 +95,11 @@ export class PubPlayerSystem extends createSystem({}) {
   init(): void {
     onSpawn((p) => this.spawn(p));
     // Spatial voice: play every punter's frames through a panner pinned to
-    // their head (positioned each frame in update()). The server applies the
-    // match bubble, so we just play what we're sent. Our OWN mic capture is
-    // started lazily on the first controller press (startVoice) — getUserMedia
-    // and the audio graph need a real user gesture to come alive in VR.
+    // their head (positioned each frame in update()). The server fans voice to
+    // the whole room — fighters and crowd alike — so we just play what we're
+    // sent. Our OWN mic capture is started lazily on the first controller press
+    // (startVoice) — getUserMedia and the audio graph need a real user gesture
+    // to come alive in VR.
     onVoice((id, frame) => pushVoiceFrame(id, frame));
     onSnap((poses) => {
       for (const [id, head, left, right] of poses) {

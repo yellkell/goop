@@ -6,9 +6,9 @@
  * the arena uses for the rival's WebRTC voice.
  *
  * Frames arrive as plain Int16 PCM (see voice/capture.ts — no WebCodecs), each
- * tagged with its sample rate, already routed by the server (the match bubble
- * is enforced there). We turn each frame into a short AudioBuffer and schedule
- * them back to back per speaker behind a small jitter buffer.
+ * tagged with its sample rate, fanned out by the server to the whole room. We
+ * turn each frame into a short AudioBuffer and schedule them back to back per
+ * speaker behind a small jitter buffer.
  *
  * Wire frame: [8-byte float64 LE sample rate][Int16 LE mono PCM].
  */
