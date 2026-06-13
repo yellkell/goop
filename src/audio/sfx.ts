@@ -283,3 +283,20 @@ export function matchEnd(win: boolean): void {
     );
   }
 }
+
+/**
+ * Saloon entrance — the swinging-doors-of-a-western-bar sound when someone
+ * walks in: a wooden door creak (descending filtered noise + a low wood
+ * knock), a spring-hinge twang, then a brass spittoon-ish bell ding.
+ */
+export function saloonEntry(): void {
+  // Hinge creak: filtered noise sweeping down, plus a detuned squeak.
+  whooshNoise(0.42, 0.1, 900, 240);
+  tone({ freq: 520, to: 240, type: 'sawtooth', dur: 0.32, gain: 0.05 });
+  // Two wooden door knocks as the panels swing past the jamb.
+  clank(220, 0.12, 0.16, 0.04);
+  clank(180, 0.1, 0.18, 0.22);
+  // A little entrance bell over the door.
+  tone({ freq: 1480, type: 'sine', dur: 0.18, gain: 0.12, delay: 0.12 });
+  tone({ freq: 1970, type: 'sine', dur: 0.14, gain: 0.07, delay: 0.16 });
+}

@@ -21,6 +21,7 @@
 
 import { SessionMode, World } from '@iwsdk/core';
 import { initFirePools } from '../fx/fire.js';
+import * as sfx from '../audio/sfx.js';
 import { customization } from '../menu/customization.js';
 import { PUB, pubServerUrl } from './config.js';
 import { buildPub } from './environment.js';
@@ -85,6 +86,13 @@ World.create(container, {
 
   // Your arena cosmetics walk in with you.
   pubConnect(pubServerUrl(), pub.myName, customization.avatar, customization.platform);
+
+  // Swinging-doors entrance for yourself, once the session's gesture has
+  // unlocked audio.
+  setTimeout(() => {
+    sfx.ensureAudio();
+    sfx.saloonEntry();
+  }, 700);
 
   // eslint-disable-next-line no-console
   console.info('[IRON BALLS PUB] Doors open. Mind the low beams.');

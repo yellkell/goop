@@ -30,8 +30,13 @@ import { diamondPlateTextures } from '../materials/diamondPlate.js';
 import { octagonSlab } from '../arena/octagon.js';
 import { FIGHT, PUB } from './config.js';
 import { Panel } from './panel.js';
+import { buildSign } from './signs.js';
 import type { PubRefs } from './state.js';
 import { corkTexture, dartboardTexture, steelWallTexture } from './textures.js';
+
+// Warm furnishing tones for the seating — wood + burgundy, like the reference.
+const WOOD = 0x6b4526;
+const BURGUNDY = 0x4e1f2d;
 
 function rgba(hex: number, a = 1): [number, number, number, number] {
   const c = new Color(hex);
@@ -109,9 +114,9 @@ export function buildPub(world: World): PubRefs {
     walls.push(wall);
     return wall;
   };
-  mkWall(W * 2, 0, -D, 0); // north (behind the bar)
-  mkWall(W * 2, 0, D, Math.PI); // south (booths)
-  const eastWall = mkWall(D * 2, W, 0, -Math.PI / 2); // dartboard wall
+  const northWall = mkWall(W * 2, 0, -D, 0); // bar + dartboard wall
+  mkWall(W * 2, 0, D, Math.PI); // south (banquette)
+  mkWall(D * 2, W, 0, -Math.PI / 2); // east
 
   // West wall has the doorway through to the fight hall: a wall segment
   // either side of the opening plus a lintel above it.
@@ -286,10 +291,11 @@ export function buildPub(world: World): PubRefs {
     root.add(bottle);
   }
 
-  const sign = new Panel(2.4, 0.45);
-  sign.setLines([{ text: 'IRON BALLS PUB', size: 76, colour: '#ffb000', bold: true }]);
-  sign.mesh.position.set(0, 2.0, -D + 0.02);
-  root.add(sign.mesh);
+  // The hand-made neon sign mounted on the back-bar wall (PNG if present,
+  // procedural neon fallback otherwise — see signs.ts).
+  const sign = buildSign('signs/iron-balls-bar.png', 2.6, 1.17);
+  sign.position.set(0, 1.92, -D + 0.03);
+  root.add(sign);
 
   // Stools at the bar.
   for (const x of [-1.6, -0.8, 0.8, 1.6]) {
@@ -311,14 +317,11 @@ export function buildPub(world: World): PubRefs {
     root.add(stool);
   }
 
-  // --- booths along the south wall ---------------------------------------------
-  for (const bx of [-3, 0, 3]) {
-    root.add(buildBooth(bx));
-  }
-
-  // The banquette bank: back-to-back benches mid-floor, parallel to the
-  // booths, with the darts corridor kept clear to the east.
-  root.add(buildBanquetteBank(-1.5, 1.4, 3.2));
+  // --- banquette seating along the south wall ---------------------------------
+  // A continuous raised plinth with a channel-backed bench, divided into
+  // booths, each with a square table and a freestanding bench opposite —
+  // the upmarket-bar look from the reference. Booth centres clear the exit.
+  root.add(buildBanquette([-2.3, -0.3, 1.75, 3.8]));
 
   // --- the EXIT — the door you came in through (south wall, west end).
   // Teleport onto its hazard mat and you're back at the main menu.
@@ -362,52 +365,47 @@ export function buildPub(world: World): PubRefs {
     root.add(mat);
   }
 
-  // --- darts corner -------------------------------------------------------------
+  // --- darts: on the NORTH wall, east end, beside the bar ---------------------
   const darts = PUB.darts;
-  // Cork blast circle behind/around the board.
+  // Cork blast circle, set just BEHIND the board (toward the wall).
   const corkSurround = new Mesh(
     new CircleGeometry(darts.surroundRadius, 24),
     new MeshStandardMaterial({ map: corkTexture(), roughness: 0.95 }),
   );
   corkSurround.name = 'cork-surround';
-  // The cork sits BEHIND the board (closer to the wall) — it was 5 mm in
-  // front and hid the whole board face.
-  corkSurround.position.set(darts.boardX + 0.02, darts.boardY, darts.boardZ);
-  corkSurround.rotation.y = -Math.PI / 2;
+  corkSurround.position.set(darts.boardX, darts.boardY, darts.boardZ - 0.02);
   root.add(corkSurround);
   // Steel cabinet ring around the cork.
   const cabinetRing = new Mesh(new TorusGeometry(darts.surroundRadius, 0.025, 8, 28), gunmetal(0.3));
   cabinetRing.position.copy(corkSurround.position);
-  cabinetRing.rotation.y = -Math.PI / 2;
   root.add(cabinetRing);
-  // The board itself.
+  // The board itself, facing out into the room (+z).
   const dartboard = new Mesh(
     new CircleGeometry(darts.boardRadius, 40),
     new MeshStandardMaterial({ map: dartboardTexture(), roughness: 0.9, side: DoubleSide }),
   );
   dartboard.name = 'dartboard';
   dartboard.position.set(darts.boardX, darts.boardY, darts.boardZ);
-  dartboard.rotation.y = -Math.PI / 2;
   root.add(dartboard);
-  // Spot lamp over the board.
+  // Spot lamp out in front of the board.
   const boardLight = new PointLight(0xfff0d8, 4, 3.5, 1.5);
-  boardLight.position.set(darts.boardX - 0.6, darts.boardY + 0.7, darts.boardZ);
+  boardLight.position.set(darts.boardX, darts.boardY + 0.7, darts.boardZ + 0.6);
   root.add(boardLight);
 
-  // Oche (throw line): hazard tape on the diamond plate.
+  // Oche (throw line): hazard tape across the lane, out in the room.
   const oche = new Mesh(
-    new PlaneGeometry(0.08, 1.2),
+    new PlaneGeometry(1.2, 0.08),
     new MeshStandardMaterial({ color: PALETTE.amber, emissive: PALETTE.amber, emissiveIntensity: 0.35 }),
   );
   oche.rotation.x = -Math.PI / 2;
-  oche.position.set(darts.ocheX, 0.012, darts.boardZ);
+  oche.position.set(darts.boardX, 0.012, darts.ocheZ);
   root.add(oche);
 
-  // The house dart BOX: an always-stocked open crate on a tall table right
-  // by the oche (darts fly back here, so it never runs dry).
+  // The house dart BOX: an always-stocked open crate on a tall table beside
+  // the oche (darts fly back here, so it never runs dry).
   const rackSlots: [number, number, number][] = [];
-  const boxX = darts.ocheX + 0.25;
-  const boxZ = darts.boardZ + 0.95;
+  const boxX = darts.boardX + 0.8;
+  const boxZ = darts.ocheZ;
   const tallLeg = new Mesh(new CylinderGeometry(0.04, 0.11, 1.13, 8), gunmetal(0.3));
   tallLeg.position.set(boxX, 0.565, boxZ);
   root.add(tallLeg);
@@ -439,10 +437,9 @@ export function buildPub(world: World): PubRefs {
     rackSlots.push([boxX - 0.12 + col * 0.12, 1.3, boxZ - 0.08 + row * 0.16]);
   }
 
-  // Leaderboard panel left of the board.
+  // Leaderboard panel on the wall, between the board and the bar.
   const dartsBoardPanel = new Panel(0.85, 0.7);
-  dartsBoardPanel.mesh.position.set(darts.wallX - 0.02, 1.7, darts.boardZ - 1.15);
-  dartsBoardPanel.mesh.rotation.y = -Math.PI / 2;
+  dartsBoardPanel.mesh.position.set(darts.boardX - 0.85, 1.7, darts.wallZ + 0.02);
   root.add(dartsBoardPanel.mesh);
 
   // --- IRON SNAKE arcade cabinet (north-west corner) -----------------------------
@@ -470,7 +467,7 @@ export function buildPub(world: World): PubRefs {
     root,
     dartboard,
     corkSurround,
-    dartCatchers: [eastWall],
+    dartCatchers: [northWall],
     dartRackSlots: rackSlots,
     glassSlots,
     dartsBoardPanel,
@@ -679,91 +676,92 @@ function buildFightHall(root: Group): { consolePanels: [Panel, Panel]; fightDisp
   return { consolePanels: [consolePanels[0], consolePanels[1]], fightDisplay, fightRims: [fightRims[0], fightRims[1]] };
 }
 
-/** A booth: padded bench against the south wall + a steel pedestal table. */
-function buildBooth(x: number): Group {
-  const D = PUB.halfDepth;
-  const booth = new Group();
-  const pad = new MeshStandardMaterial({ color: 0x5a2a20, roughness: 0.85 });
-
-  const seatBase = new Mesh(new BoxGeometry(1.5, 0.42, 0.5), darkSteel());
-  seatBase.position.set(x, 0.21, D - 0.28);
-  booth.add(seatBase);
-  const cushion = new Mesh(new BoxGeometry(1.46, 0.08, 0.46), pad);
-  cushion.position.set(x, 0.46, D - 0.28);
-  booth.add(cushion);
-  const backrest = new Mesh(new BoxGeometry(1.5, 0.6, 0.1), pad);
-  backrest.position.set(x, 0.8, D - 0.06);
-  booth.add(backrest);
-  const trim = new Mesh(new BoxGeometry(1.5, 0.04, 0.11), amberGlow(0.3));
-  trim.position.set(x, 1.12, D - 0.06);
-  booth.add(trim);
-
-  // Table matching SURFACES in config.ts: 0.9 m square top at y 0.78.
-  const pedestal = new Mesh(new CylinderGeometry(0.05, 0.16, 0.76, 8), gunmetal(0.3));
-  pedestal.position.set(x, 0.38, D - 0.7);
-  booth.add(pedestal);
-  const tabletop = new Mesh(new BoxGeometry(0.9, 0.04, 0.9), gunmetal(0.25));
-  tabletop.position.set(x, 0.76, D - 0.7);
-  booth.add(tabletop);
-  const edge = new Mesh(new BoxGeometry(0.92, 0.015, 0.92), darkSteel());
-  edge.position.set(x, 0.783, D - 0.7);
-  booth.add(edge);
-
-  return booth;
-}
-
 /**
- * The banquette bank: a long back-to-back bench spine running EAST–WEST,
- * parallel to the wall booths — exactly how a real pub fills its middle
- * floor. Each side gets two pedestal tables with a pair of stools across,
- * so every table seats a group of four (two on the banquette, two on
- * stools), and proper aisles form on both sides. Tables match the island
- * entries in SURFACES (config.ts).
+ * The banquette run along the south wall: a raised wooden plinth, a
+ * continuous channel-backed burgundy bench divided into booths by fins, and
+ * for each booth a square table with a freestanding bench opposite — the
+ * upmarket-bar layout from the reference. `centres` are the booth x's; the
+ * tables match the SURFACES entries in config.ts.
  */
-function buildBanquetteBank(cx: number, zSpine: number, length: number): Group {
-  const bank = new Group();
-  const pad = new MeshStandardMaterial({ color: 0x5a2a20, roughness: 0.85 });
+function buildBanquette(centres: number[]): Group {
+  const D = PUB.halfDepth;
+  const g = new Group();
+  g.name = 'banquette';
+  const wood = new MeshStandardMaterial({ color: WOOD, roughness: 0.7, metalness: 0.05 });
+  const woodDark = new MeshStandardMaterial({ color: 0x4a2f1a, roughness: 0.75 });
+  const pad = new MeshStandardMaterial({ color: BURGUNDY, roughness: 0.85 });
+  const tableMat = new MeshStandardMaterial({ color: 0x241a16, roughness: 0.5, metalness: 0.3 });
 
-  // The shared backrest spine, full length.
-  const spine = new Mesh(new BoxGeometry(length, 1.1, 0.1), pad);
-  spine.position.set(cx, 0.55, zSpine);
-  bank.add(spine);
-  const spineTrim = new Mesh(new BoxGeometry(length, 0.04, 0.12), amberGlow(0.3));
-  spineTrim.position.set(cx, 1.12, zSpine);
-  bank.add(spineTrim);
+  const x0 = centres[0] - 1.0;
+  const x1 = centres[centres.length - 1] + 1.0;
+  const span = x1 - x0;
+  const midX = (x0 + x1) / 2;
+  const PZ = D - 0.55; // bench/back centre line, against the wall
+  const STEP = 0.12; // plinth height
 
-  for (const side of [-1, 1]) {
-    // Full-length bench off each face of the spine.
-    const seatBase = new Mesh(new BoxGeometry(length, 0.42, 0.46), darkSteel());
-    seatBase.position.set(cx, 0.21, zSpine + side * 0.28);
-    bank.add(seatBase);
-    const cushion = new Mesh(new BoxGeometry(length - 0.04, 0.08, 0.42), pad);
-    cushion.position.set(cx, 0.46, zSpine + side * 0.28);
-    bank.add(cushion);
+  // Raised plinth the whole bench sits on (a step up off the floor).
+  const plinth = new Mesh(new BoxGeometry(span + 0.1, STEP, 1.0), wood);
+  plinth.position.set(midX, STEP / 2, D - 0.5);
+  g.add(plinth);
+  const plinthLip = new Mesh(new BoxGeometry(span + 0.1, 0.03, 0.05), woodDark);
+  plinthLip.position.set(midX, STEP, D - 1.0);
+  g.add(plinthLip);
 
-    // Two tables per side, stools across from each.
-    for (const tx of [cx - 0.8, cx + 0.8]) {
-      const tz = zSpine + side * 0.78;
-      const pedestal = new Mesh(new CylinderGeometry(0.05, 0.16, 0.76, 8), gunmetal(0.3));
-      pedestal.position.set(tx, 0.38, tz);
-      bank.add(pedestal);
-      const tabletop = new Mesh(new BoxGeometry(0.7, 0.04, 0.45), gunmetal(0.25));
-      tabletop.position.set(tx, 0.76, tz);
-      bank.add(tabletop);
-      for (const sx of [-0.22, 0.22]) {
-        const stool = new Group();
-        stool.position.set(tx + sx, 0, zSpine + side * 1.1);
-        const leg = new Mesh(new CylinderGeometry(0.03, 0.05, 0.62, 8), gunmetal(0.3));
-        leg.position.y = 0.31;
-        stool.add(leg);
-        const seat = new Mesh(new CylinderGeometry(0.17, 0.17, 0.06, 12), pad);
-        seat.position.y = 0.65;
-        stool.add(seat);
-        bank.add(stool);
-      }
-    }
+  // Continuous bench: base box + burgundy cushion, sitting on the plinth.
+  const base = new Mesh(new BoxGeometry(span, 0.32, 0.55), woodDark);
+  base.position.set(midX, STEP + 0.16, PZ);
+  g.add(base);
+  const cushion = new Mesh(new BoxGeometry(span - 0.04, 0.1, 0.5), pad);
+  cushion.position.set(midX, STEP + 0.37, PZ);
+  g.add(cushion);
+
+  // Tall channel-tufted back against the wall, built from vertical panels.
+  const backZ = D - 0.16;
+  const backTop = 1.35;
+  const panelW = 0.26;
+  const nPanels = Math.max(1, Math.round(span / panelW));
+  for (let i = 0; i < nPanels; i++) {
+    const px = x0 + (i + 0.5) * (span / nPanels);
+    const panel = new Mesh(new BoxGeometry((span / nPanels) - 0.03, backTop - (STEP + 0.42), 0.08), pad);
+    panel.position.set(px, (STEP + 0.42 + backTop) / 2, backZ);
+    g.add(panel);
   }
-  return bank;
+  // Capping rail along the top of the back.
+  const rail = new Mesh(new BoxGeometry(span, 0.06, 0.12), wood);
+  rail.position.set(midX, backTop, backZ);
+  g.add(rail);
+
+  // Divider fins between booths + a table and opposite bench per booth.
+  const bounds = [x0, ...centres.slice(0, -1).map((_, i) => (centres[i] + centres[i + 1]) / 2), x1];
+  for (const bx of bounds) {
+    const fin = new Mesh(new BoxGeometry(0.06, backTop - STEP, 0.95), wood);
+    fin.position.set(bx, STEP + (backTop - STEP) / 2, D - 0.5);
+    g.add(fin);
+  }
+  for (const cx of centres) {
+    // Square table jutting toward the aisle.
+    const tz = D - 1.45;
+    const pedestal = new Mesh(new CylinderGeometry(0.05, 0.14, 0.72, 8), tableMat);
+    pedestal.position.set(cx, 0.36, tz);
+    g.add(pedestal);
+    const top = new Mesh(new BoxGeometry(0.7, 0.05, 0.7), tableMat);
+    top.position.set(cx, 0.74, tz);
+    g.add(top);
+    const edge = new Mesh(new BoxGeometry(0.72, 0.02, 0.72), woodDark);
+    edge.position.set(cx, 0.765, tz);
+    g.add(edge);
+    // Freestanding bench across the table, facing the wall.
+    const benchBase = new Mesh(new BoxGeometry(0.9, 0.3, 0.4), woodDark);
+    benchBase.position.set(cx, 0.15, D - 1.95);
+    g.add(benchBase);
+    const benchPad = new Mesh(new BoxGeometry(0.86, 0.09, 0.36), pad);
+    benchPad.position.set(cx, 0.35, D - 1.95);
+    g.add(benchPad);
+    const benchBack = new Mesh(new BoxGeometry(0.9, 0.5, 0.08), woodDark);
+    benchBack.position.set(cx, 0.6, D - 2.13);
+    g.add(benchBack);
+  }
+  return g;
 }
 
 /** Classic upright cabinet: marquee, angled screen, control deck, side art. */
@@ -806,7 +804,9 @@ function buildArcadeCabinet(): { cabinet: Group; screen: Mesh; stick: Group } {
   cabinet.add(marquee);
   const marqueeText = new Panel(0.6, 0.2);
   marqueeText.setLines([{ text: 'IRON SNAKE', size: 60, colour: '#39ff14', bold: true }]);
-  marqueeText.mesh.position.set(0, 1.84, 0.301);
+  // Sit the text clearly PROUD of the marquee face (front at z 0.30) so the
+  // green text and the metal panel stop z-fighting at the top of the cabinet.
+  marqueeText.mesh.position.set(0, 1.84, 0.315);
   cabinet.add(marqueeText.mesh);
 
   // Screen: angled back CRT face, pushed PROUD of the body — the tilt used
@@ -824,16 +824,21 @@ function buildArcadeCabinet(): { cabinet: Group; screen: Mesh; stick: Group } {
   screen.rotation.x = -0.18;
   cabinet.add(screen);
 
-  // Control deck: joystick + two buttons.
-  const deck = new Mesh(new BoxGeometry(0.6, 0.07, 0.3), gunmetal(0.3));
-  deck.position.set(0, 1.05, 0.38);
-  deck.rotation.x = 0.12;
+  // Control deck JUTS OUT below the screen so the joystick isn't tucked
+  // under the screen's overhang (the screen's bottom edge sits near z 0.4).
+  const deck = new Mesh(new BoxGeometry(0.6, 0.08, 0.34), gunmetal(0.3));
+  deck.position.set(0, 1.0, 0.5);
+  deck.rotation.x = 0.18;
   cabinet.add(deck);
+  // Bracket linking the jutting deck back to the body.
+  const bracket = new Mesh(new BoxGeometry(0.5, 0.1, 0.22), darkSteel());
+  bracket.position.set(0, 0.92, 0.4);
+  cabinet.add(bracket);
   // The joystick pivots at its base — SnakeSystem tilts this group when a
   // hand pushes the stick around.
   const stick = new Group();
   stick.name = 'snake-joystick';
-  stick.position.set(-0.12, 1.08, 0.38);
+  stick.position.set(-0.12, 1.04, 0.5);
   const shaft = new Mesh(new CylinderGeometry(0.012, 0.012, 0.1, 6), darkSteel());
   shaft.position.y = 0.05;
   stick.add(shaft);
@@ -852,8 +857,8 @@ function buildArcadeCabinet(): { cabinet: Group; screen: Mesh; stick: Group } {
       new CylinderGeometry(0.022, 0.026, 0.018, 10),
       new MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 0.4, roughness: 0.4 }),
     );
-    button.position.set(bx, 1.095, 0.39);
-    button.rotation.x = 0.12;
+    button.position.set(bx, 1.04, 0.52);
+    button.rotation.x = 0.18;
     cabinet.add(button);
   }
 

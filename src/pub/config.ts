@@ -4,13 +4,12 @@
  * One low-ceilinged steel boozer, roughly 9 m × 6 m, everything in metres
  * and world space (no mirroring — all twelve punters share one room):
  *
- *        z = -3  ───────────── BAR (north wall) ─────────────
- *          arcade │ taps & shelves          bar counter      │
- *          corner │                                          │ dartboard
- *        x = -4.5 │              open floor                  │ x = +4.5
- *                 │                                   oche ┊ │ (east wall)
- *          booth  │  booth        booth                      │
- *        z = +3  ────────────── (south wall) ────────────────
+ *        z = -3.6 ──── BAR (north wall) ───────────── dartboard ──
+ *          arcade │ taps & shelves     bar counter     oche┊      │
+ *          corner │                                                │
+ *        x = -5.2 │              open floor / aisle                │ x = +5.2
+ *                 │  ╔═ banquette booths along the south wall ═╗   │
+ *      door ▸ z = +3.6 ───────────── (south wall) ───────────────
  */
 
 import { PALETTE } from '../config.js';
@@ -41,15 +40,16 @@ export const PUB = {
   /** Tap positions along the counter (x), used by the build and the barkeep. */
   tapXs: [-1.2, -0.4, 0.4, 1.2],
 
-  // Dartboard on the east wall (standard: bull at 1.73 m, oche 2.37 m out).
+  // Dartboard on the NORTH wall (same wall as the bar), off to the east end
+  // beside the counter. Bull at 1.73 m, oche 2.37 m out into the room.
   darts: {
-    wallX: HALF_W,
-    boardX: HALF_W - 0.04, // proud of the wall on its cabinet
-    boardY: 1.73,
-    boardZ: 0.6,
+    wallZ: -HALF_D,
+    boardX: 3.8, // east of the bottle shelf (bottles span x ±2.3)
+    boardY: 1.6,
+    boardZ: -HALF_D + 0.04, // proud of the north wall
     boardRadius: 0.42, // oversized house board, filling its cork circle
-    surroundRadius: 0.45, // cork blast zone around it
-    ocheX: HALF_W - 0.04 - 2.37,
+    surroundRadius: 0.5, // cork blast zone around it
+    ocheZ: -HALF_D + 2.37, // throw line, out into the room
     rackSlots: 6,
   },
 
@@ -57,8 +57,8 @@ export const PUB = {
    *  its mat and you're back at the FIRE FIGHT main menu. */
   exit: { x0: -4.8, x1: -4.0, height: 2.1 },
 
-  // Open floor east of the banquette bank (the old spot is now furniture).
-  spawn: { x: 1.3, y: 0, z: 0.8 },
+  // You spawn just INSIDE the door, like you've walked in off the street.
+  spawn: { x: -4.35, y: 0, z: 2.65 },
 
   /** Glasses on the bar at opening time — they ALL start under the counter;
    *  the barkeep brings each one out between his other jobs. */
@@ -193,16 +193,16 @@ export const SURFACES: Surface[] = [
     minZ: PUB.bar.z - PUB.bar.depth,
     maxZ: PUB.bar.z,
   },
-  // Booth tables (kept in sync with environment.ts buildBooth calls).
-  { y: 0.78, minX: -3.45, maxX: -2.55, minZ: HALF_D - 1.15, maxZ: HALF_D - 0.25 },
-  { y: 0.78, minX: -0.45, maxX: 0.45, minZ: HALF_D - 1.15, maxZ: HALF_D - 0.25 },
-  { y: 0.78, minX: 2.55, maxX: 3.45, minZ: HALF_D - 1.15, maxZ: HALF_D - 0.25 },
-  // The banquette-bank tables (environment.ts buildBanquetteBank: spine at
-  // x -1.5 / z 1.4, tables at x ±0.8 off centre, z ±0.78 off the spine).
-  { y: 0.78, minX: -2.65, maxX: -1.95, minZ: 0.395, maxZ: 0.845 },
-  { y: 0.78, minX: -1.05, maxX: -0.35, minZ: 0.395, maxZ: 0.845 },
-  { y: 0.78, minX: -2.65, maxX: -1.95, minZ: 1.955, maxZ: 2.405 },
-  { y: 0.78, minX: -1.05, maxX: -0.35, minZ: 1.955, maxZ: 2.405 },
+  // Banquette booth tables along the south wall (environment.ts
+  // buildBanquette: booths centred at x −2.3 / −0.3 / 1.75 / 3.8, each
+  // table 0.7 m square at z = HALF_D − 1.45).
+  ...[-2.3, -0.3, 1.75, 3.8].map((cx) => ({
+    y: 0.76,
+    minX: cx - 0.35,
+    maxX: cx + 0.35,
+    minZ: HALF_D - 1.8,
+    maxZ: HALF_D - 1.1,
+  })),
 ];
 
 /** Accent colours cycled by join order — distinct fire tints per punter. */
