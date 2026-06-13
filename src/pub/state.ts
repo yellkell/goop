@@ -13,6 +13,9 @@ export interface RemotePunter {
   id: string;
   name: string;
   accent: number;
+  /** Their main-game skin picks (empty = default look). */
+  av: string;
+  pf: string;
   rig: BoxerRig;
   nameTag: Panel;
   /** Latest network pose; rigs ease toward these each frame. */
@@ -33,10 +36,11 @@ export interface PubRefs {
   dartsBoardPanel: Panel;
   arcadeScreen: Mesh;
   arcadePos: [number, number, number];
-  hiScorePanel: Panel;
   /** The cabinet root + its joystick stick (pivot at the deck). */
   arcadeCabinet: Group;
   snakeStick: Group;
+  /** Fight hall: each platform's glowing rim — re-skinned per claimant. */
+  fightRims: [Mesh, Mesh];
   /** Fight hall: claim console panels (side 0, side 1) + the big display. */
   consolePanels: [Panel, Panel];
   fightDisplay: Panel;

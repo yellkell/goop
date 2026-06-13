@@ -10,6 +10,8 @@ import { createSystem, InputComponent } from '@iwsdk/core';
 import { Color, Group, MeshStandardMaterial, Quaternion, Vector3 } from 'three';
 import { buildBoxer } from '../../avatar/boxer.js';
 import { buildHand, setHandCurl } from '../../avatar/hands.js';
+import { applyAvatarSkin, avatarSkin } from '../../avatar/skins.js';
+import { customization } from '../../menu/customization.js';
 import { solveTorso } from '../../avatar/boxer.js';
 import { PALETTE, teamColor } from '../../config.js';
 import { onSnap, onSpawn, pubSendRaw } from '../net.js';
@@ -155,6 +157,8 @@ export class PubPlayerSystem extends createSystem({}) {
     if (pub.punters.has(p.id) || p.id === pub.myId) return;
     const rig = buildBoxer(1);
     retintRig(rig.all, p.accent);
+    // Their arena skin rides over the accent tint (LEDs keep the accent).
+    if (p.av) for (const part of rig.all) applyAvatarSkin(part, avatarSkin(p.av));
     for (const part of rig.all) this.scene.add(part);
     rig.head.position.set(p.head[0], p.head[1] || 1.6, p.head[2]);
 
@@ -167,6 +171,8 @@ export class PubPlayerSystem extends createSystem({}) {
       id: p.id,
       name: p.name,
       accent: p.accent,
+      av: p.av ?? '',
+      pf: p.pf ?? '',
       rig,
       nameTag,
       head: p.head,
@@ -194,6 +200,7 @@ export class PubPlayerSystem extends createSystem({}) {
     for (const hand of ['left', 'right'] as const) {
       const glove = buildHand(hand === 'left' ? 1 : -1);
       retintLocal(glove, pub.myAccent);
+      applyAvatarSkin(glove, avatarSkin(customization.avatar)); // your skin walks in too
       grips[hand].add(glove);
       this.localGloves.push(glove);
     }

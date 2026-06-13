@@ -167,7 +167,7 @@ function boardRows() {
 
 function playerNet(id) {
   const p = players.get(id);
-  return { id, name: p.name, accent: p.accent, head: p.head, left: p.left, right: p.right };
+  return { id, name: p.name, accent: p.accent, av: p.av, pf: p.pf, head: p.head, left: p.left, right: p.right };
 }
 
 function releaseSnake(id) {
@@ -265,6 +265,8 @@ wss.on('connection', (ws) => {
         ws,
         name: String(msg.name || myId).slice(0, 14),
         accent,
+        av: String(msg.av || '').slice(0, 16),
+        pf: String(msg.pf || '').slice(0, 16),
         head: ZERO_POSE,
         left: ZERO_POSE,
         right: ZERO_POSE,

@@ -23,7 +23,7 @@ export function onSnap(fn: (poses: SnapPoses) => void): void {
   snapHook = fn;
 }
 
-export function pubConnect(url: string, name: string): void {
+export function pubConnect(url: string, name: string, av = '', pf = ''): void {
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
   try {
     ws = new WebSocket(url);
@@ -32,7 +32,7 @@ export function pubConnect(url: string, name: string): void {
     return;
   }
 
-  ws.onopen = () => pubSendRaw({ t: 'hello', name });
+  ws.onopen = () => pubSendRaw({ t: 'hello', name, av, pf });
 
   ws.onmessage = (e) => {
     let msg: PubServerMsg;

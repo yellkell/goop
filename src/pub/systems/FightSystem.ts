@@ -22,9 +22,11 @@
  */
 
 import { createSystem, InputComponent } from '@iwsdk/core';
-import { Quaternion, Vector3 } from 'three';
+import { MeshStandardMaterial, Quaternion, Vector3 } from 'three';
 import type { XROrigin } from '@iwsdk/xr-input';
-import { BODY_IK, FIREBALL } from '../../config.js';
+import { BODY_IK, FIREBALL, teamColor } from '../../config.js';
+import { platformSkin } from '../../avatar/skins.js';
+import { customization } from '../../menu/customization.js';
 import {
   createFireVisual,
   emberBurst,
@@ -163,6 +165,34 @@ export class FightSystem extends createSystem({}) {
     this.renderDisplay();
   }
 
+  private rimKey = '';
+
+  /**
+   * Dress each platform rim in its claimant's PLATFORM skin the moment a
+   * corner locks in (back to corner colours when it frees up) — your arena
+   * cosmetics follow you onto the fight-hall floor.
+   */
+  private dressRims(): void {
+    const rims = pub.refs?.fightRims;
+    if (!rims) return;
+    const pfFor = (side: 0 | 1): string => {
+      const id = pub.fight.sides[side];
+      if (!id) return '';
+      if (id === pub.myId) return customization.platform;
+      return pub.punters.get(id)?.pf ?? '';
+    };
+    const key = `${pfFor(0)}|${pfFor(1)}`;
+    if (key === this.rimKey) return;
+    this.rimKey = key;
+    ([0, 1] as const).forEach((side) => {
+      const pf = pfFor(side);
+      const colour = pf ? platformSkin(pf).neon : teamColor(side);
+      const mat = rims[side].material as MeshStandardMaterial;
+      mat.color.setHex(colour);
+      mat.emissive.setHex(colour);
+    });
+  }
+
   update(delta: number): void {
     this.time += delta;
     this.consoleCooldown = Math.max(0, this.consoleCooldown - delta);
@@ -170,6 +200,7 @@ export class FightSystem extends createSystem({}) {
     this.camera.getWorldQuaternion(_camQ);
 
     this.checkConsoles();
+    this.dressRims();
 
     const f = pub.fight;
     const fighting = f.phase === 'fighting';

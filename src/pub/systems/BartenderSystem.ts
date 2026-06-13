@@ -48,6 +48,8 @@ const AISLE_MAX = 2.35;
 
 const _target = new Vector3();
 const _punter = new Vector3();
+/** Glove pose targets — the hands EASE toward these instead of teleporting. */
+const REST: [Vector3, Vector3] = [new Vector3(-0.28, 1.02, -0.18), new Vector3(0.28, 1.02, -0.18)];
 
 export class BartenderSystem extends createSystem({}) {
   private root!: Group;
@@ -60,6 +62,7 @@ export class BartenderSystem extends createSystem({}) {
   private arrived = false;
   private animTime = 0;
   private bob = 0;
+  private gloveTarget: [Vector3, Vector3] = [REST[0].clone(), REST[1].clone()];
 
   init(): void {
     this.buildBody();
@@ -156,13 +159,13 @@ export class BartenderSystem extends createSystem({}) {
     const dx = task.x - this.root.position.x;
     if (!this.arrived) {
       if (Math.abs(dx) > 0.04) {
-        const step = Math.sign(dx) * Math.min(Math.abs(dx), speed * delta);
+        // Ease off as he closes in — no hard stop at the mark.
+        const step = Math.sign(dx) * Math.min(Math.abs(dx), Math.max(0.25, Math.min(speed, Math.abs(dx) * 3)) * delta);
         this.root.position.x += step;
-        this.bob += delta * 9;
-        this.root.position.y = Math.abs(Math.sin(this.bob)) * 0.015;
+        this.bob += delta * 6;
+        this.root.position.y = Math.abs(Math.sin(this.bob)) * 0.011;
       } else {
         this.arrived = true;
-        this.root.position.y = 0;
       }
     }
 
@@ -172,6 +175,15 @@ export class BartenderSystem extends createSystem({}) {
       this.animateTask(task, delta);
       if (this.taskTimer <= 0) this.finishTask(task);
     }
+
+    if (this.arrived) {
+      this.root.position.y -= this.root.position.y * Math.min(1, delta * 8);
+    }
+
+    // Hands flow between work poses instead of snapping.
+    const k = Math.min(1, delta * 7);
+    this.rig.gloves[0].position.lerp(this.gloveTarget[0], k);
+    this.rig.gloves[1].position.lerp(this.gloveTarget[1], k);
 
     // Head: glance at the nearest punter, otherwise mind the bar.
     this.aimHead(delta);
@@ -221,8 +233,8 @@ export class BartenderSystem extends createSystem({}) {
 
   private restGloves(): void {
     // Knuckles toward the counter (local −z), hands at service height.
-    this.rig.gloves[0].position.set(-0.28, 1.02, -0.18);
-    this.rig.gloves[1].position.set(0.28, 1.02, -0.18);
+    this.gloveTarget[0].copy(REST[0]);
+    this.gloveTarget[1].copy(REST[1]);
     this.rig.gloves[0].rotation.set(0, 0, 0);
     this.rig.gloves[1].rotation.set(0, 0, 0);
   }
@@ -232,7 +244,7 @@ export class BartenderSystem extends createSystem({}) {
     switch (task.kind) {
       case 'wipe': {
         // Right glove sweeps circles over the counter top.
-        this.rig.gloves[1].position.set(
+        this.gloveTarget[1].set(
           0.2 + Math.cos(t * 3.2) * 0.16,
           1.06,
           -0.38 + Math.sin(t * 3.2) * 0.1,
@@ -241,8 +253,8 @@ export class BartenderSystem extends createSystem({}) {
       }
       case 'pour': {
         // Left glove holds the glass under the tap; right rests the handle.
-        this.rig.gloves[0].position.set(-0.08, 1.06, -0.42);
-        this.rig.gloves[1].position.set(0.16, 1.32, -0.34);
+        this.gloveTarget[0].set(-0.08, 1.06, -0.42);
+        this.gloveTarget[1].set(0.16, 1.32, -0.34);
         // Stream runs while the glass is under the spout (world space; the
         // glove's local offset mirrors through the root's 180° yaw).
         this.pourStream.visible = this.taskTimer > 0.8;
@@ -251,8 +263,8 @@ export class BartenderSystem extends createSystem({}) {
       }
       case 'polish': {
         // Glass in the left, right buffs it in little circles.
-        this.rig.gloves[0].position.set(-0.12, 1.18, -0.28);
-        this.rig.gloves[1].position.set(
+        this.gloveTarget[0].set(-0.12, 1.18, -0.28);
+        this.gloveTarget[1].set(
           0.02 + Math.cos(t * 5) * 0.05,
           1.2 + Math.sin(t * 5) * 0.04,
           -0.3,
@@ -262,7 +274,7 @@ export class BartenderSystem extends createSystem({}) {
       case 'deliver': {
         // Reach out and set the fresh pint down on its slot.
         const k = 1 - Math.max(0, this.taskTimer / task.duration);
-        this.rig.gloves[0].position.set(-0.1, 1.18 - k * 0.12, -0.3 - k * 0.25);
+        this.gloveTarget[0].set(-0.1, 1.18 - k * 0.12, -0.3 - k * 0.25);
         break;
       }
     }
