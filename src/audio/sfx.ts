@@ -304,27 +304,27 @@ export function roundEnd(win: boolean): void {
 /** End-of-match fanfare / sad cue. */
 export function matchEnd(win: boolean): void {
   if (win) {
-    bellStrike(0);
-    bellStrike(0.24);
-    bellStrike(0.48);
-    whooshNoise(0.9, 0.16, 180, 1400, 0.18);
-    [196, 247, 294].forEach((f) =>
-      tone({ freq: f, to: f * 0.98, type: 'sawtooth', dur: 1.15, gain: 0.08, delay: 0.5 }),
+    // Wooshing triumph — no tune. A big air-rush builds and lands on a
+    // gut-punch impact, then a low power drone (root + octave) rings out.
+    const HIT = 0.62; // when the rising whoosh lands
+    // The build: two layered noise sweeps rushing upward into the hit.
+    whooshNoise(HIT + 0.05, 0.26, 130, 2200);
+    whooshNoise(HIT + 0.05, 0.18, 320, 3600, 0.06);
+    // Rising sub underneath the build for weight.
+    tone({ freq: 60, to: 150, type: 'sine', dur: HIT, gain: 0.22 });
+    // The landing: layered strikes + a downward impact whoosh.
+    bellStrike(HIT);
+    clank(150, 0.16, 0.5, HIT);
+    clank(300, 0.1, 0.35, HIT + 0.02);
+    whooshNoise(0.5, 0.24, 2600, 200, HIT);
+    tone({ freq: 80, to: 44, type: 'sine', dur: 0.45, gain: 0.26, delay: HIT }); // impact thump
+    // Triumphant power drone — a sustained root + octave (no melody) that
+    // swells in just after the hit and rings out long.
+    [98, 196].forEach((f) =>
+      tone({ freq: f, to: f * 1.005, type: 'sawtooth', dur: 1.6, gain: 0.1, delay: HIT + 0.04 }),
     );
-    [
-      [392, 494, 587],
-      [523, 659, 784],
-      [659, 784, 988],
-      [784, 988, 1175],
-    ].forEach((chord, i) => {
-      for (const f of chord) {
-        tone({ freq: f, type: 'triangle', dur: 0.34, gain: 0.16, delay: 0.68 + i * 0.28 });
-      }
-      clank(700 + i * 170, 0.05, 0.16, 0.72 + i * 0.28);
-    });
-    bellStrike(1.88);
-    tone({ freq: 1047, type: 'triangle', dur: 0.8, gain: 0.2, delay: 1.9 });
-    tone({ freq: 1319, type: 'triangle', dur: 0.7, gain: 0.12, delay: 1.92 });
+    bellStrike(HIT + 0.04);
+    bellStrike(HIT + 0.55);
   } else {
     bellStrike(0);
     bellStrike(0.28);
