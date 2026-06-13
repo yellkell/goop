@@ -36,6 +36,8 @@ export interface BoxerRig {
   all: Group[];
 }
 
+export const GLOVE_VISUAL_SCALE = 1.28;
+
 function chassisMat(emissive = 0, intensity = 0): MeshStandardMaterial {
   return new MeshStandardMaterial({
     color: PALETTE.gunmetal,
@@ -72,6 +74,7 @@ function glowMat(color: number, intensity = 1.4): MeshStandardMaterial {
 export function buildGlove(team: number): Group {
   const glove = new Group();
   const accent = teamColor(team);
+  glove.scale.setScalar(GLOVE_VISUAL_SCALE);
 
   // The fist: one thick armoured block.
   const fist = new Mesh(new BoxGeometry(0.16, 0.125, 0.17), chassisMat(accent, 0.06));

@@ -6,7 +6,7 @@
 
 import { createSystem, InputComponent } from '@iwsdk/core';
 import type { Group } from 'three';
-import { buildGlove } from '../avatar/boxer.js';
+import { buildGlove, GLOVE_VISUAL_SCALE } from '../avatar/boxer.js';
 import { app } from '../menu/appState.js';
 
 const HANDS = ['left', 'right'] as const;
@@ -32,7 +32,7 @@ export class PlayerGloveSystem extends createSystem({}) {
 
       // A little squash while squeezing — feels grippy without physics.
       const squeezing = this.input.xr.gamepads[hand]?.getButtonPressed(InputComponent.Squeeze) ?? false;
-      const target = squeezing ? 0.88 : 1;
+      const target = GLOVE_VISUAL_SCALE * (squeezing ? 0.88 : 1);
       const s = glove.scale.x + (target - glove.scale.x) * Math.min(1, delta * 14);
       glove.scale.setScalar(s);
     }

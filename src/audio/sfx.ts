@@ -194,7 +194,20 @@ export function hitDealt(): void {
   tone({ freq: 260, to: 78, type: 'sine', dur: 0.18, gain: 0.3 });
 }
 
-/** You take a hit — a chassis-rattling slam. */
+/** Aim Training target impacts: disc = bright gong, cutout = hollow armour. */
+export function trainingTargetHit(kind: 0 | 1): void {
+  if (kind === 0) {
+    clank(920, 0.18, 0.42);
+    clank(1380, 0.08, 0.26, 0.015);
+    tone({ freq: 740, to: 980, type: 'triangle', dur: 0.11, gain: 0.12 });
+  } else {
+    clank(360, 0.18, 0.28);
+    tone({ freq: 150, to: 58, type: 'sawtooth', dur: 0.16, gain: 0.2 });
+    whooshNoise(0.09, 0.08, 520, 180);
+  }
+}
+
+/** You take a hit: a chassis-rattling slam. */
 export function hitTaken(): void {
   tone({ freq: 105, to: 36, type: 'sawtooth', dur: 0.3, gain: 0.3 });
   clank(270, 0.16, 0.28, 0.01);
@@ -261,14 +274,32 @@ export function roundEnd(win: boolean): void {
 
 /** End-of-match fanfare / sad cue. */
 export function matchEnd(win: boolean): void {
-  bellStrike(0);
-  bellStrike(0.28);
-  bellStrike(0.56);
   if (win) {
-    [523, 659, 784, 1047].forEach((f, i) =>
-      tone({ freq: f, type: 'triangle', dur: 0.16, gain: 0.22, delay: 0.7 + i * 0.12 }),
+    bellStrike(0);
+    bellStrike(0.24);
+    bellStrike(0.48);
+    whooshNoise(0.9, 0.16, 180, 1400, 0.18);
+    [196, 247, 294].forEach((f) =>
+      tone({ freq: f, to: f * 0.98, type: 'sawtooth', dur: 1.15, gain: 0.08, delay: 0.5 }),
     );
+    [
+      [392, 494, 587],
+      [523, 659, 784],
+      [659, 784, 988],
+      [784, 988, 1175],
+    ].forEach((chord, i) => {
+      for (const f of chord) {
+        tone({ freq: f, type: 'triangle', dur: 0.34, gain: 0.16, delay: 0.68 + i * 0.28 });
+      }
+      clank(700 + i * 170, 0.05, 0.16, 0.72 + i * 0.28);
+    });
+    bellStrike(1.88);
+    tone({ freq: 1047, type: 'triangle', dur: 0.8, gain: 0.2, delay: 1.9 });
+    tone({ freq: 1319, type: 'triangle', dur: 0.7, gain: 0.12, delay: 1.92 });
   } else {
+    bellStrike(0);
+    bellStrike(0.28);
+    bellStrike(0.56);
     [392, 330, 262].forEach((f, i) =>
       tone({ freq: f, to: f * 0.9, type: 'sine', dur: 0.24, gain: 0.2, delay: 0.7 + i * 0.16 }),
     );
