@@ -202,14 +202,17 @@ export function trainingTargetHit(kind: 0 | 1): void {
     tone({ freq: 740, to: 980, type: 'triangle', dur: 0.11, gain: 0.12 });
   } else {
     clank(360, 0.18, 0.28);
-    tone({ freq: 150, to: 58, type: 'sawtooth', dur: 0.16, gain: 0.2 });
-    whooshNoise(0.09, 0.08, 520, 180);
+    clank(520, 0.08, 0.18, 0.025);
+    tone({ freq: 150, to: 72, type: 'triangle', dur: 0.16, gain: 0.18 });
   }
 }
 
 export function clap(): void {
-  whooshNoise(0.045, 0.09, 2200, 4200);
-  tone({ freq: 1250, to: 840, type: 'triangle', dur: 0.055, gain: 0.08 });
+  clank(1180, 0.18, 0.16);
+  clank(1680, 0.08, 0.1, 0.018);
+  whooshNoise(0.055, 0.16, 1800, 5200);
+  tone({ freq: 1250, to: 840, type: 'triangle', dur: 0.07, gain: 0.16 });
+  tone({ freq: 260, to: 150, type: 'sine', dur: 0.08, gain: 0.1 });
 }
 
 export function fistBump(): void {
