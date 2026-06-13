@@ -252,7 +252,7 @@ export class PubPlayerSystem extends createSystem({}) {
       this.voiceStarted = ok; // only a real success locks it in
       if (!ok) this.voiceRetryCooldown = 2; // let them try again on the next press
       // eslint-disable-next-line no-console
-      console.info(ok ? '[pub voice] mic live' : '[pub voice] mic unavailable (permission/WebCodecs) — will retry on next press');
+      console.info(ok ? '[pub voice] mic live' : '[pub voice] mic unavailable (permission?) — will retry on next press');
     });
   }
 

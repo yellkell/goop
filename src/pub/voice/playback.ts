@@ -1,52 +1,38 @@
 /**
- * Spatialised playback for pub voice chat. Each remote punter gets their own
- * Opus decoder feeding a WebAudio HRTF PannerNode pinned to their head, with
- * the listener glued to your camera — so the room sounds like a room: voices
- * come from where the iron skulls actually stand, and fall off with distance.
+ * Spatialised playback for pub voice chat. Each remote punter gets a WebAudio
+ * HRTF PannerNode pinned to their head, with the listener glued to your camera
+ * — so the room sounds like a room: voices come from where the iron skulls
+ * actually stand, and fall off with distance. This is the SAME panner graph
+ * the arena uses for the rival's WebRTC voice.
  *
- * Frames arrive already routed by the server (the match bubble is enforced
- * there), so we just decode whatever we're handed and place it in 3D. A small
- * jitter buffer smooths network unevenness; decoded PCM is scheduled back to
- * back per speaker so there are no gaps or overlaps.
+ * Frames arrive as plain Int16 PCM (see voice/capture.ts — no WebCodecs), each
+ * tagged with its sample rate, already routed by the server (the match bubble
+ * is enforced there). We turn each frame into a short AudioBuffer and schedule
+ * them back to back per speaker behind a small jitter buffer.
  *
- * Like the capture side, WebCodecs (AudioDecoder/EncodedAudioChunk) is reached
- * through globalThis since it isn't in the TS DOM lib.
+ * Wire frame: [8-byte float64 LE sample rate][Int16 LE mono PCM].
  */
 
 import type { Quaternion, Vector3 } from 'three';
 import { audioContext } from '../../audio/sfx.js';
 
-const SAMPLE_RATE = 48000;
 const JITTER = 0.12; // s of lead before a speaker starts — absorbs network jitter
-const SPEAKING_MS = 250; // recent-frame window for the "is talking" indicator
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const G = globalThis as any;
+const SPEAKING_MS = 350; // recent-frame window for the "is talking" indicator
 
 interface Speaker {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  decoder: any;
   panner: PannerNode;
   gain: GainNode;
   nextTime: number; // scheduling cursor in ctx time
-  lastFrame: number; // performance.now() of the last decoded frame
+  lastFrame: number; // performance.now() of the last frame
 }
 
 const speakers = new Map<string, Speaker>();
-let warnedNoDecoder = false;
 
 function ensureSpeaker(id: string): Speaker | null {
   const ctx = audioContext();
   if (!ctx) return null;
   const existing = speakers.get(id);
   if (existing) return existing;
-  if (!G.AudioDecoder) {
-    if (!warnedNoDecoder) {
-      console.warn('[pub voice] WebCodecs decode unavailable — voices muted');
-      warnedNoDecoder = true;
-    }
-    return null;
-  }
 
   const panner = ctx.createPanner();
   panner.panningModel = 'HRTF';
@@ -55,62 +41,41 @@ function ensureSpeaker(id: string): Speaker | null {
   panner.maxDistance = 24;
   panner.rolloffFactor = 1.1;
   const gain = ctx.createGain();
-  gain.gain.value = 1.4; // voices sit just above the sfx bed
+  gain.gain.value = 1.5; // voices sit just above the sfx bed
   panner.connect(gain).connect(ctx.destination);
 
-  const speaker: Speaker = { decoder: null, panner, gain, nextTime: 0, lastFrame: 0 };
-  speaker.decoder = new G.AudioDecoder({
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    output: (audioData: any) => schedule(speaker, audioData),
-    error: (e: Error) => console.warn('[pub voice] decoder error', e),
-  });
-  speaker.decoder.configure({ codec: 'opus', sampleRate: SAMPLE_RATE, numberOfChannels: 1 });
+  const speaker: Speaker = { panner, gain, nextTime: 0, lastFrame: 0 };
   speakers.set(id, speaker);
   return speaker;
 }
 
-/** Decode and queue one Opus frame from punter `id`. */
+/** Decode (just int16→float) and queue one PCM frame from punter `id`. */
 export function pushVoiceFrame(id: string, frame: ArrayBuffer): void {
   if (frame.byteLength <= 8) return;
-  const speaker = ensureSpeaker(id);
-  if (!speaker?.decoder) return;
-  const timestamp = new DataView(frame).getFloat64(0, true);
-  const data = new Uint8Array(frame, 8);
-  try {
-    speaker.decoder.decode(new G.EncodedAudioChunk({ type: 'key', timestamp, data }));
-  } catch {
-    /* a malformed frame just drops */
-  }
-  speaker.lastFrame = performance.now();
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function schedule(speaker: Speaker, audioData: any): void {
   const ctx = audioContext();
-  if (!ctx) {
-    audioData.close();
-    return;
-  }
-  const frames: number = audioData.numberOfFrames;
-  const sr: number = audioData.sampleRate || SAMPLE_RATE;
-  const buf = ctx.createBuffer(1, frames, sr);
-  try {
-    audioData.copyTo(buf.getChannelData(0), { planeIndex: 0, format: 'f32-planar' });
-  } catch {
-    audioData.close();
-    return;
-  }
-  audioData.close();
+  if (!ctx) return;
+  // Voice may be the first thing to wake the graph in a quiet pub.
+  if (ctx.state === 'suspended') void ctx.resume();
+  const speaker = ensureSpeaker(id);
+  if (!speaker) return;
+
+  const rate = new DataView(frame).getFloat64(0, true) || 16000;
+  const pcm = new Int16Array(frame, 8);
+  if (pcm.length === 0) return;
+  const buf = ctx.createBuffer(1, pcm.length, rate);
+  const ch = buf.getChannelData(0);
+  for (let i = 0; i < pcm.length; i++) ch[i] = pcm[i] / 32768;
 
   const src = ctx.createBufferSource();
-  src.buffer = buf;
+  src.buffer = buf; // the context resamples `rate` → output rate automatically
   src.connect(speaker.panner);
   const now = ctx.currentTime;
-  // If we've fallen behind (stall) re-prime the jitter buffer rather than
-  // dumping a backlog all at once.
+  // If we've fallen behind (a talk gap or a stall), re-prime the jitter buffer
+  // rather than dumping a backlog all at once.
   if (speaker.nextTime < now + 0.005) speaker.nextTime = now + JITTER;
   src.start(speaker.nextTime);
   speaker.nextTime += buf.duration;
+  speaker.lastFrame = performance.now();
 }
 
 /** Move a speaker's panner to their head (world space). Call every frame. */
@@ -162,7 +127,7 @@ export function updateVoiceListener(pos: Vector3, quat: Quaternion): void {
   }
 }
 
-/** True if `id` has produced voice frames in the last quarter-second. */
+/** True if `id` has produced voice frames in the last fraction of a second. */
 export function isSpeaking(id: string): boolean {
   const speaker = speakers.get(id);
   return !!speaker && performance.now() - speaker.lastFrame < SPEAKING_MS;
@@ -172,11 +137,6 @@ export function isSpeaking(id: string): boolean {
 export function removeVoiceSpeaker(id: string): void {
   const speaker = speakers.get(id);
   if (!speaker) return;
-  try {
-    speaker.decoder?.close();
-  } catch {
-    /* already closed */
-  }
   speaker.panner.disconnect();
   speaker.gain.disconnect();
   speakers.delete(id);
