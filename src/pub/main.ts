@@ -34,6 +34,7 @@ import { FightSystem } from './systems/FightSystem.js';
 import { PubPlayerSystem } from './systems/PubPlayerSystem.js';
 import { SnakeSystem } from './systems/SnakeSystem.js';
 import { TeleportSystem } from './systems/TeleportSystem.js';
+import { FXSystem } from '../systems/FXSystem.js';
 
 const container = document.getElementById('scene-container') as HTMLDivElement;
 
@@ -83,6 +84,10 @@ World.create(container, {
   world.registerSystem(SnakeSystem);
   world.registerSystem(FightSystem);
   world.registerSystem(BartenderSystem);
+  // Animates and self-destructs transient effects (clap gesture cues, fire
+  // impacts) and drives the fire particle pools. Without it, the white clap
+  // flash spawns but never fades — leaving a permanent mark in the room.
+  world.registerSystem(FXSystem);
 
   // Your arena cosmetics walk in with you.
   pubConnect(pubServerUrl(), pub.myName, customization.avatar, customization.platform);
