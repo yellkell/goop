@@ -84,13 +84,15 @@ export class PubPlayerSystem extends createSystem({}) {
   private prevDistance = 0;
   private hasPrevHands = false;
   private clapCooldown = 0;
+  private voiceStarted = false;
 
   init(): void {
     onSpawn((p) => this.spawn(p));
-    // Spatial voice: stream our mic, and play every punter's frames through a
-    // panner pinned to their head (positioned each frame in update()). The
-    // server applies the match bubble, so we just send and play.
-    void startVoiceCapture((frame) => pubSendVoice(frame));
+    // Spatial voice: play every punter's frames through a panner pinned to
+    // their head (positioned each frame in update()). The server applies the
+    // match bubble, so we just play what we're sent. Our OWN mic capture is
+    // started lazily on the first controller press (startVoice) — getUserMedia
+    // and the audio graph need a real user gesture to come alive in VR.
     onVoice((id, frame) => pushVoiceFrame(id, frame));
     onSnap((poses) => {
       for (const [id, head, left, right] of poses) {
@@ -113,6 +115,7 @@ export class PubPlayerSystem extends createSystem({}) {
 
   update(delta: number): void {
     this.attachLocalGloves();
+    this.startVoiceOnFirstPress();
     this.tryLocalClap(delta);
 
     // Your fingers track your real squeeze (trigger = index, grip = rest).
@@ -186,7 +189,7 @@ export class PubPlayerSystem extends createSystem({}) {
       // Name tag floats over the helmet, facing you — and swells a touch while
       // they're talking so you can see who has the floor.
       punter.nameTag.mesh.position.copy(rig.head.position);
-      punter.nameTag.mesh.position.y += 0.38;
+      punter.nameTag.mesh.position.y += 0.6; // ride well clear of the helmet
       punter.nameTag.mesh.lookAt(_cam);
       punter.nameTag.mesh.scale.setScalar(isSpeaking(punter.id) ? 1.12 : 1);
     }
@@ -201,9 +204,9 @@ export class PubPlayerSystem extends createSystem({}) {
     for (const part of rig.all) this.scene.add(part);
     rig.head.position.set(p.head[0], p.head[1] || 1.6, p.head[2]);
 
-    const nameTag = new Panel(0.5, 0.12, 384);
-    const hex = `#${p.accent.toString(16).padStart(6, '0')}`;
-    nameTag.setLines([{ text: p.name.slice(0, 14).toUpperCase(), size: 30, colour: hex, bold: true }]);
+    // Floating name: plate-free, white, futuristic HUD type, riding high.
+    const nameTag = new Panel(0.8, 0.2, 512);
+    nameTag.setLabel(p.name.slice(0, 14).toUpperCase(), '#ffffff', 80);
     this.scene.add(nameTag.mesh);
 
     const punter: RemotePunter = {
@@ -221,6 +224,21 @@ export class PubPlayerSystem extends createSystem({}) {
     pub.punters.set(p.id, punter);
     bus.emit('joined', punter);
     saloonEntry(); // swinging doors — someone just walked in
+  }
+
+  /**
+   * Bring the mic online on the first trigger/squeeze. Browsers gate
+   * getUserMedia and the WebAudio graph behind a genuine user gesture; the
+   * controller press is ours. Runs once.
+   */
+  private startVoiceOnFirstPress(): void {
+    if (this.voiceStarted) return;
+    if (!this.anyPressed(InputComponent.Trigger) && !this.anyPressed(InputComponent.Squeeze)) return;
+    this.voiceStarted = true;
+    void startVoiceCapture((frame) => pubSendVoice(frame)).then((ok) => {
+      // eslint-disable-next-line no-console
+      console.info(ok ? '[pub voice] mic live' : '[pub voice] mic unavailable (permission/WebCodecs)');
+    });
   }
 
   private despawn(id: string): void {

@@ -13,8 +13,9 @@
  * anchor — alternate hands to climb. Let go of both and you FALL: gravity
  * pulls the rig back down to the hall floor (grab again to arrest it).
  *
- * Only the three tall solid walls are climbable (west, north, south); the
- * shared east/door wall isn't, so nobody can shimmy over into the pub.
+ * Any of the four hall perimeter walls is climbable, each with a thick inward
+ * grab zone (REACH) so latching on is forgiving. Gated to the fight hall, so
+ * the low-ceilinged pub proper stays climb-free.
  */
 
 import { createSystem, InputComponent } from '@iwsdk/core';
@@ -25,9 +26,9 @@ import { pulseHand } from '../../input/haptics.js';
 const HANDS = ['left', 'right'] as const;
 type Hand = (typeof HANDS)[number];
 
-const REACH = 0.4; // how close the grip must be to a wall to latch on (m)
-const GRIP_ON = 0.6; // squeeze value that latches a hand
-const GRIP_OFF = 0.4; // squeeze value that releases it (hysteresis)
+const REACH = 0.7; // how close the grip must be to a wall to latch on (m) — generous
+const GRIP_ON = 0.5; // squeeze value that latches a hand
+const GRIP_OFF = 0.35; // squeeze value that releases it (hysteresis)
 const MIN_GRAB_Y = 0.1; // can't latch below this — grab the wall, not the floor
 const MAX_HEAD_Y = FIGHT.hall.height - 1.4; // stop the head short of the ceiling
 const GRAVITY = 16; // m/s² once you let go of the wall
@@ -41,6 +42,7 @@ export class ClimbSystem extends createSystem({}) {
   private gripping: Record<Hand, boolean> = { left: false, right: false };
   private anchor = new Vector3();
   private fallVel = 0;
+  private dbgTimer = 0;
 
   update(delta: number): void {
     const player = this.player;
@@ -68,7 +70,11 @@ export class ClimbSystem extends createSystem({}) {
             this.active = hand; // the newest grab drives the climb
             this.anchor.copy(_grip);
             this.fallVel = 0; // grabbing on arrests any fall
-            pulseHand(this.world.session, hand, 0.45, 45);
+            pulseHand(this.world.session, hand, 0.5, 50);
+            // eslint-disable-next-line no-console
+            console.info(`[climb] ${hand} latched at`, _grip.x.toFixed(2), _grip.y.toFixed(2), _grip.z.toFixed(2));
+          } else {
+            this.reportMiss(_grip, delta);
           }
         }
       } else if (squeeze < GRIP_OFF) {
@@ -112,18 +118,33 @@ export class ClimbSystem extends createSystem({}) {
     }
   }
 
-  /** True if the grip is within reach of a climbable hall wall. */
+  /**
+   * True if the grip is within reach of any fight-hall perimeter wall. REACH
+   * gives each wall a thick inward grab zone, so you can latch on without
+   * pressing your hand exactly onto the plane.
+   */
   private nearWall(g: Vector3): boolean {
     if (g.y < MIN_GRAB_Y) return false;
     const h = FIGHT.hall;
-    // West wall (the far end of the hall).
-    if (Math.abs(g.x - h.minX) < REACH && g.z > h.minZ && g.z < h.maxZ) return true;
-    // North / south walls — only along the hall's own x-span, never the
-    // shared east/door wall (so you can't climb across into the pub).
-    if (g.x > h.minX && g.x < h.maxX) {
-      if (Math.abs(g.z - h.minZ) < REACH) return true;
-      if (Math.abs(g.z - h.maxZ) < REACH) return true;
-    }
-    return false;
+    const nearX = Math.abs(g.x - h.minX) < REACH || Math.abs(g.x - h.maxX) < REACH;
+    const nearZ = Math.abs(g.z - h.minZ) < REACH || Math.abs(g.z - h.maxZ) < REACH;
+    const insideX = g.x > h.minX - REACH && g.x < h.maxX + REACH;
+    const insideZ = g.z > h.minZ - REACH && g.z < h.maxZ + REACH;
+    // Near a side wall (E/W) while within the depth span, or near an end wall
+    // (N/S) while within the width span.
+    return (nearX && insideZ) || (nearZ && insideX);
+  }
+
+  /** Throttled log when a squeeze in the hall finds no wall — climb debugging. */
+  private reportMiss(g: Vector3, delta: number): void {
+    this.dbgTimer -= delta;
+    if (this.dbgTimer > 0) return;
+    this.dbgTimer = 0.5;
+    const h = FIGHT.hall;
+    // eslint-disable-next-line no-console
+    console.info(
+      `[climb] no wall in reach — hand x=${g.x.toFixed(2)} z=${g.z.toFixed(2)} y=${g.y.toFixed(2)} ` +
+        `(walls x ${h.minX}/${h.maxX}, z ${h.minZ}/${h.maxZ}; reach ${REACH}m)`,
+    );
   }
 }
