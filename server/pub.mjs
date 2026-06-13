@@ -26,11 +26,11 @@ const MAX_PLAYERS = 12;
 const TICK_MS = 50; // 20 Hz snapshots
 // Glasses are ids 0-14 (the pub opens with 8 active; the barkeep brings the
 // rest out one at a time), darts are ids 15-20. Mirrors src/pub/config.ts.
-const GLASS_MAX = 15;
-const GLASS_START = 8;
+const GLASS_MAX = 8;
+const GLASS_START = 0;
 const DART_COUNT = 6;
 const PROP_COUNT = GLASS_MAX + DART_COUNT;
-const RESTOCK_MS = 25_000;
+const RESTOCK_MS = 14_000;
 
 const DATA_FILE = join(dirname(fileURLToPath(import.meta.url)), 'pub-data.json');
 
@@ -399,7 +399,7 @@ wss.on('connection', (ws) => {
 });
 
 // The barkeep's restock round: while anyone is in, bring out one fresh
-// glass every RESTOCK_MS until all 15 are on the floor. (Clients animate the
+// glass every RESTOCK_MS until all 8 are on the floor. (Clients animate the
 // robot walking it over; the glass lands on the bar a few seconds after this
 // broadcast — see glassDeliverDelay in src/pub/config.ts.)
 setInterval(() => {

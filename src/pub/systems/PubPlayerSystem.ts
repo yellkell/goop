@@ -8,7 +8,8 @@
 
 import { createSystem } from '@iwsdk/core';
 import { Color, Group, MeshStandardMaterial, Quaternion, Vector3 } from 'three';
-import { buildBoxer, buildGlove } from '../../avatar/boxer.js';
+import { buildBoxer } from '../../avatar/boxer.js';
+import { buildHand } from '../../avatar/hands.js';
 import { solveTorso } from '../../avatar/boxer.js';
 import { PALETTE, teamColor } from '../../config.js';
 import { onSnap, onSpawn, pubSendRaw } from '../net.js';
@@ -181,7 +182,7 @@ export class PubPlayerSystem extends createSystem({}) {
     const grips = this.player.gripSpaces;
     if (!grips.left || !grips.right) return;
     for (const hand of ['left', 'right'] as const) {
-      const glove = buildGlove(0);
+      const glove = buildHand(hand === 'left' ? 1 : -1);
       retintLocal(glove, pub.myAccent);
       grips[hand].add(glove);
       this.localGloves.push(glove);

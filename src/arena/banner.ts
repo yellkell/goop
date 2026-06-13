@@ -49,14 +49,10 @@ export function createTitleBanner(scene: Scene): Mesh {
   ctx.fillText('FIGHT', W / 2 + 185, 178);
   ctx.shadowBlur = 0;
 
-  ctx.font = '700 38px system-ui, sans-serif';
-  ctx.fillStyle = UI.textDim;
-  ctx.fillText('flaming-fist duels at a distance', W / 2, 272);
-
   ctx.font = '700 34px system-ui, sans-serif';
   ctx.fillStyle = UI.amberSoft;
-  ctx.fillText('hold trigger or grip · ball orbits your fist', W / 2, 352);
-  ctx.fillText('punch to throw · squeeze to recall', W / 2, 402);
+  ctx.fillText('hold trigger or grip · ball orbits your fist', W / 2, 332);
+  ctx.fillText('punch to throw · hold or trigger to recall', W / 2, 392);
 
   const texture = new CanvasTexture(canvas);
   texture.minFilter = LinearFilter;

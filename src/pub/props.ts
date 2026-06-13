@@ -73,17 +73,39 @@ export function buildPintGlass(): Group {
       opacity: 0.88,
     }),
   );
+  beer.name = 'beer';
   beer.position.y = 0.012 + (GLASS.height * 0.72) / 2;
   g.add(beer);
   const head = new Mesh(
     new CylinderGeometry(GLASS.radiusTop * 0.89, GLASS.radiusTop * 0.85, 0.018, 12),
     new MeshStandardMaterial({ color: 0xf2e9d4, roughness: 0.8 }),
   );
+  head.name = 'beer-head';
   head.position.y = 0.012 + GLASS.height * 0.72 + 0.009;
   g.add(head);
 
   g.add(grabProxy(0.085, GLASS.height / 2));
   return g;
+}
+
+/**
+ * Set how full a pint is (0 = empty, 1 = full): the amber column scales up
+ * from the glass base and the foam head rides on top. PropSystem animates
+ * this as a fresh pour settles.
+ */
+export function setGlassFill(glass: Group, f: number): void {
+  const beer = glass.getObjectByName('beer');
+  const head = glass.getObjectByName('beer-head');
+  const fill = Math.max(0.0001, Math.min(1, f));
+  if (beer) {
+    beer.scale.y = fill;
+    beer.position.y = 0.012 + (GLASS.height * 0.72 * fill) / 2;
+    beer.visible = f > 0.02;
+  }
+  if (head) {
+    head.position.y = 0.012 + GLASS.height * 0.72 * fill + 0.009;
+    head.visible = f > 0.1;
+  }
 }
 
 /**

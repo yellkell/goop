@@ -29,11 +29,14 @@ const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.m
 export class BotSystem extends createSystem({
   balls: { required: [Fireball] },
 }) {
-  // Where the bot is drifting to (its own local frame: x lateral, y head height).
+  // Where the bot is drifting to (its own local frame: x lateral, y head
+  // height, z forward/back across its pad depth).
   private targetX = 0;
   private targetY = BOT.headY;
+  private targetZ = 0;
   private x = 0;
   private y = BOT.headY;
+  private z = 0;
   private moveTimer = 1;
   private throwTimer = BOT.throwInterval;
   private windupHand: 0 | 1 = 0;
@@ -73,6 +76,9 @@ export class BotSystem extends createSystem({
       else this.targetY = BOT.headY + (Math.random() * 0.24 - 0.12);
       this.targetY = clamp(this.targetY, BOT.headYMin, BOT.headYMax);
 
+      // Forward pressure / backpedal across the pad depth too.
+      this.targetZ = clamp((Math.random() * 2 - 1) * 0.5, -0.5, 0.5);
+
       this.moveTimer = Math.random() < 0.3 ? 0.35 + Math.random() * 0.5 : 0.9 + Math.random() * 1.1;
     }
 
@@ -83,11 +89,12 @@ export class BotSystem extends createSystem({
       const obj = ball.object3D;
       if (!obj) continue;
       obj.getWorldPosition(_ballPos);
-      _tmp.set(this.x, this.y, -ARENA_GAP);
+      _tmp.set(this.x, this.y, -ARENA_GAP + this.z);
       if (_ballPos.distanceTo(_tmp) < BOT.reactDistance) {
         const away = Math.sign(this.x - _ballPos.x) || (Math.random() < 0.5 ? -1 : 1);
         this.targetX = clamp(this.x + away * 0.6, -BOT.padHalfWidth, BOT.padHalfWidth);
         this.targetY = _ballPos.y > this.y - 0.15 ? BOT.headYMin : BOT.headYMax;
+        this.targetZ = -0.5; // and give ground
         break;
       }
     }
@@ -98,12 +105,15 @@ export class BotSystem extends createSystem({
     const stepY = BOT.duckSpeed * delta;
     const dy = this.targetY - this.y;
     this.y += Math.abs(dy) <= stepY ? dy : Math.sign(dy) * stepY;
+    const stepZ = BOT.moveSpeed * 0.8 * delta;
+    const dz = this.targetZ - this.z;
+    this.z += Math.abs(dz) <= stepZ ? dz : Math.sign(dz) * stepZ;
   }
 
   /** Write the phantom body onto the opponent bus. */
   private pose(delta: number): void {
     this.guardPhase += delta;
-    const z = -ARENA_GAP;
+    const z = -ARENA_GAP + this.z;
 
     opponent.headPos.set(this.x, this.y, z);
     // Face the player's head.

@@ -69,9 +69,16 @@ export class Panel {
     const ctx = this.ctx;
     let y = 22;
     for (const line of lines) {
-      const size = line.size ?? 34;
+      // Shrink-to-fit: a title must never run off its plate.
+      let size = line.size ?? 34;
+      const font = (px: number): string =>
+        line.bold ? stencilFont(px) : `${px}px 'Arial Narrow', system-ui, sans-serif`;
+      ctx.font = font(size);
+      while (size > 12 && ctx.measureText(line.text).width > w - 52) {
+        size -= 2;
+        ctx.font = font(size);
+      }
       y += size;
-      ctx.font = line.bold ? stencilFont(size) : `${size}px 'Arial Narrow', system-ui, sans-serif`;
       ctx.fillStyle = line.colour ?? '#e8ecf2';
       ctx.textAlign = line.align ?? 'center';
       const x = line.align === 'left' ? 26 : line.align === 'right' ? w - 26 : w / 2;

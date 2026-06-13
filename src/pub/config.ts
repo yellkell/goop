@@ -15,10 +15,16 @@
 
 import { PALETTE } from '../config.js';
 
+// Room shell extents (also used inside PUB below — object literals can't
+// self-reference). Stretched from 4.5×3.0 to fit more seating and a longer
+// darts corridor.
+const HALF_W = 5.2;
+const HALF_D = 3.6;
+
 export const PUB = {
   // Room shell (the pub proper; the fight hall hangs off its west wall).
-  halfWidth: 4.5, // x extent
-  halfDepth: 3.0, // z extent
+  halfWidth: HALF_W, // x extent
+  halfDepth: HALF_D, // z extent
   ceiling: 2.45, // proper low pub ceiling — mind your head
   beamDrop: 0.16, // steel I-beams hang this far below the ceiling
 
@@ -37,24 +43,29 @@ export const PUB = {
 
   // Dartboard on the east wall (standard: bull at 1.73 m, oche 2.37 m out).
   darts: {
-    wallX: 4.5,
-    boardX: 4.46, // proud of the wall on its cabinet
+    wallX: HALF_W,
+    boardX: HALF_W - 0.04, // proud of the wall on its cabinet
     boardY: 1.73,
     boardZ: 0.6,
     boardRadius: 0.2255, // regulation 451 mm board
     surroundRadius: 0.45, // cork blast zone around it
-    ocheX: 4.46 - 2.37,
+    ocheX: HALF_W - 0.04 - 2.37,
     rackSlots: 6,
   },
 
+  /** The way you came in: a door on the south wall, west end. Teleport onto
+   *  its mat and you're back at the FIRE FIGHT main menu. */
+  exit: { x0: -4.8, x1: -4.0, height: 2.1 },
+
   spawn: { x: -0.5, y: 0, z: 1.6 },
 
-  /** Glasses on the bar at opening time… */
-  glassStart: 8,
-  /** …and the most the barkeep will bring out (he restocks one at a time). */
-  glassMax: 15,
-  /** Seconds between the barkeep fetching a fresh glass from the back. */
-  glassRestockInterval: 25,
+  /** Glasses on the bar at opening time — they ALL start under the counter;
+   *  the barkeep brings each one out between his other jobs. */
+  glassStart: 0,
+  /** …and the most he'll bring out (he restocks one at a time). */
+  glassMax: 8,
+  /** Seconds between the barkeep fetching a fresh glass from under the bar. */
+  glassRestockInterval: 14,
   /** Seconds between a glass being announced and it landing on the bar —
    *  covers the barkeep's walk-and-place animation on every client. */
   glassDeliverDelay: 4,
@@ -69,7 +80,8 @@ export const PUB = {
  * (the arena uses ten) so the duel fits indoors.
  */
 const CAGE_YARDS = 4.572; // 5 yards in metres
-const HALL_CX = -10.25; // duel centreline (x)
+const HALL_CX = -12.5; // duel centreline (x) — pushed west so a spectator
+// ring (the stands) fits all the way around the sunken pit
 const PLATFORM_HALF_W = 0.86; // OCTAGON_HALF_WIDTH
 const PLATFORM_HALF_D = 0.75; // OCTAGON_HALF_DEPTH
 
@@ -78,6 +90,9 @@ export const FIGHT = {
   /** Platforms at z = ±platformZ — same 3.0 m gap as the arena. */
   platformZ: 1.5,
   platformThickness: 0.14,
+  /** The duel floor is DUG IN: the cage rect drops this far below the hall
+   *  floor, with bench stands around the rim — a little stadium. */
+  pitDepth: 0.7,
   /** Ball-killing cage, 5 yards out from each platform rim. */
   cage: {
     minX: HALL_CX - PLATFORM_HALF_W - CAGE_YARDS,
@@ -86,14 +101,14 @@ export const FIGHT = {
     maxZ: 1.5 + PLATFORM_HALF_D + CAGE_YARDS,
     ceiling: 4.2,
   },
-  /** The hall shell, wrapped just outside the cage. */
-  hall: { minX: -16, maxX: -PUB.halfWidth, minZ: -7, maxZ: 7, height: 4.6 },
-  /** Doorway in the shared wall (x = -4.5). */
+  /** The hall shell: the sunken pit (cage rect) + a stands ring around it. */
+  hall: { minX: -19.8, maxX: -PUB.halfWidth, minZ: -8.6, maxZ: 8.6, height: 4.6 },
+  /** Doorway in the shared wall. */
   door: { z0: 0.4, z1: 1.8, height: 2.1 },
-  /** Side claim consoles (side 0 south/+z, side 1 north/−z), facing the door. */
+  /** Side claim consoles on the east stands (side 0 south/+z, side 1 north/−z). */
   consoles: [
-    [-6.6, 0, 2.9],
-    [-6.6, 0, -2.9],
+    [-6.3, 0, 2.9],
+    [-6.3, 0, -2.9],
   ] as [number, number, number][],
   /** How far a fighter's head may stray from their platform centre. */
   forfeitRadius: 1.35,
@@ -101,14 +116,26 @@ export const FIGHT = {
   hpMax: 100,
 } as const;
 
-/** Where you may land a teleport (floor rectangles, walls implied between). */
+/** Teleporting onto this mat (inside the pub, by the exit door) leaves the
+ *  pub and returns to the FIRE FIGHT main menu. */
+export const EXIT_ZONE = { minX: -4.8, maxX: -4.0, minZ: HALF_D - 0.55, maxZ: HALF_D - 0.08 };
+
+/**
+ * Where you may land a teleport (floor rectangles, walls implied between).
+ * The fight hall is split into a RING around the sunken pit: spectators
+ * roam the stands on every side, but the pit itself is invisible-walled —
+ * fighters only get in via the claim consoles.
+ */
 export const TELEPORT_AREAS = [
   // Pub floor, this side of the bar.
-  { minX: -4.3, maxX: 4.3, minZ: -1.85, maxZ: 2.8 },
+  { minX: -(HALF_W - 0.2), maxX: HALF_W - 0.2, minZ: -1.85, maxZ: HALF_D - 0.08 },
   // The doorway strip.
-  { minX: -4.65, maxX: -4.2, minZ: FIGHT.door.z0, maxZ: FIGHT.door.z1 },
-  // The fight hall.
-  { minX: FIGHT.hall.minX + 0.3, maxX: FIGHT.hall.maxX, minZ: FIGHT.hall.minZ + 0.3, maxZ: FIGHT.hall.maxZ - 0.3 },
+  { minX: -(HALF_W + 0.15), maxX: -(HALF_W - 0.3), minZ: FIGHT.door.z0, maxZ: FIGHT.door.z1 },
+  // The fight hall stands — four strips wrapped around the pit (cage rect).
+  { minX: FIGHT.hall.minX + 0.3, maxX: FIGHT.cage.minX - 0.15, minZ: FIGHT.hall.minZ + 0.3, maxZ: FIGHT.hall.maxZ - 0.3 },
+  { minX: FIGHT.cage.maxX + 0.15, maxX: FIGHT.hall.maxX, minZ: FIGHT.hall.minZ + 0.3, maxZ: FIGHT.hall.maxZ - 0.3 },
+  { minX: FIGHT.cage.minX - 0.15, maxX: FIGHT.cage.maxX + 0.15, minZ: FIGHT.hall.minZ + 0.3, maxZ: FIGHT.cage.minZ - 0.15 },
+  { minX: FIGHT.cage.minX - 0.15, maxX: FIGHT.cage.maxX + 0.15, minZ: FIGHT.cage.maxZ + 0.15, maxZ: FIGHT.hall.maxZ - 0.3 },
 ];
 
 export const TELEPORT = {
@@ -162,9 +189,12 @@ export const SURFACES: Surface[] = [
     maxZ: PUB.bar.z,
   },
   // Booth tables (kept in sync with environment.ts buildBooth calls).
-  { y: 0.78, minX: -3.45, maxX: -2.55, minZ: 1.85, maxZ: 2.75 },
-  { y: 0.78, minX: -0.45, maxX: 0.45, minZ: 1.85, maxZ: 2.75 },
-  { y: 0.78, minX: 2.55, maxX: 3.45, minZ: 1.85, maxZ: 2.75 },
+  { y: 0.78, minX: -3.45, maxX: -2.55, minZ: HALF_D - 1.15, maxZ: HALF_D - 0.25 },
+  { y: 0.78, minX: -0.45, maxX: 0.45, minZ: HALF_D - 1.15, maxZ: HALF_D - 0.25 },
+  { y: 0.78, minX: 2.55, maxX: 3.45, minZ: HALF_D - 1.15, maxZ: HALF_D - 0.25 },
+  // The back-to-back island tables (environment.ts buildSeatingIsland).
+  { y: 0.78, minX: -2.05, maxX: -1.15, minZ: 0.58, maxZ: 0.98 },
+  { y: 0.78, minX: -2.05, maxX: -1.15, minZ: 2.02, maxZ: 2.42 },
 ];
 
 /** Accent colours cycled by join order — distinct fire tints per punter. */

@@ -21,6 +21,7 @@ import {
   Vector3,
 } from 'three';
 import { BODY_IK, PALETTE, teamColor } from '../config.js';
+import { buildHand } from './hands.js';
 
 export interface BoxerRig {
   /** Helmet + visor; position/orient from the head pose. */
@@ -328,7 +329,8 @@ export function buildBoxer(team: number): BoxerRig {
   torso.name = 'opponent-torso';
   torso.add(chest, pelvis);
 
-  const gloves: [Group, Group] = [buildGlove(team), buildGlove(team)];
+  // Articulated VR hands (left thumb +x, right thumb -x), not gauntlets.
+  const gloves: [Group, Group] = [buildHand(1), buildHand(-1)];
   gloves[0].name = 'opponent-glove-left';
   gloves[1].name = 'opponent-glove-right';
 

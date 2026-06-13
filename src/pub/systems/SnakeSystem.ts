@@ -240,11 +240,15 @@ export class SnakeSystem extends createSystem({}) {
   private step(): void {
     this.dir = this.nextDir;
     const head = this.snake[0];
-    const next: Cell = [head[0] + this.dir[0], head[1] + this.dir[1]];
+    // Wrap-around rules: run off one edge, slide in the opposite one —
+    // only your own tail kills you.
+    const next: Cell = [
+      (head[0] + this.dir[0] + COLS) % COLS,
+      (head[1] + this.dir[1] + ROWS) % ROWS,
+    ];
 
-    const hitWall = next[0] < 0 || next[0] >= COLS || next[1] < 0 || next[1] >= ROWS;
     const hitSelf = this.snake.some(([x, y]) => x === next[0] && y === next[1]);
-    if (hitWall || hitSelf) {
+    if (hitSelf) {
       this.gameOver();
       return;
     }

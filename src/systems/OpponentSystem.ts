@@ -9,6 +9,7 @@
 import { createSystem, Vector3, type Entity } from '@iwsdk/core';
 import { Object3D } from 'three';
 import { buildBoxer, setGloveLit, solveTorso, type BoxerRig } from '../avatar/boxer.js';
+import { setHandCurl } from '../avatar/hands.js';
 import {
   OPPONENT_DEFAULT_AVATAR,
   OPPONENT_DEFAULT_PLATFORM,
@@ -98,10 +99,12 @@ export class OpponentSystem extends createSystem({
     for (const hand of [0, 1] as const) {
       rig.gloves[hand].position.copy(opponent.handPos[hand]);
       rig.gloves[hand].quaternion.copy(opponent.handQuat[hand]);
-      // Their squeeze flares their LEDs — the tell that fire is winding up,
-      // even when they're lining up a behind-the-back lob — and the hand
-      // stays hot through a recall until the ball is back in it.
-      setGloveLit(rig.gloves[hand], opponent.orbiting[hand] || this.ballReturning(hand), delta);
+      // Their squeeze turns their hand white — the tell that fire is winding
+      // up, even on a behind-the-back lob — and it stays hot through a
+      // recall until the ball is back in it. Fingers fist up when active.
+      const active = opponent.orbiting[hand] || this.ballReturning(hand);
+      setGloveLit(rig.gloves[hand], active, delta);
+      setHandCurl(rig.gloves[hand], active ? 1 : 0.35, active ? 1 : 0.4, active ? 0.9 : 0.45);
     }
 
     this.hitboxes.head?.object3D?.position.copy(opponent.headPos);

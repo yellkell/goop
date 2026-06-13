@@ -42,15 +42,18 @@ let plateMaps: DiamondPlateMaps | undefined;
  * in a fatter additive halo of the team colour — proper neon tubing, not a
  * one-pixel line.
  */
-function makeNeonRim(color: number): Group {
+function makeNeonRim(color: number, dim = false): Group {
   const rim = new Group();
   rim.name = 'rim-ring';
-  const core = new MeshBasicMaterial({ color: new Color(color).lerp(new Color(0xffffff), 0.45) });
+  const core = new MeshBasicMaterial({
+    color: new Color(color).lerp(new Color(0xffffff), dim ? 0.18 : 0.45),
+  });
   core.userData.role = 'neon-core'; // skin recolour target (avatar/skins.ts)
+  if (dim) core.userData.dim = 1;
   const halo = new MeshBasicMaterial({
     color: new Color(color),
     transparent: true,
-    opacity: 0.4,
+    opacity: dim ? 0.2 : 0.4,
     blending: AdditiveBlending,
     depthWrite: false,
   });
@@ -160,8 +163,9 @@ function makePlatform(color: number): Group {
   group.add(makeNeonRim(color));
 
   // --- Per-skin ornaments (hidden; applyPlatformSkin shows one set) ---
-  // AZURE: a second, inset neon ring — clean concentric tech.
-  const inner = makeNeonRim(color);
+  // AZURE: a second, inset neon ring — dimmer than the rim so it reads as
+  // an underglow, not a duplicate edge.
+  const inner = makeNeonRim(color, true);
   inner.scale.setScalar(0.82);
   inner.userData.skinTag = 'azure';
   inner.visible = false;

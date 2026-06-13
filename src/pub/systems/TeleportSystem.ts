@@ -16,12 +16,7 @@
 
 import { createSystem, InputComponent } from '@iwsdk/core';
 import {
-  AdditiveBlending,
-  BufferAttribute,
-  BufferGeometry,
   Group,
-  Line,
-  LineBasicMaterial,
   Mesh,
   MeshBasicMaterial,
   Quaternion,
@@ -29,11 +24,14 @@ import {
   ShapeGeometry,
   Vector3,
 } from 'three';
+import { Line2 } from 'three/examples/jsm/lines/Line2.js';
+import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import type { XROrigin } from '@iwsdk/xr-input';
 import { OCTAGON_VERTICES, PALETTE } from '../../config.js';
 import { octagonSlab } from '../../arena/octagon.js';
 import { uiClick } from '../../audio/sfx.js';
-import { PUB, TELEPORT, TELEPORT_AREAS } from '../config.js';
+import { EXIT_ZONE, PUB, TELEPORT, TELEPORT_AREAS } from '../config.js';
 import { pub } from '../state.js';
 
 const _origin = new Vector3();
@@ -56,6 +54,9 @@ export function teleportPlayer(player: XROrigin, x: number, z: number, yaw: numb
 
   const dYaw = yaw - headYaw;
   player.rotation.y += dYaw;
+  // Normal landings are at stands/pub level; the fight claim sinks the rig
+  // into the pit AFTER calling this.
+  player.position.y = 0;
 
   // Rotate the head's offset from the rig origin by the turn we just made,
   // then position the rig so the head ends up exactly on target.
@@ -82,8 +83,10 @@ function lockedToPlatform(): boolean {
 
 export class TeleportSystem extends createSystem({}) {
   private aimingHand: 'left' | 'right' | null = null;
-  private arc!: Line;
-  private arcGeo!: BufferGeometry;
+  private arc!: Line2;
+  private arcGeo!: LineGeometry;
+  private arcMat!: LineMaterial;
+  private arcBuf = new Array<number>(TELEPORT.arcPoints * 3).fill(0);
   private marker!: Group;
   private markerMat!: MeshBasicMaterial;
   private arrowMat!: MeshBasicMaterial;
@@ -93,22 +96,18 @@ export class TeleportSystem extends createSystem({}) {
   private spawned = false;
 
   init(): void {
-    // Arc line.
-    this.arcGeo = new BufferGeometry();
-    this.arcGeo.setAttribute(
-      'position',
-      new BufferAttribute(new Float32Array(TELEPORT.arcPoints * 3), 3),
-    );
-    this.arc = new Line(
-      this.arcGeo,
-      new LineBasicMaterial({
-        color: PALETTE.amber,
-        transparent: true,
-        opacity: 0.85,
-        blending: AdditiveBlending,
-        depthWrite: false,
-      }),
-    );
+    // Arc line — a fat world-unit ribbon (LineBasicMaterial ignores width).
+    this.arcGeo = new LineGeometry();
+    this.arcGeo.setPositions(this.arcBuf);
+    this.arcMat = new LineMaterial({
+      color: PALETTE.amber,
+      linewidth: 0.016, // metres — reads as proper neon tubing
+      worldUnits: true,
+      transparent: true,
+      opacity: 0.9,
+      depthWrite: false,
+    });
+    this.arc = new Line2(this.arcGeo, this.arcMat);
     this.arc.frustumCulled = false;
     this.arc.visible = false;
     this.scene.add(this.arc);
@@ -122,6 +121,9 @@ export class TeleportSystem extends createSystem({}) {
     });
     const slab = new Mesh(octagonSlab(OCTAGON_VERTICES, 0.012), this.markerMat);
     this.marker = new Group();
+    // The full platform footprint was huge underfoot — shrink the whole
+    // marker (octagon + arrow) to a compact puck.
+    this.marker.scale.setScalar(0.42);
     this.marker.add(slab);
 
     // The facing arrow inside it (points −z at yaw 0, like the camera).
@@ -185,6 +187,18 @@ export class TeleportSystem extends createSystem({}) {
     if (mag < TELEPORT.release) {
       // Stick sprung back — go (if the marker was on valid floor).
       if (this.valid) {
+        // Landing on the exit mat walks you back out to the main menu.
+        if (
+          this.landing.x >= EXIT_ZONE.minX && this.landing.x <= EXIT_ZONE.maxX &&
+          this.landing.z >= EXIT_ZONE.minZ && this.landing.z <= EXIT_ZONE.maxZ
+        ) {
+          this.hide();
+          const go = (): void => window.location.assign('index.html');
+          const session = this.world.session as XRSession | undefined;
+          if (session) void Promise.resolve(session.end()).then(go, go);
+          else go();
+          return;
+        }
         teleportPlayer(this.player, this.landing.x, this.landing.z, this.landingYaw);
         uiClick();
       }
@@ -204,12 +218,15 @@ export class TeleportSystem extends createSystem({}) {
     // Ballistic arc from the controller.
     _p.copy(_origin);
     _v.copy(_dir).multiplyScalar(TELEPORT.launchSpeed);
-    const pos = this.arcGeo.getAttribute('position') as BufferAttribute;
+    const buf = this.arcBuf;
+    const put = (i: number): void => {
+      buf[i * 3] = _p.x;
+      buf[i * 3 + 1] = _p.y;
+      buf[i * 3 + 2] = _p.z;
+    };
     let landed = false;
-    let used = 0;
     for (let i = 0; i < TELEPORT.arcPoints; i++) {
-      pos.setXYZ(i, _p.x, _p.y, _p.z);
-      used = i + 1;
+      put(i);
       if (landed) continue;
       _v.y -= TELEPORT.gravity * TELEPORT.arcStep;
       _p.addScaledVector(_v, TELEPORT.arcStep);
@@ -217,8 +234,12 @@ export class TeleportSystem extends createSystem({}) {
         _p.y = 0;
         landed = true;
         this.landing.copy(_p);
-        // Fill the remaining points at the landing spot so the line stops.
-        for (let j = i + 1; j < TELEPORT.arcPoints; j++) pos.setXYZ(j, _p.x, _p.y, _p.z);
+        // Pin the remaining points at the landing spot so the ribbon stops.
+        for (let j = i + 1; j < TELEPORT.arcPoints; j++) {
+          buf[j * 3] = _p.x;
+          buf[j * 3 + 1] = _p.y;
+          buf[j * 3 + 2] = _p.z;
+        }
         break;
       }
     }
@@ -226,8 +247,7 @@ export class TeleportSystem extends createSystem({}) {
       // Arc never reached the floor (pointing at the ceiling) — invalid.
       this.landing.copy(_p);
     }
-    pos.needsUpdate = true;
-    this.arcGeo.setDrawRange(0, landed ? TELEPORT.arcPoints : used);
+    this.arcGeo.setPositions(buf);
 
     this.valid = landed && inTeleportArea(this.landing.x, this.landing.z);
 
@@ -240,7 +260,7 @@ export class TeleportSystem extends createSystem({}) {
     const colour = this.valid ? PALETTE.amber : PALETTE.danger;
     this.markerMat.color.set(colour);
     this.arrowMat.color.set(colour);
-    (this.arc.material as LineBasicMaterial).color.set(colour);
+    this.arcMat.color.set(colour);
     this.marker.position.set(this.landing.x, 0.01, this.landing.z);
     this.marker.rotation.y = this.landingYaw;
     this.marker.visible = true;
