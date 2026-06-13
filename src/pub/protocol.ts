@@ -89,10 +89,16 @@ export type PubEvent =
   | { e: 'DARTS_RESET' }
   /** Fighter streaming both fireballs (~20 Hz) so the crowd sees the duel. */
   | { e: 'FIGHT_FB'; balls: [FireballNet, FireballNet] }
-  /** Victim-authoritative: YOUR ball `ball` hit me — it's spent. */
-  | { e: 'FIGHT_HIT'; ball: 0 | 1 }
+  /**
+   * Victim-authoritative: YOUR ball `ball` hit me — it's spent. `ret` marks a
+   * RETURN-PASS connect (a recalled ball caught me on its way home): it keeps
+   * homing instead of dying, exactly like the arena's recall-through technique.
+   */
+  | { e: 'FIGHT_HIT'; ball: 0 | 1; ret?: boolean }
   /** I parried your ball `ball` out of the air. */
   | { e: 'FIGHT_DEFLECT'; ball: 0 | 1 }
+  /** Your ball `ball` clashed mid-air with one of mine — both are spent. */
+  | { e: 'FIGHT_CLASH'; ball: 0 | 1 }
   /** Fighter reporting their own hp after taking a hit. */
   | { e: 'FIGHT_HP'; hp: number }
   /** Streamed by the player at the arcade machine so spectators see the screen. */

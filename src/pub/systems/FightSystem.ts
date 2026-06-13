@@ -1,31 +1,41 @@
 /**
  * FIRE FIGHT in the fight hall — the main game's duel, on display for the
- * whole pub.
+ * whole pub. This is meant to be 1:1 with a QUICK MATCH in the real arena
+ * (same physics, effects, colours and chosen cosmetics), just running over the
+ * pub's room server instead of the 1v1 bout relay — and in pure VR, no
+ * passthrough.
  *
  * Flow: pull the trigger at a corner console to claim that platform (you're
  * teleported onto it). When both corners are claimed the server counts down
  * and the fight is ON — everyone else in the social space can gather round
  * the hazard line and watch, or wander back to the pub.
  *
- * The fireball mechanics are the arena's, ported onto pub networking:
+ * The fireball mechanics are the arena's (src/systems/FireballSystem.ts +
+ * CollisionSystem.ts), ported onto pub networking:
  *  - hold trigger/grip → the ball ORBITS your fist, spinning up;
  *  - release mid-punch → it FLIES along your swing (aim-assisted toward the
  *    other fighter), arcs under light gravity, dies on the cage — which in
  *    here is pulled in to FIVE yards from the platform rims so the duel
  *    fits indoors;
- *  - trigger while it's away → it RETURNS to your fist.
+ *  - trigger while it's away → it RETURNS to your fist (and can connect on the
+ *    way home — the recall-through technique — without being spent).
  *
- * Hits are victim-authoritative (you rule on balls hitting YOUR head/torso,
- * exactly like the arena's net protocol); each fighter streams their two
- * balls at 20 Hz so spectators see the whole exchange. First to 0 hp loses;
- * leaving your platform forfeits.
+ * Hits are victim-authoritative (you rule on balls hitting YOUR head/torso —
+ * three IK spheres solved exactly like the arena's body — same as the arena's
+ * net protocol); each fighter streams their two balls at 20 Hz so spectators
+ * see the whole exchange. First to 0 hp loses; leaving your platform forfeits.
+ *
+ * Colours follow the arena, NOT the corner: from a fighter's own eyes their
+ * fire always burns orange and their opponent's blue (pure client-side); only
+ * spectators see the fixed ember-vs-blue corner tints.
  */
 
 import { createSystem, InputComponent } from '@iwsdk/core';
 import { MeshStandardMaterial, Quaternion, Vector3 } from 'three';
 import type { XROrigin } from '@iwsdk/xr-input';
 import { BODY_IK, FIREBALL, teamColor } from '../../config.js';
-import { platformSkin } from '../../avatar/skins.js';
+import { buildBoxer, solveTorso, type BoxerRig } from '../../avatar/boxer.js';
+import { applyAvatarSkin, avatarSkin, platformSkin } from '../../avatar/skins.js';
 import { customization } from '../../menu/customization.js';
 import {
   createFireVisual,
@@ -35,6 +45,7 @@ import {
   updateFirePools,
   type FireVisual,
 } from '../../fx/fire.js';
+import { spawnDamagePopup, spawnFireImpact } from '../../fx/effects.js';
 import * as sfx from '../../audio/sfx.js';
 import { pulseHand } from '../../input/haptics.js';
 import { FIGHT } from '../config.js';
@@ -105,6 +116,8 @@ interface RemoteBall {
   trailAcc: number;
   /** Victim-side per-ball re-hit guard. */
   hitCooldown: number;
+  /** One connect per return leg — the recall-through guard (arena parity). */
+  returnHit: number;
   hasTarget: boolean;
 }
 
@@ -116,7 +129,7 @@ const _aim = new Vector3();
 const _offset = new Vector3();
 const _camQ = new Quaternion();
 const _head = new Vector3();
-const _body = new Vector3();
+const _headQ = new Quaternion();
 
 export class FightSystem extends createSystem({}) {
   private time = 0;
@@ -128,8 +141,22 @@ export class FightSystem extends createSystem({}) {
   private myHp: number = FIGHT.hpMax;
   private lastPhase: FightNet['phase'] = 'idle';
   private consoleCooldown = 0;
+  /** My own iron torso — rendered while I fight (so I see my machine) and
+   *  solved each frame for the head/chest/pelvis hit spheres, arena-style. */
+  private bodyRig?: BoxerRig;
+  private myChest = new Vector3();
+  private myPelvis = new Vector3();
 
   init(): void {
+    // The local fighter's body: an ember (team 0) torso wearing my avatar
+    // skin, exactly like the arena's PlayerBodySystem. Only the torso joins
+    // the scene (my gloves are the controllers; my own head stays unseen).
+    this.bodyRig = buildBoxer(0);
+    this.bodyRig.torso.name = 'pub-fighter-torso';
+    this.bodyRig.torso.visible = false;
+    applyAvatarSkin(this.bodyRig.torso, avatarSkin(customization.avatar));
+    this.scene.add(this.bodyRig.torso);
+
     this.cleanupFuncs.push(
       bus.on('fight', (f) => this.onFight(f)),
       bus.on('gameEvent', ({ from, ev }) => {
@@ -138,21 +165,42 @@ export class FightSystem extends createSystem({}) {
             this.onRemoteBalls(from, ev.balls);
             break;
           case 'FIGHT_HIT':
-            // My ball connected on their side — it's spent.
+            // My ball connected on their side.
             if (this.amFighter() && this.myBalls) {
               const ball = this.myBalls[ev.ball];
-              if (ball.state === FLYING || ball.state === RETURNING) {
+              if (ev.ret) {
+                // Return-pass: it keeps homing, never spent on the connect.
+              } else if (ball.state === FLYING || ball.state === RETURNING) {
                 ball.state = DEAD;
-                emberBurst(ball.pos, 14, this.mySide() === 1);
+                ball.vel.set(0, 0, 0);
               }
+              spawnFireImpact(this.world, ball.pos, 0);
+              spawnDamagePopup(this.world, ball.pos, FIREBALL.damage);
               sfx.hitDealt();
             }
             break;
           case 'FIGHT_DEFLECT':
             if (this.amFighter() && this.myBalls) {
               const ball = this.myBalls[ev.ball];
-              if (ball.state === FLYING) ball.state = DEAD;
+              if (ball.state === FLYING) {
+                ball.state = DEAD;
+                ball.vel.set(0, 0, 0);
+              }
               sfx.deflect();
+            }
+            break;
+          case 'FIGHT_CLASH':
+            // One of my thrown balls met one of theirs — both die.
+            if (this.amFighter() && this.myBalls) {
+              const ball = this.myBalls[ev.ball];
+              if (ball.state === FLYING || ball.state === RETURNING) {
+                ball.state = DEAD;
+                ball.vel.set(0, 0, 0);
+                emberBurst(ball.pos, 14, false);
+                emberBurst(ball.pos, 14, true);
+                spawnFireImpact(this.world, ball.pos, 0, 1.2);
+                sfx.ballClash();
+              }
             }
             break;
           default:
@@ -168,12 +216,13 @@ export class FightSystem extends createSystem({}) {
   private rimKey = '';
 
   /**
-   * Dress each platform rim in its claimant's PLATFORM skin the moment a
-   * corner locks in (back to corner colours when it frees up) — your arena
+   * Dress each platform rim AND slab in its claimant's PLATFORM skin the moment
+   * a corner locks in (back to corner colours when it frees up) — your arena
    * cosmetics follow you onto the fight-hall floor.
    */
   private dressRims(): void {
     const rims = pub.refs?.fightRims;
+    const slabs = pub.refs?.fightSlabs;
     if (!rims) return;
     const pfFor = (side: 0 | 1): string => {
       const id = pub.fight.sides[side];
@@ -190,6 +239,7 @@ export class FightSystem extends createSystem({}) {
       const mat = rims[side].material as MeshStandardMaterial;
       mat.color.setHex(colour);
       mat.emissive.setHex(colour);
+      if (slabs) (slabs[side].material as MeshStandardMaterial).emissive.setHex(colour);
     });
   }
 
@@ -207,13 +257,15 @@ export class FightSystem extends createSystem({}) {
     const live = f.phase === 'starting' || fighting;
 
     if (this.amFighter() && live) {
+      this.solveMyBody();
       this.ensureMyBalls();
       this.updateMyBalls(delta, fighting);
       this.checkForfeit();
       this.checkIncomingHits(fighting);
       this.streamBalls(delta);
-    } else if (this.myBalls && f.phase === 'idle') {
-      this.disposeMyBalls();
+    } else {
+      if (this.bodyRig) this.bodyRig.torso.visible = false;
+      if (this.myBalls && f.phase === 'idle') this.disposeMyBalls();
     }
 
     // Remote fighters' balls: ease to targets, drive the fire look.
@@ -224,7 +276,7 @@ export class FightSystem extends createSystem({}) {
         this.remoteBalls.delete(id);
         continue;
       }
-      const side = f.sides[1] === id ? 1 : 0;
+      const cool = this.teamFor(id) === 1;
       const k = 1 - Math.exp(-16 * delta);
       for (const b of balls) {
         b.hitCooldown = Math.max(0, b.hitCooldown - delta);
@@ -235,7 +287,7 @@ export class FightSystem extends createSystem({}) {
             b.visual.group.position.lerp(b.target, k);
           }
         }
-        this.driveFireLook(b.visual, b.visual.group.position, b.state, b, delta, side === 1);
+        this.driveFireLook(b.visual, b.visual.group.position, b.state, b, delta, cool);
       }
     }
   }
@@ -250,6 +302,17 @@ export class FightSystem extends createSystem({}) {
 
   private amFighter(): boolean {
     return this.mySide() !== -1;
+  }
+
+  /**
+   * Render team (0 = ember/orange, 1 = blue) for a fighter id FROM MY EYES.
+   * A fighter always sees their own fire orange and their foe's blue (arena
+   * parity); a spectator sees the fixed corner tints.
+   */
+  private teamFor(id: string | null): 0 | 1 {
+    if (!id) return 0;
+    if (this.amFighter()) return id === pub.myId ? 0 : 1;
+    return pub.fight.sides[1] === id ? 1 : 0;
   }
 
   private checkConsoles(): void {
@@ -320,13 +383,38 @@ export class FightSystem extends createSystem({}) {
     }
   }
 
+  /**
+   * Solve and show my own torso, mirroring the arena's PlayerBodySystem. The
+   * pit drops the rig a level (player.y = -pitDepth), so we lift the head into
+   * "floor at 0" space for the pinned-hip solve and drop the result back down.
+   */
+  private solveMyBody(): void {
+    const rig = this.bodyRig;
+    if (!rig) return;
+    const side = this.mySide();
+    if (side === -1) {
+      rig.torso.visible = false;
+      return;
+    }
+    rig.torso.visible = true;
+    this.player.head.getWorldPosition(_head);
+    this.player.head.getWorldQuaternion(_headQ);
+    _head.y += FIGHT.pitDepth;
+    const z = side === 0 ? FIGHT.platformZ : -FIGHT.platformZ;
+    solveTorso(rig, _head, _headQ, FIGHT.centerX, z, this.myChest, this.myPelvis);
+    rig.chest.position.y -= FIGHT.pitDepth;
+    rig.pelvis.position.y -= FIGHT.pitDepth;
+    this.myChest.y -= FIGHT.pitDepth;
+    this.myPelvis.y -= FIGHT.pitDepth;
+  }
+
   // --- my fireballs (the arena state machine, pub coordinates) --------------------
 
   private ensureMyBalls(): void {
     if (this.myBalls) return;
-    const side = this.mySide();
+    const team = this.teamFor(pub.myId); // a fighter's own fire is always ember
     const mk = (hand: Hand): LocalBall => {
-      const visual = createFireVisual(side === 1 ? 1 : 0);
+      const visual = createFireVisual(team);
       this.scene.add(visual.group);
       this.handPose(hand);
       return {
@@ -374,8 +462,7 @@ export class FightSystem extends createSystem({}) {
 
   private updateMyBalls(delta: number, fighting: boolean): void {
     if (!this.myBalls) return;
-    const side = this.mySide();
-    const cool = side === 1;
+    const cool = this.teamFor(pub.myId) === 1; // my own fire (ember from my view)
 
     for (const hand of [0, 1] as const) {
       const ball = this.myBalls[hand];
@@ -533,49 +620,98 @@ export class FightSystem extends createSystem({}) {
     if (!balls) return;
 
     this.player.head.getWorldPosition(_head);
-    // Head, chest and pelvis spheres hung under the tracked head — the same
-    // proportions the arena's IK hitboxes use.
+    // Head, chest and pelvis spheres — the SAME three IK volumes (and radii)
+    // the arena solves, so dodging plays identically.
     const spheres: [Vector3, number][] = [
       [_head, BODY_IK.headRadius],
-      [_body.copy(_head).setY(Math.max(0.4, _head.y - 0.45)), BODY_IK.chestRadius],
+      [this.myChest, BODY_IK.chestRadius],
+      [this.myPelvis, BODY_IK.pelvisRadius],
     ];
 
     for (const idx of [0, 1] as const) {
       const enemy = balls[idx];
-      if (enemy.state !== FLYING || enemy.hitCooldown > 0 || !enemy.hasTarget) continue;
+      const returning = enemy.state === RETURNING;
+      if (enemy.state !== FLYING && !returning) continue;
+      if (!enemy.hasTarget || enemy.hitCooldown > 0) continue;
+      // One connect per return leg — a return-pass that already landed is inert.
+      if (returning && enemy.returnHit === 1) continue;
+      const ePos = enemy.visual.group.position;
 
-      // Parry first: my orbiting/returning ball knocks it out of the air.
-      if (this.myBalls) {
-        for (const mine of this.myBalls) {
-          if (mine.state !== ORBIT && mine.state !== RETURNING) continue;
-          const r = FIREBALL.radius * 2 + FIREBALL.deflectBonus;
-          if (mine.pos.distanceTo(enemy.visual.group.position) <= r) {
-            enemy.hitCooldown = 0.6;
-            enemy.state = DEAD;
-            emberBurst(enemy.visual.group.position, 10, true);
-            sfx.deflect();
-            pubSendEvent({ e: 'FIGHT_DEFLECT', ball: idx });
-            break;
-          }
-        }
-        if (enemy.hitCooldown > 0) continue;
-      }
+      // Clash: my thrown ball meeting theirs cancels both (flying-vs-flying;
+      // a returning ball is already leaving).
+      if (!returning && this.tryClash(enemy, idx, ePos)) continue;
 
+      // Parry: my orbiting/returning ball knocks it out of the air.
+      if (this.tryParry(enemy, idx, ePos)) continue;
+
+      // Body: head/chest/pelvis.
       for (const [centre, radius] of spheres) {
-        if (enemy.visual.group.position.distanceTo(centre) <= radius + FIREBALL.radius) {
+        if (ePos.distanceTo(centre) <= radius + FIREBALL.radius) {
           enemy.hitCooldown = 0.8;
-          enemy.state = DEAD;
           this.myHp = Math.max(0, this.myHp - FIREBALL.damage);
-          emberBurst(enemy.visual.group.position, 16, true);
+          // Taking a hit is the loudest moment: oversized fiery burst, damage
+          // number, hard double-hand buzz (arena's spawnFireImpact at 1.7).
+          spawnFireImpact(this.world, ePos, 1, 1.7);
+          spawnDamagePopup(this.world, ePos, FIREBALL.damage);
           sfx.hitTaken();
-          pulseHand(this.world.session, 'left', 1, 120);
-          pulseHand(this.world.session, 'right', 1, 120);
-          pubSendEvent({ e: 'FIGHT_HIT', ball: idx });
+          pulseHand(this.world.session, 'left', 1, 160);
+          pulseHand(this.world.session, 'right', 1, 160);
+          // A return-pass keeps homing home; a thrown ball is spent on contact.
+          if (returning) {
+            enemy.returnHit = 1;
+            pubSendEvent({ e: 'FIGHT_HIT', ball: idx, ret: true });
+          } else {
+            enemy.state = DEAD;
+            pubSendEvent({ e: 'FIGHT_HIT', ball: idx });
+          }
           pubSendEvent({ e: 'FIGHT_HP', hp: this.myHp });
           break;
         }
       }
     }
+  }
+
+  /** My orbiting/returning ball slaps an incoming enemy ball from the air. */
+  private tryParry(enemy: RemoteBall, idx: 0 | 1, ePos: Vector3): boolean {
+    if (!this.myBalls) return false;
+    for (const hand of [0, 1] as const) {
+      const mine = this.myBalls[hand];
+      if (mine.state !== ORBIT && mine.state !== RETURNING) continue;
+      const reach = FIREBALL.radius * 2 + FIREBALL.deflectBonus;
+      if (mine.pos.distanceTo(ePos) > reach) continue;
+      enemy.hitCooldown = 0.6;
+      enemy.state = DEAD;
+      emberBurst(ePos, 22, true);
+      spawnFireImpact(this.world, ePos, 1);
+      sfx.deflect();
+      pulseHand(this.world.session, HANDS[hand], 0.9, 120);
+      pubSendEvent({ e: 'FIGHT_DEFLECT', ball: idx });
+      return true;
+    }
+    return false;
+  }
+
+  /** Two thrown balls (one mine, one theirs) meeting mid-air block each other. */
+  private tryClash(enemy: RemoteBall, idx: 0 | 1, ePos: Vector3): boolean {
+    if (!this.myBalls) return false;
+    for (const mine of this.myBalls) {
+      if (mine.state !== FLYING) continue;
+      const reach = FIREBALL.radius * 2 + FIREBALL.deflectBonus;
+      if (mine.pos.distanceTo(ePos) > reach) continue;
+      // Both balls die where they met — iron on iron, sparks in both colours.
+      mine.state = DEAD;
+      mine.vel.set(0, 0, 0);
+      enemy.hitCooldown = 0.6;
+      enemy.state = DEAD;
+      emberBurst(ePos, 14, true);
+      emberBurst(ePos, 14, false);
+      spawnFireImpact(this.world, ePos, 0, 1.2);
+      sfx.ballClash();
+      // Their copy of MY ball dies via my stream; tell them THEIR ball clashed.
+      pubSendEvent({ e: 'FIGHT_CLASH', ball: idx });
+      return true;
+    }
+    return false;
   }
 
   // --- streaming + remote rendering -------------------------------------------------
@@ -593,9 +729,9 @@ export class FightSystem extends createSystem({}) {
     if (from === pub.myId) return;
     let rec = this.remoteBalls.get(from);
     if (!rec) {
-      const side = pub.fight.sides[1] === from ? 1 : 0;
+      const team = this.teamFor(from);
       const mk = (): RemoteBall => {
-        const visual = createFireVisual(side === 1 ? 1 : 0);
+        const visual = createFireVisual(team);
         this.scene.add(visual.group);
         return {
           visual,
@@ -604,6 +740,7 @@ export class FightSystem extends createSystem({}) {
           heat: 0.8,
           trailAcc: 0,
           hitCooldown: 0,
+          returnHit: 0,
           hasTarget: false,
         };
       };
@@ -612,16 +749,19 @@ export class FightSystem extends createSystem({}) {
     }
     for (const idx of [0, 1] as const) {
       const [x, y, z, state] = balls[idx];
+      const prev = rec[idx].state;
       rec[idx].target.set(x, y, z);
       if (!rec[idx].hasTarget) {
         rec[idx].visual.group.position.set(x, y, z);
         rec[idx].hasTarget = true;
       }
-      // Don't resurrect a ball we already ruled dead (hit/parry) until the
+      // Don't resurrect a ball we already ruled dead (hit/parry/clash) until the
       // owner's stream agrees it's back in play.
-      if (!(rec[idx].state === DEAD && state === FLYING && rec[idx].hitCooldown > 0)) {
+      if (!(prev === DEAD && state === FLYING && rec[idx].hitCooldown > 0)) {
         rec[idx].state = state;
       }
+      // A fresh return leg re-arms the recall-through hit.
+      if (rec[idx].state === RETURNING && prev !== RETURNING) rec[idx].returnHit = 0;
     }
   }
 
@@ -651,7 +791,9 @@ export class FightSystem extends createSystem({}) {
 
     if (state === FLYING || state === RETURNING) {
       rec.trailAcc += delta;
-      if (rec.trailAcc >= 0.012) {
+      // Dense stamp (arena cadence) so the fat core particles overlap into one
+      // thick molten rope.
+      if (rec.trailAcc >= 0.009) {
         rec.trailAcc = 0;
         stampTrail(pos, cool);
       }
