@@ -404,13 +404,22 @@ function buildEagleHead(accent: number): Group {
   const cere = new Mesh(new BoxGeometry(r * 0.3, r * 0.14, r * 0.2), darkMat());
   cere.position.set(0, -r * 0.04, -r * 1.0);
   g.add(cere);
-  // Swept-back feather crest — fanning glowing blades.
-  for (let i = -2; i <= 2; i++) {
-    const len = r * 0.52 - Math.abs(i) * r * 0.07;
-    const feather = new Mesh(new BoxGeometry(r * 0.05, len, r * 0.16), glowMat(accent, 0.6 + (2 - Math.abs(i)) * 0.2));
-    feather.position.set(i * r * 0.16, r * 0.7, r * 0.12);
-    feather.rotation.set(0.7, 0, i * 0.12);
-    g.add(feather);
+  // Layered crown plume: decorative metal feathers that hide the bare dome.
+  const crestBase = new Mesh(new BoxGeometry(r * 0.62, r * 0.16, r * 0.18), darkMat());
+  crestBase.position.set(0, r * 0.74, r * 0.08);
+  crestBase.rotation.x = 0.45;
+  g.add(crestBase);
+  for (let i = -3; i <= 3; i++) {
+    const a = Math.abs(i);
+    const len = r * (0.78 - a * 0.08);
+    const back = new Mesh(new BoxGeometry(r * 0.08, len, r * 0.12), chassisMat(accent, 0.04));
+    back.position.set(i * r * 0.12, r * (0.82 - a * 0.015), r * (0.09 + a * 0.015));
+    back.rotation.set(0.72 + a * 0.07, i * -0.05, i * 0.16);
+    g.add(back);
+    const vane = new Mesh(new BoxGeometry(r * 0.032, len * 0.82, r * 0.14), glowMat(accent, 0.75 + (3 - a) * 0.16));
+    vane.position.set(i * r * 0.12, r * (0.86 - a * 0.01), r * (0.045 + a * 0.01));
+    vane.rotation.copy(back.rotation);
+    g.add(vane);
   }
   // Layered cheek feather plates.
   for (const side of [-1, 1]) {
