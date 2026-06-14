@@ -43,6 +43,8 @@ export type PeerMessage =
   | { k: 'clash'; mine: 0 | 1; yours: 0 | 1 }
   /** I want a rematch (sent from the FIGHT OVER panel; both sides → restart). */
   | { k: 'rematch' }
+  /** I threw you a GG (the B-button salute). Pop it over my avatar's head. */
+  | { k: 'gg' }
   /** Who I am, once per bout: leaderboard callsign + hidden ELO (so the
    *  winner can weight their score gain by rival quality) + my skin picks
    *  so you see me dressed the way I chose. */

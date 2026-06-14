@@ -12,13 +12,18 @@ import { opponent } from '../combat/opponentBus.js';
 import { spawnGestureCue, spawnPopup } from '../fx/effects.js';
 import { pulseHand } from '../input/haptics.js';
 import { app } from '../menu/appState.js';
+import { net } from '../net/client.js';
 import * as sfx from '../audio/sfx.js';
 import { ARENA_GAP } from '../config.js';
 
 const CLAP_DISTANCE = 0.13;
 const CLAP_CLOSING_SPEED = 1.45;
 const CLAP_COMBINED_SPEED = 2.1;
-const CLAP_COOLDOWN = 0.55;
+const CLAP_COOLDOWN = 0.2; // applause should be rapid, not gated
+
+/** The B-button GG salute is a deliberate one-shot — long cooldown so it can't
+ *  be spammed at the opponent. */
+const SELF_GG_COOLDOWN = 10;
 
 const FIST_TOUCH_DISTANCE = 0.26;
 const FIST_LANE_RADIUS = 0.3;
@@ -38,6 +43,7 @@ export class PlayerGestureSystem extends createSystem({}) {
   private hasPrev = false;
   private clapCooldown = 0;
   private fistBumpCooldown = 0;
+  private selfGgCooldown = 0;
 
   update(delta: number): void {
     const active = app.state === 'playing' || app.state === 'training';
@@ -57,6 +63,7 @@ export class PlayerGestureSystem extends createSystem({}) {
     rightGrip.getWorldPosition(_right);
     this.clapCooldown = Math.max(0, this.clapCooldown - delta);
     this.fistBumpCooldown = Math.max(0, this.fistBumpCooldown - delta);
+    this.selfGgCooldown = Math.max(0, this.selfGgCooldown - delta);
 
     this.tryClap(delta);
     this.trySelfGgButton();
@@ -88,9 +95,11 @@ export class PlayerGestureSystem extends createSystem({}) {
   }
 
   private trySelfGgButton(): void {
-    if (this.fistBumpCooldown > 0) return;
+    if (this.selfGgCooldown > 0) return;
     if (!(this.input.xr.gamepads.right?.getButtonDown(InputComponent.B_Button) ?? false)) return;
     this.emitGg(_right, 'right');
+    net.send({ k: 'gg' }); // the opponent pops the GG over my avatar's head
+    this.selfGgCooldown = SELF_GG_COOLDOWN;
   }
 
   private tryFistBump(delta: number): void {
@@ -131,6 +140,7 @@ export class PlayerGestureSystem extends createSystem({}) {
     if (!best) return;
 
     this.emitGg(best.cue, best.local === 0 ? 'left' : 'right');
+    this.fistBumpCooldown = FIST_BUMP_COOLDOWN;
   }
 
   private emitGg(cue: Vector3, hands: 'left' | 'right' | 'both'): void {
@@ -144,7 +154,7 @@ export class PlayerGestureSystem extends createSystem({}) {
     } else {
       pulseHand(this.world.session, hands, 0.55, 80);
     }
-    this.fistBumpCooldown = FIST_BUMP_COOLDOWN;
+    // Cooldown is owned by the caller — fist bump vs the B-button salute differ.
   }
 
   private anyPressed(button: string): boolean {

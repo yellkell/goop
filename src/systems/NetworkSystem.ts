@@ -30,7 +30,7 @@ import { myElo, myName, reportResult, rival } from '../net/leaderboard.js';
 import { customization } from '../menu/customization.js';
 import { setSpeakerPosition, updateListener } from '../net/voice.js';
 import type { PeerMessage, PoseTuple } from '../net/protocol.js';
-import { spawnDamagePopup, spawnFireImpact } from '../fx/effects.js';
+import { spawnDamagePopup, spawnFireImpact, spawnGestureCue, spawnPopup } from '../fx/effects.js';
 import * as sfx from '../audio/sfx.js';
 import { InputComponent } from '@iwsdk/core';
 import { NET } from '../config.js';
@@ -215,6 +215,15 @@ export class NetworkSystem extends createSystem({
           ball.setValue(Fireball, 'state', BallState.Dead);
         }
         ballCommands.push({ type: 'spend', hand: msg.mine });
+        break;
+      }
+      case 'gg': {
+        // The rival saluted us — pop their GG over their avatar's head.
+        _p.copy(opponent.headPos);
+        _p.y += 0.32;
+        spawnGestureCue(this.world, opponent.headPos, 0.3);
+        spawnPopup(this.world, _p, 'GG', '#ffffff', 'rgba(255,255,255,0.95)', 2.2);
+        sfx.fistBump();
         break;
       }
       case 'rematch':
