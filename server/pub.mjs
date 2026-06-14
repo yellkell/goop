@@ -17,6 +17,7 @@
 
 import { createServer } from 'node:http';
 import { readFileSync, writeFileSync } from 'node:fs';
+import { createHmac } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { WebSocketServer } from 'ws';
@@ -302,14 +303,71 @@ function handleEvent(senderId, ev) {
   }
 }
 
+// --- LiveKit voice tokens -------------------------------------------------------
+// Pub voice runs through a LiveKit SFU (the 1v1 arena keeps its own P2P voice).
+// We mint short-lived access tokens here so the API secret never reaches the
+// browser. A LiveKit token is a plain HS256 JWT, so we sign it with the API
+// secret using node:crypto — no extra server dependency to deploy on Render.
+//
+// Set these in the Render service environment (Dashboard → Environment):
+//   LIVEKIT_URL      wss://<your-project>.livekit.cloud
+//   LIVEKIT_API_KEY  (from the LiveKit Cloud project's Keys page)
+//   LIVEKIT_API_SECRET
+const LK_URL = process.env.LIVEKIT_URL || '';
+const LK_KEY = process.env.LIVEKIT_API_KEY || '';
+const LK_SECRET = process.env.LIVEKIT_API_SECRET || '';
+const LK_READY = Boolean(LK_URL && LK_KEY && LK_SECRET);
+
+const b64url = (input) =>
+  Buffer.from(input).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+/** A LiveKit join token (JWT) for `identity` in `room`, valid for 6 hours. */
+function livekitToken(identity, name, room) {
+  const now = Math.floor(Date.now() / 1000);
+  const header = b64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+  const payload = b64url(
+    JSON.stringify({
+      iss: LK_KEY,
+      sub: identity,
+      name,
+      nbf: now,
+      iat: now,
+      exp: now + 6 * 60 * 60,
+      video: { room, roomJoin: true, canPublish: true, canSubscribe: true, canPublishData: false },
+    }),
+  );
+  const sig = b64url(createHmac('sha256', LK_SECRET).update(`${header}.${payload}`).digest());
+  return `${header}.${payload}.${sig}`;
+}
+
 // --- wiring ---------------------------------------------------------------------
 const http = createServer((req, res) => {
+  const url = new URL(req.url, 'http://localhost');
+
+  // Browser fetches the voice token cross-origin (Firebase Hosting → Render).
+  res.setHeader('Access-Control-Allow-Origin', '*');
+
+  if (url.pathname === '/token') {
+    if (!LK_READY) {
+      res.writeHead(503, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: 'voice not configured' }));
+      return;
+    }
+    const identity = (url.searchParams.get('identity') || `anon-${Math.random().toString(36).slice(2, 8)}`).slice(0, 64);
+    const name = (url.searchParams.get('name') || '').slice(0, 32);
+    const room = (url.searchParams.get('room') || 'iron-balls-pub').slice(0, 64);
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ token: livekitToken(identity, name, room), url: LK_URL }));
+    return;
+  }
+
   res.writeHead(200, { 'content-type': 'application/json' });
   res.end(
     JSON.stringify({
       pub: 'iron-balls-pub',
       punters: players.size,
       snakeHi: data.snakeHi,
+      voice: LK_READY ? 'livekit' : 'off',
     }),
   );
 });

@@ -17,9 +17,9 @@ import { PALETTE, teamColor } from '../../config.js';
 import { spawnGestureCue } from '../../fx/effects.js';
 import { pulseHand } from '../../input/haptics.js';
 import { clap, micToggle, saloonEntry } from '../../audio/sfx.js';
-import { onSnap, onSpawn, onVoice, pubSendRaw, pubSendVoice } from '../net.js';
-import { startVoiceCapture, toggleVoiceMuted } from '../voice/capture.js';
-import { isSpeaking, pushVoiceFrame, removeVoiceSpeaker, setVoiceSpeakerPosition, updateVoiceListener } from '../voice/playback.js';
+import { onSnap, onSpawn, pubSendRaw } from '../net.js';
+import { connectPubVoice, isSpeaking, togglePubMic } from '../voice/livekit.js';
+import { PUB_VOICE_ROOM, pubVoiceTokenUrl } from '../config.js';
 import { Panel } from '../panel.js';
 import type { PoseTuple, PubPlayerNet } from '../protocol.js';
 import { bus, pub, type RemotePunter } from '../state.js';
@@ -43,7 +43,6 @@ const _cam = new Vector3();
 const _left = new Vector3();
 const _right = new Vector3();
 const _mid = new Vector3();
-const _camQ = new Quaternion();
 
 function packWorldPose(obj: { getWorldPosition(v: Vector3): Vector3; getWorldQuaternion(q: Quaternion): Quaternion }): PoseTuple {
   obj.getWorldPosition(_pos);
@@ -94,13 +93,9 @@ export class PubPlayerSystem extends createSystem({}) {
 
   init(): void {
     onSpawn((p) => this.spawn(p));
-    // Spatial voice: play every punter's frames through a panner pinned to
-    // their head (positioned each frame in update()). The server fans voice to
-    // the whole room — fighters and crowd alike — so we just play what we're
-    // sent. Our OWN mic capture is started lazily on the first controller press
-    // (startVoice) — getUserMedia and the audio graph need a real user gesture
-    // to come alive in VR.
-    onVoice((id, frame) => pushVoiceFrame(id, frame));
+    // Voice runs through LiveKit (see voice/livekit.ts) — we join the room on
+    // the first controller press (getUserMedia + autoplay need a real gesture)
+    // and LiveKit fans everyone's mic to the whole pub.
     onSnap((poses) => {
       for (const [id, head, left, right] of poses) {
         const punter = pub.punters.get(id);
@@ -151,16 +146,14 @@ export class PubPlayerSystem extends createSystem({}) {
     }
 
     // --- voice ---------------------------------------------------------------
-    // Left Y toggles your mic. Keep the audio listener on your camera so the
-    // room pans correctly even when you're alone (speakers track heads below).
+    // Left Y toggles your LiveKit mic.
     if (this.input.xr.gamepads.left?.getButtonDown(InputComponent.Y_Button)) {
-      const muted = toggleVoiceMuted();
+      const muted = togglePubMic();
       micToggle(!muted);
       pulseHand(this.world.session, 'left', 0.25, muted ? 30 : 60);
     }
+    // Camera world position is still needed below to face the name tags.
     this.camera.getWorldPosition(_cam);
-    this.camera.getWorldQuaternion(_camQ);
-    updateVoiceListener(_cam, _camQ);
 
     // --- remote punters -----------------------------------------------------
     if (pub.punters.size === 0) return;
@@ -192,8 +185,6 @@ export class PubPlayerSystem extends createSystem({}) {
         glove.position.lerp(_pos, k);
         glove.quaternion.slerp(_quat, k);
       }
-      // Their voice comes from their head.
-      setVoiceSpeakerPosition(punter.id, rig.head.position);
       // Name tag floats over the helmet, facing you — and swells a touch while
       // they're talking so you can see who has the floor.
       punter.nameTag.mesh.position.copy(rig.head.position);
@@ -235,25 +226,21 @@ export class PubPlayerSystem extends createSystem({}) {
   }
 
   /**
-   * Bring the mic online on a trigger/squeeze. Browsers gate getUserMedia and
-   * the WebAudio graph behind a genuine user gesture; the controller press is
-   * ours. The mic permission granted in the FIRE FIGHT arena does NOT carry
-   * into the pub page (different document), so the pub asks for it afresh — and
-   * if that first ask is denied or races the immersive session, we keep trying
-   * on later presses (every ~2s) so the player gets another prompt rather than
-   * being stuck silent forever.
+   * Join the LiveKit voice room on the first trigger/squeeze. Connecting and
+   * enabling the mic need a genuine user gesture (getUserMedia + autoplay), and
+   * the room server only hands out a token once we have our pub id, so we wait
+   * for both and retry on later presses if the first attempt races or fails.
    */
   private startVoiceOnFirstPress(): void {
     if (this.voiceStarted || this.voiceStarting) return;
     if (this.voiceRetryCooldown > 0) return;
+    if (!pub.online || !pub.myId) return; // need our identity for the token
     if (!this.anyPressed(InputComponent.Trigger) && !this.anyPressed(InputComponent.Squeeze)) return;
     this.voiceStarting = true;
-    void startVoiceCapture((frame) => pubSendVoice(frame)).then((ok) => {
+    void connectPubVoice(pubVoiceTokenUrl(), pub.myId, pub.myName, PUB_VOICE_ROOM).then((ok) => {
       this.voiceStarting = false;
       this.voiceStarted = ok; // only a real success locks it in
-      if (!ok) this.voiceRetryCooldown = 2; // let them try again on the next press
-      // eslint-disable-next-line no-console
-      console.info(ok ? '[pub voice] mic live' : '[pub voice] mic unavailable (permission?) — will retry on next press');
+      if (!ok) this.voiceRetryCooldown = 2; // try again on the next press
     });
   }
 
@@ -263,7 +250,6 @@ export class PubPlayerSystem extends createSystem({}) {
     for (const part of punter.rig.all) this.scene.remove(part);
     this.scene.remove(punter.nameTag.mesh);
     punter.nameTag.dispose();
-    removeVoiceSpeaker(id);
     pub.punters.delete(id);
   }
 
