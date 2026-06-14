@@ -26,6 +26,8 @@ interface Boxers {
   them: Entity;
 }
 
+type RoundResult = 'ko' | 'time';
+
 export class GameStateSystem extends createSystem({
   combatants: { required: [Combatant, Health] },
 }) {
@@ -88,9 +90,9 @@ export class GameStateSystem extends createSystem({
   private runAuthority(c: Boxers, pHp: number, oHp: number, delta: number): void {
     if (match.phase === 'playing') {
       match.roundTimer = Math.max(0, match.roundTimer - delta);
-      if (oHp <= 0) this.endRound(true, 'KNOCKOUT');
-      else if (pHp <= 0) this.endRound(false, 'KNOCKED OUT');
-      else if (match.roundTimer <= 0) this.endRound(pHp >= oHp, 'TIME');
+      if (oHp <= 0) this.endRound(true, 'ko');
+      else if (pHp <= 0) this.endRound(false, 'ko');
+      else if (match.roundTimer <= 0) this.endRound(pHp >= oHp, 'time');
     } else if (match.phase === 'matchOver' && app.mode === 'net') {
       // Net bouts HOLD at FIGHT OVER — the panel decides. Both boxers
       // pressing REMATCH restarts the match; RETURN (or the rival leaving)
@@ -126,12 +128,12 @@ export class GameStateSystem extends createSystem({
     }
   }
 
-  private endRound(iWon: boolean, how: string): void {
+  private endRound(iWon: boolean, result: RoundResult): void {
     if (iWon) match.myScore += 1;
     else match.oppScore += 1;
     match.phase = 'roundOver';
     match.resultTimer = MATCH.roundOverDelay;
-    match.message = iWon ? (how === 'TIME' ? 'ROUND WON' : 'KNOCKOUT') : how === 'TIME' ? 'ROUND LOST' : 'KNOCKED OUT';
+    match.message = result === 'ko' ? (iWon ? 'KO' : "KO'D") : iWon ? 'WIN' : 'LOSS';
     sfx.roundEnd(iWon);
     if (app.mode === 'net') this.echoState();
   }
@@ -140,7 +142,7 @@ export class GameStateSystem extends createSystem({
     match.phase = 'matchOver';
     match.resultTimer = MATCH.matchOverDelay;
     const win = match.myScore > match.oppScore;
-    match.message = win ? 'YOU WIN THE FIGHT' : 'YOU LOSE';
+    match.message = win ? 'YOU WIN' : 'YOU LOSE';
     if (win) app.stats.wins += 1;
     else app.stats.losses += 1;
     saveStats();

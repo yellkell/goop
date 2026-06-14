@@ -4,8 +4,8 @@
  * the right (blue) — so one glance over your rival's shoulder takes in the
  * whole game state. Smoked glass, not opaque hoardings: a stencilled name
  * strip, a chunky segmented health readout, chamfered round pips and the
- * timer, with your real room visible through everything. The headline
- * (ROUND WON, etc.) floats above them.
+ * timer, with your real room visible through everything. The short metallic
+ * verdict (KO, YOU WIN, etc.) floats above them.
  *
  * In Aim Training the left board becomes your score/streak readout and the
  * right board shows the dodge bar + time.
@@ -23,7 +23,7 @@ import {
 import { ARENA_GAP, MATCH } from '../config.js';
 import type { MatchState } from '../combat/matchState.js';
 import { app, training } from '../menu/appState.js';
-import { UI, hazardStrip, plate, segmentBar, stencilFont } from './industrial.js';
+import { UI, fitStencilText, hazardStrip, metalText, plate, segmentBar, stencilFont } from './industrial.js';
 
 const W = 880;
 const H = 420;
@@ -113,6 +113,13 @@ function fmtTime(seconds: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
+function verdictAccent(message: string): string {
+  if (message.includes('LOSE') || message === 'LOSS' || message === "KO'D") return UI.coolBright;
+  if (message === 'FIGHT' || message === 'TIME') return UI.danger;
+  if (message === 'WIN') return UI.amber;
+  return UI.emberBright;
+}
+
 export function createScoreboard(scene: Scene): Scoreboard {
   const group = new Group();
   group.name = 'scoreboards';
@@ -130,7 +137,7 @@ export function createScoreboard(scene: Scene): Scoreboard {
   const timer = makeBoard(0.46, 0.29, 256, 160);
   timer.mesh.position.set(0, 2.0, -ARENA_GAP - 1.1);
 
-  // Headline strip (ROUND WON, KNOCKOUT…) floating just above the boards.
+  // Headline strip (KO, YOU WIN...) floating just above the boards.
   // Sized to the canvas aspect so the stencil type renders undistorted.
   const centre = makeBoard(2.2, 1.05);
   centre.mesh.position.set(0, 2.9, -ARENA_GAP - 1.15);
@@ -182,35 +189,31 @@ export function createScoreboard(scene: Scene): Scoreboard {
     const { ctx, tex } = centre;
     ctx.clearRect(0, 0, W, H);
     if (message) {
-      // No backing plate — just the verdict, molten stencil type floating
-      // over the gap, shrunk until it fits whatever the message is.
+      // Dark smoked plate plus chromed type: shorter and heavier than the old
+      // explanatory copy, but still rim-lit in the bout colours.
       ctx.textAlign = 'center';
-      let px = 120;
-      ctx.font = stencilFont(px);
-      while (px > 44 && ctx.measureText(message).width > W - 64) {
-        px -= 4;
-        ctx.font = stencilFont(px);
-      }
+      const accent = verdictAccent(message);
+      const px = fitStencilText(ctx, message, W - 120, message.includes('YOU') ? 124 : 152, 44);
       const midY = sub ? 188 : 216;
-      const grad = ctx.createLinearGradient(0, midY - px * 0.55, 0, midY + px * 0.55);
-      grad.addColorStop(0, '#fff3cf');
-      grad.addColorStop(1, UI.ember);
-      // A dark outline then an ember halo keep it readable over passthrough.
-      ctx.lineWidth = Math.max(6, px * 0.09);
-      ctx.strokeStyle = 'rgba(10,11,14,0.85)';
-      ctx.strokeText(message, W / 2, midY);
-      ctx.fillStyle = grad;
-      ctx.shadowColor = 'rgba(255,122,24,0.9)';
-      ctx.shadowBlur = 26;
-      ctx.fillText(message, W / 2, midY);
-      ctx.shadowBlur = 0;
+      const textW = ctx.measureText(message).width;
+      const plateW = Math.min(W - 72, Math.max(300, textW + 128));
+      plate(ctx, (W - plateW) / 2, midY - px * 0.62, plateW, px * 1.18, {
+        cut: 28,
+        fill: 'rgba(2,3,7,0.78)',
+        stroke: accent,
+        rivets: false,
+      });
+      metalText(ctx, message, W / 2, midY, px, accent);
       if (sub) {
-        ctx.font = '700 44px system-ui, sans-serif';
-        ctx.lineWidth = 6;
-        ctx.strokeStyle = 'rgba(10,11,14,0.8)';
-        ctx.strokeText(sub, W / 2, 296);
-        ctx.fillStyle = UI.textDim;
-        ctx.fillText(sub, W / 2, 296);
+        ctx.font = stencilFont(40);
+        ctx.lineWidth = 7;
+        ctx.strokeStyle = 'rgba(2,3,7,0.9)';
+        ctx.strokeText(sub, W / 2, 304);
+        ctx.fillStyle = accent;
+        ctx.shadowColor = accent;
+        ctx.shadowBlur = 10;
+        ctx.fillText(sub, W / 2, 304);
+        ctx.shadowBlur = 0;
       }
     }
     tex.needsUpdate = true;
@@ -221,7 +224,7 @@ export function createScoreboard(scene: Scene): Scoreboard {
       drawTimer(fmtTime(state.roundTimer));
       drawSide(left, 'YOU', UI.emberBright, pHp / pMax, state.myScore);
       drawSide(right, app.mode === 'net' ? 'RIVAL' : 'BOT', UI.cool, oHp / oMax, state.oppScore);
-      drawCentre(state.message, state.phase === 'matchOver' ? '' : state.message ? `round ${state.round}` : '');
+      drawCentre(state.message, state.phase === 'matchOver' ? '' : state.message ? `R${state.round}` : '');
     },
 
     updateTraining(hp, hpMax) {

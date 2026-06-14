@@ -245,10 +245,10 @@ export class NetworkSystem extends createSystem({
 
     if (msg.phase !== prevPhase) {
       if (msg.phase === 'playing') sfx.roundBell();
-      else if (msg.phase === 'roundOver') sfx.roundEnd(match.message.includes('WON') || match.message === 'KNOCKOUT');
+      else if (msg.phase === 'roundOver') sfx.roundEnd(match.message === 'KO' || match.message === 'WIN');
       else if (msg.phase === 'matchOver') {
         const win = match.myScore > match.oppScore;
-        match.message = win ? 'YOU WIN THE FIGHT' : 'YOU LOSE';
+        match.message = win ? 'YOU WIN' : 'YOU LOSE';
         if (win) app.stats.wins += 1;
         else app.stats.losses += 1;
         saveStats();
@@ -271,12 +271,18 @@ export class NetworkSystem extends createSystem({
   /** Host messages are host-perspective; mirror the verdict for the guest. */
   private flipMessage(msg: string): string {
     switch (msg) {
-      case 'KNOCKOUT': return 'KNOCKED OUT';
-      case 'KNOCKED OUT': return 'KNOCKOUT';
-      case 'ROUND WON': return 'ROUND LOST';
-      case 'ROUND LOST': return 'ROUND WON';
+      case 'KO': return "KO'D";
+      case "KO'D": return 'KO';
+      case 'WIN': return 'LOSS';
+      case 'LOSS': return 'WIN';
+      case 'YOU WIN': return 'YOU LOSE';
+      case 'YOU LOSE': return 'YOU WIN';
+      // Back-compat for any in-flight peers still running the old copy.
+      case 'KNOCKOUT': return "KO'D";
+      case 'KNOCKED OUT': return 'KO';
+      case 'ROUND WON': return 'LOSS';
+      case 'ROUND LOST': return 'WIN';
       case 'YOU WIN THE FIGHT': return 'YOU LOSE';
-      case 'YOU LOSE': return 'YOU WIN THE FIGHT';
       default: return msg;
     }
   }

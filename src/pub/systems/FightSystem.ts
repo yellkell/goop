@@ -53,7 +53,7 @@ import { pubSendEvent, pubSendRaw } from '../net.js';
 import type { FightNet, FireballNet } from '../protocol.js';
 import { bus, pub } from '../state.js';
 import { Panel } from '../panel.js';
-import { UI, hazardStrip, plate, segmentBar, stencilFont } from '../../ui/industrial.js';
+import { UI, fitStencilText, hazardStrip, metalText, plate, segmentBar, stencilFont } from '../../ui/industrial.js';
 import { teleportPlayer } from './TeleportSystem.js';
 
 const HANDS = ['left', 'right'] as const;
@@ -1065,13 +1065,13 @@ export class FightSystem extends createSystem({}) {
     const clk = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
     const headline =
       f.phase === 'starting'
-        ? `ROUND ${f.round}`
+        ? `R${f.round}`
         : f.phase === 'fighting'
-          ? 'FIGHT!'
+          ? 'FIGHT'
           : f.phase === 'roundOver'
             ? f.winner === pub.myId
-              ? 'ROUND WON'
-              : 'ROUND LOST'
+              ? 'WIN'
+              : 'LOSS'
             : f.winner === pub.myId
               ? 'YOU WIN'
               : 'YOU LOSE';
@@ -1097,9 +1097,8 @@ export class FightSystem extends createSystem({}) {
       // neon rule tinted to the moment.
       hazardStrip(ctx, 44, 40, 76, 24, UI.amber);
       ctx.textAlign = 'left';
-      ctx.font = stencilFont(54);
-      ctx.fillStyle = headlineColour;
-      ctx.fillText(headline, 146, 58);
+      const headlinePx = fitStencilText(ctx, headline, w - 330, 60, 34);
+      metalText(ctx, headline, 146, 58, headlinePx, headlineColour, 'left');
       ctx.textAlign = 'right';
       ctx.font = stencilFont(62);
       ctx.fillStyle = UI.text;
@@ -1202,19 +1201,25 @@ export class FightSystem extends createSystem({}) {
       }
 
       ctx.textAlign = 'center';
-      ctx.font = `900 ${Math.round(h * 0.17)}px "Arial Black", system-ui, sans-serif`;
+      const winnerSide = f.sides[1] === f.winner ? 1 : 0;
+      const winnerName = this.nameOf(f.winner).toUpperCase().slice(0, 10);
       const status =
         f.phase === 'idle'
-          ? 'CHALLENGERS WANTED'
+          ? 'OPEN'
           : f.phase === 'starting'
-            ? 'FIGHTERS READY…'
+            ? 'READY'
             : f.phase === 'fighting'
-              ? 'FIGHT!'
+              ? 'FIGHT'
               : f.phase === 'roundOver'
-                ? `${this.nameOf(f.winner).toUpperCase()} TAKES THE ROUND`
-                : `${this.nameOf(f.winner).toUpperCase()} WINS`;
-      ctx.fillStyle = f.phase === 'fighting' ? '#e8352a' : '#e8ecf2';
-      ctx.fillText(status, w / 2, h * 0.82);
+                ? `${winnerName} KO`
+                : `${winnerName} WINS`;
+      const statusAccent =
+        f.phase === 'fighting' ? UI.danger
+        : f.phase === 'starting' ? UI.amber
+        : f.phase === 'idle' ? UI.coolBright
+        : colours[winnerSide];
+      const statusPx = fitStencilText(ctx, status, w * 0.9, Math.round(h * 0.2), 28);
+      metalText(ctx, status, w / 2, h * 0.82, statusPx, statusAccent);
     });
   }
 }

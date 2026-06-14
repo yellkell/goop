@@ -29,6 +29,67 @@ export function stencilFont(px: number): string {
   return `900 ${px}px 'Arial Black', 'Arial Narrow', system-ui, sans-serif`;
 }
 
+/** Find the largest stencil size that fits a single-line label. */
+export function fitStencilText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+  startPx: number,
+  minPx = 18,
+): number {
+  let px = startPx;
+  ctx.font = stencilFont(px);
+  while (px > minPx && ctx.measureText(text).width > maxWidth) {
+    px -= 2;
+    ctx.font = stencilFont(px);
+  }
+  return px;
+}
+
+/** Dark, chromed verdict lettering with a coloured rim-light. */
+export function metalText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  px: number,
+  accent: string,
+  align: CanvasTextAlign = 'center',
+): void {
+  ctx.save();
+  ctx.textAlign = align;
+  ctx.textBaseline = 'middle';
+  ctx.font = stencilFont(px);
+  ctx.lineJoin = 'round';
+
+  ctx.lineWidth = Math.max(8, px * 0.13);
+  ctx.strokeStyle = 'rgba(1,2,5,0.95)';
+  ctx.strokeText(text, x, y);
+
+  ctx.shadowColor = accent;
+  ctx.shadowBlur = Math.round(px * 0.28);
+  ctx.lineWidth = Math.max(3, px * 0.045);
+  ctx.strokeStyle = accent;
+  ctx.strokeText(text, x, y);
+  ctx.shadowBlur = 0;
+
+  const chrome = ctx.createLinearGradient(0, y - px * 0.62, 0, y + px * 0.55);
+  chrome.addColorStop(0, '#f9fbff');
+  chrome.addColorStop(0.18, '#8e9aac');
+  chrome.addColorStop(0.36, '#e6ebf4');
+  chrome.addColorStop(0.52, accent);
+  chrome.addColorStop(0.74, '#303746');
+  chrome.addColorStop(1, '#080a0f');
+  ctx.fillStyle = chrome;
+  ctx.fillText(text, x, y);
+
+  ctx.globalAlpha = 0.42;
+  ctx.lineWidth = Math.max(1, px * 0.018);
+  ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+  ctx.strokeText(text, x, y - px * 0.02);
+  ctx.restore();
+}
+
 /** Futuristic HUD type — prefers a sci-fi face if the device has one, else a
  *  clean techy monospace. Pair with wide letter-spacing + a glow. */
 export function futuristicFont(px: number, weight = 600): string {
