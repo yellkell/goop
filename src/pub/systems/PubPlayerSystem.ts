@@ -26,11 +26,11 @@ import { bus, pub, type RemotePunter } from '../state.js';
 
 const SEND_INTERVAL = 0.05; // 20 Hz
 const EASE = 14; // exponential smoothing rate for remote pose targets
-const CLAP_DISTANCE = 0.15;
+const CLAP_DISTANCE = 0.13;
 // Hands have to come together with real intent — a slow drift between resting
 // hands shouldn't read as applause.
-const CLAP_CLOSING_SPEED = 1.3;
-const CLAP_COMBINED_SPEED = 1.9;
+const CLAP_CLOSING_SPEED = 1.45;
+const CLAP_COMBINED_SPEED = 2.1;
 const CLAP_COOLDOWN = 0.55;
 
 const _pos = new Vector3();

@@ -132,13 +132,15 @@ export class NetworkSystem extends createSystem({
         hands[hand] = packPose(_p, _q);
       }
       // Trigger and grip are one action; either squeeze lights us up for them.
+      // A social fist bump is stricter: both must be held so ordinary orbit
+      // holds do not accidentally advertise "GG me".
       const gp = this.input.xr.gamepads[HANDS[hand]];
       orbit[hand] =
         (gp?.getButtonPressed(InputComponent.Trigger) ?? false) ||
         (gp?.getButtonPressed(InputComponent.Squeeze) ?? false);
       fist[hand] =
         (gp?.getButtonPressed(InputComponent.Squeeze) ?? false) &&
-        !(gp?.getButtonPressed(InputComponent.Trigger) ?? false);
+        (gp?.getButtonPressed(InputComponent.Trigger) ?? false);
     }
 
     net.send({ k: 'pose', head: headPose, left: hands[0], right: hands[1], orbit, fist, hp: this.myHp });

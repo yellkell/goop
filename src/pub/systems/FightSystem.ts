@@ -67,6 +67,10 @@ const RETURNING = 3;
 const DEAD = 4;
 
 const STREAM_INTERVAL = 0.05; // 20 Hz
+const FIST_TOUCH_DISTANCE = 0.32;
+const FIST_LANE_RADIUS = 0.34;
+const FIST_CLOSING_SPEED = 1.35;
+const FIST_LOCAL_HAND_SPEED = 1.2;
 
 /** Ring buffer of recent hand positions → smoothed punch velocity. */
 class VelocityTracker {
@@ -165,6 +169,9 @@ export class FightSystem extends createSystem({}) {
   private lastServerTimer = -1;
   /** Throttle glove-touches so one bump pops a single GG. */
   private fistBumpCooldown = 0;
+  private fistPose: [Vector3, Vector3] = [new Vector3(), new Vector3()];
+  private prevFistPose: [Vector3, Vector3] = [new Vector3(), new Vector3()];
+  private hasPrevFistPose = false;
 
   init(): void {
     // The local fighter's body: an ember (team 0) torso wearing my avatar
@@ -457,43 +464,80 @@ export class FightSystem extends createSystem({}) {
     this.fistBumpCooldown = Math.max(0, this.fistBumpCooldown - delta);
     if (this.fistBumpCooldown > 0) return;
     const side = this.mySide();
-    if (side === -1) return;
+    if (side === -1) {
+      this.hasPrevFistPose = false;
+      return;
+    }
     // The moments you actually want it: the pre-bell stare-down, between rounds
     // and after the match — never mid-exchange.
     const phase = pub.fight.phase;
-    if (phase !== 'starting' && phase !== 'roundOver' && phase !== 'over') return;
+    if (phase !== 'starting' && phase !== 'roundOver' && phase !== 'over') {
+      this.hasPrevFistPose = false;
+      return;
+    }
 
     const oppId = pub.fight.sides[side === 0 ? 1 : 0];
     const opp = oppId ? pub.punters.get(oppId) : null;
-    if (!opp) return;
+    if (!opp || delta <= 0) {
+      this.hasPrevFistPose = false;
+      return;
+    }
     const oppSide: 0 | 1 = side === 0 ? 1 : 0;
 
     for (const hand of [0, 1] as const) {
-      const gp = this.input.xr.gamepads[HANDS[hand]];
-      const clenched =
-        (gp?.getButtonPressed(InputComponent.Squeeze) ?? false) &&
-        !(gp?.getButtonPressed(InputComponent.Trigger) ?? false);
-      if (!clenched) continue;
       const grip = this.player.gripSpaces[HANDS[hand]];
-      if (!grip) continue;
-      grip.getWorldPosition(_myFist);
+      if (!grip) {
+        this.hasPrevFistPose = false;
+        return;
+      }
+      grip.getWorldPosition(this.fistPose[hand]);
+    }
+
+    if (!this.hasPrevFistPose) {
+      this.rememberFistPose();
+      return;
+    }
+
+    for (const hand of [0, 1] as const) {
+      if (!this.localFistPressed(hand)) continue;
+      _myFist.copy(this.fistPose[hand]);
+      const localSpeed = _myFist.distanceTo(this.prevFistPose[hand]) / delta;
       const iReach = this.reachingToCentre(_myFist.z, side);
 
       for (const oh of [opp.left, opp.right]) {
         _oppFist.set(oh[0], oh[1], oh[2]);
         const contact = _myFist.distanceTo(_oppFist);
         const lane = Math.hypot(_myFist.x - _oppFist.x, _myFist.y - _oppFist.y);
-        const bothReach = iReach && this.reachingToCentre(_oppFist.z, oppSide) && lane < 0.42;
-        if (contact > 0.4 && !bothReach) continue;
+        const bothReach = iReach && this.reachingToCentre(_oppFist.z, oppSide) && lane < FIST_LANE_RADIUS;
+        if (contact > FIST_TOUCH_DISTANCE && !bothReach) continue;
+        const closingSpeed = (this.prevFistPose[hand].distanceTo(_oppFist) - contact) / delta;
+        if (closingSpeed < FIST_CLOSING_SPEED && localSpeed < FIST_LOCAL_HAND_SPEED) continue;
 
         _ggMid.copy(_myFist).add(_oppFist).multiplyScalar(0.5);
         this.popGg(_ggMid);
         pubSendEvent({ e: 'FIGHT_GG', pos: [_ggMid.x, _ggMid.y, _ggMid.z] });
         pulseHand(this.world.session, HANDS[hand], 0.6, 90);
         this.fistBumpCooldown = 1.25;
+        this.rememberFistPose();
         return;
       }
     }
+
+    this.rememberFistPose();
+  }
+
+  private localFistPressed(hand: 0 | 1): boolean {
+    const gp = this.input.xr.gamepads[HANDS[hand]];
+    return (
+      (gp?.getButtonPressed(InputComponent.Squeeze) ?? false) &&
+      (gp?.getButtonPressed(InputComponent.Trigger) ?? false)
+    );
+  }
+
+  private rememberFistPose(): void {
+    this.prevFistPose[0].copy(this.fistPose[0]);
+    this.prevFistPose[1].copy(this.fistPose[1]);
+    this.hasPrevFistPose = true;
   }
 
   /** A fist `z` that has reached out over the pit toward the centreline. */

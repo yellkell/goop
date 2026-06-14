@@ -15,14 +15,17 @@ import { app } from '../menu/appState.js';
 import * as sfx from '../audio/sfx.js';
 import { ARENA_GAP } from '../config.js';
 
-const CLAP_DISTANCE = 0.16;
-const CLAP_CLOSING_SPEED = 0.75;
-const CLAP_COMBINED_SPEED = 1.1;
+const CLAP_DISTANCE = 0.13;
+const CLAP_CLOSING_SPEED = 1.45;
+const CLAP_COMBINED_SPEED = 2.1;
 const CLAP_COOLDOWN = 0.55;
 
-const FIST_TOUCH_DISTANCE = 0.32;
-const FIST_LANE_RADIUS = 0.36;
+const FIST_TOUCH_DISTANCE = 0.26;
+const FIST_LANE_RADIUS = 0.3;
 const FIST_FORWARD_REACH = 0.45;
+const FIST_CLOSING_SPEED = 1.45;
+const FIST_COMBINED_SPEED = 2.2;
+const FIST_LOCAL_HAND_SPEED = 1.25;
 const FIST_BUMP_COOLDOWN = 1.25;
 
 const _left = new Vector3();
@@ -58,7 +61,7 @@ export class PlayerGestureSystem extends createSystem({}) {
 
     this.tryClap(delta);
     this.trySelfFistBump(delta);
-    this.tryFistBump();
+    this.tryFistBump(delta);
 
     this.prevLeft.copy(_left);
     this.prevRight.copy(_right);
@@ -87,8 +90,8 @@ export class PlayerGestureSystem extends createSystem({}) {
 
   private trySelfFistBump(delta: number): void {
     if (!this.hasPrev || this.fistBumpCooldown > 0 || delta <= 0) return;
-    const leftFist = this.pressed('left', InputComponent.Squeeze) && !this.pressed('left', InputComponent.Trigger);
-    const rightFist = this.pressed('right', InputComponent.Squeeze) && !this.pressed('right', InputComponent.Trigger);
+    const leftFist = this.fistPressed('left');
+    const rightFist = this.fistPressed('right');
     if (!leftFist || !rightFist) return;
 
     const distance = _left.distanceTo(_right);
@@ -96,27 +99,29 @@ export class PlayerGestureSystem extends createSystem({}) {
     const closingSpeed = (this.prevDistance - distance) / delta;
     const leftSpeed = _left.distanceTo(this.prevLeft) / delta;
     const rightSpeed = _right.distanceTo(this.prevRight) / delta;
-    if (closingSpeed < CLAP_CLOSING_SPEED && leftSpeed + rightSpeed < CLAP_COMBINED_SPEED) return;
+    if (closingSpeed < FIST_CLOSING_SPEED && leftSpeed + rightSpeed < FIST_COMBINED_SPEED) return;
 
     _mid.copy(_left).add(_right).multiplyScalar(0.5);
     this.emitGg(_mid, 'both');
   }
 
-  private tryFistBump(): void {
+  private tryFistBump(delta: number): void {
     // Works in EVERY match phase — the bump you most want is the touch of
     // gloves between rounds and after the final bell, so don't gate it to the
     // live round (that was why "nothing happened" the moment the bell went).
-    if (app.state !== 'playing' || !opponent.active || this.fistBumpCooldown > 0) return;
+    if (app.state !== 'playing' || !opponent.active || this.fistBumpCooldown > 0 || delta <= 0) return;
 
     const localFist: [boolean, boolean] = [
-      this.pressed('left', InputComponent.Squeeze) && !this.pressed('left', InputComponent.Trigger),
-      this.pressed('right', InputComponent.Squeeze) && !this.pressed('right', InputComponent.Trigger),
+      this.fistPressed('left'),
+      this.fistPressed('right'),
     ];
 
     let best: { local: 0 | 1; remote: 0 | 1; score: number; cue: Vector3 } | null = null;
     for (const local of [0, 1] as const) {
       if (!localFist[local]) continue;
       const localPos = local === 0 ? _left : _right;
+      const prevLocalPos = local === 0 ? this.prevLeft : this.prevRight;
+      const localSpeed = localPos.distanceTo(prevLocalPos) / delta;
       for (const remote of [0, 1] as const) {
         if (!opponent.fisting[remote]) continue;
         const remotePos = opponent.handPos[remote];
@@ -127,6 +132,8 @@ export class PlayerGestureSystem extends createSystem({}) {
           remotePos.z > -ARENA_GAP + FIST_FORWARD_REACH &&
           laneDistance < FIST_LANE_RADIUS;
         if (contactDistance > FIST_TOUCH_DISTANCE && !bothReached) continue;
+        const closingSpeed = (prevLocalPos.distanceTo(remotePos) - contactDistance) / delta;
+        if (closingSpeed < FIST_CLOSING_SPEED && localSpeed < FIST_LOCAL_HAND_SPEED) continue;
         const score = contactDistance + laneDistance;
         if (!best || score < best.score) {
           best = { local, remote, score, cue: _mid.copy(localPos).add(remotePos).multiplyScalar(0.5).clone() };
@@ -154,6 +161,10 @@ export class PlayerGestureSystem extends createSystem({}) {
 
   private anyPressed(button: string): boolean {
     return this.pressed('left', button) || this.pressed('right', button);
+  }
+
+  private fistPressed(hand: 'left' | 'right'): boolean {
+    return this.pressed(hand, InputComponent.Squeeze) && this.pressed(hand, InputComponent.Trigger);
   }
 
   private pressed(hand: 'left' | 'right', button: string): boolean {
