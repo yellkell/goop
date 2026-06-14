@@ -39,7 +39,9 @@ export const AVATAR_SKINS: AvatarSkin[] = [
   // display names follow the metallic-animal heads buildBoxer gives each one.
   { id: 'cobalt', name: 'BEAR', chassis: 0x122039, trim: 0x0a111e, accent: 0x4fb7ff },
   { id: 'crimson', name: 'PANTHER', chassis: 0x2e1013, trim: 0x170809, accent: 0xff3b4e },
-  { id: 'valkyrie', name: 'EAGLE', chassis: 0x261b33, trim: 0x120d1a, accent: 0xff9ad5, slim: true },
+  // No slimmer silhouette: the visual body must match the shared hitbox so no
+  // skin is harder to hit than another.
+  { id: 'valkyrie', name: 'EAGLE', chassis: 0x261b33, trim: 0x120d1a, accent: 0xff9ad5 },
   { id: 'soon-av', name: 'SOON', locked: true, chassis: 0, trim: 0, accent: 0 },
 ];
 
@@ -52,7 +54,9 @@ export const PLATFORM_SKINS: PlatformSkin[] = [
 
 /** How the OPPONENT looks when they haven't picked (bot bouts): team blue. */
 export const OPPONENT_DEFAULT_AVATAR: AvatarSkin = {
-  id: 'opp-default', name: '', chassis: 0x1c1f25, trim: 0x121419, accent: PALETTE.coolFlame,
+  // id matches the PANTHER tag so an unskinned opponent (the bot) still gets a
+  // full animal head — in the default cool-blue team colours.
+  id: 'crimson', name: '', chassis: 0x1c1f25, trim: 0x121419, accent: PALETTE.coolFlame,
 };
 export const OPPONENT_DEFAULT_PLATFORM: PlatformSkin = {
   id: 'opp-default', name: '', neon: PALETTE.coolFlame,
