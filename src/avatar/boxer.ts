@@ -212,95 +212,228 @@ export function setGloveLit(glove: Group, lit: boolean, delta: number): void {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Animal heads — a detailed metallic head per skin. Each is a self-contained
+// Group tagged with the skin id it belongs to (applyAvatarSkin shows one). The
+// front faces −z; everything is sized off BODY_IK.headRadius so the head fills
+// the (unchanged) head hitbox sphere. Materials are role-tagged so a skin
+// recolours them: chassis = body steel, trim = dark, glow = the accent (eyes).
+// ---------------------------------------------------------------------------
+
+function taggedHead(id: string): Group {
+  const g = new Group();
+  g.userData.skinTag = id;
+  g.visible = false;
+  return g;
+}
+
+/** COBALT → BEAR: broad heavy skull, rounded ears, blunt muzzle, tusks. */
+function buildBearHead(accent: number): Group {
+  const r = BODY_IK.headRadius;
+  const g = taggedHead('cobalt');
+
+  const skull = new Mesh(new SphereGeometry(r * 0.92, 16, 12), chassisMat(accent, 0.06));
+  skull.scale.set(1.14, 0.96, 1.04);
+  skull.position.y = r * 0.16;
+  g.add(skull);
+  // Forehead plate + a glowing crown seam down the middle.
+  const forehead = new Mesh(new BoxGeometry(r * 1.5, r * 0.5, r * 0.5), chassisMat(accent, 0.05));
+  forehead.position.set(0, r * 0.34, -r * 0.5);
+  g.add(forehead);
+  const seam = new Mesh(new BoxGeometry(r * 0.09, r * 0.05, r * 1.3), glowMat(accent, 0.5));
+  seam.position.set(0, r * 0.66, -r * 0.2);
+  g.add(seam);
+  // Heavy brow ridges + deep-set glowing eyes.
+  for (const side of [-1, 1]) {
+    const ridge = new Mesh(new BoxGeometry(r * 0.62, r * 0.18, r * 0.42), darkMat());
+    ridge.position.set(side * r * 0.42, r * 0.26, -r * 0.78);
+    ridge.rotation.z = side * 0.16;
+    g.add(ridge);
+    const eye = new Mesh(new BoxGeometry(r * 0.26, r * 0.16, r * 0.1), glowMat(accent, 2.2));
+    eye.position.set(side * r * 0.42, r * 0.1, -r * 0.86);
+    g.add(eye);
+  }
+  // Rounded ears: outer disc + dark inner.
+  for (const side of [-1, 1]) {
+    const ear = new Mesh(new CylinderGeometry(r * 0.34, r * 0.34, r * 0.14, 16), chassisMat(accent, 0.05));
+    ear.rotation.x = Math.PI / 2;
+    ear.position.set(side * r * 0.72, r * 0.96, -r * 0.02);
+    g.add(ear);
+    const inner = new Mesh(new CylinderGeometry(r * 0.2, r * 0.2, r * 0.16, 16), darkMat());
+    inner.rotation.x = Math.PI / 2;
+    inner.position.set(side * r * 0.72, r * 0.96, -r * 0.05);
+    g.add(inner);
+  }
+  // Blunt muzzle: bridge + snout box + nose pad + lower jaw.
+  const bridge = new Mesh(new BoxGeometry(r * 0.4, r * 0.26, r * 0.55), chassisMat(accent, 0.04));
+  bridge.position.set(0, r * 0.02, -r * 0.98);
+  g.add(bridge);
+  const muzzle = new Mesh(new BoxGeometry(r * 0.72, r * 0.46, r * 0.66), chassisMat(accent, 0.04));
+  muzzle.position.set(0, -r * 0.34, -r * 0.96);
+  g.add(muzzle);
+  const nose = new Mesh(new SphereGeometry(r * 0.18, 10, 8), darkMat());
+  nose.scale.set(1.3, 0.85, 0.9);
+  nose.position.set(0, -r * 0.26, -r * 1.32);
+  g.add(nose);
+  const jaw = new Mesh(new BoxGeometry(r * 0.6, r * 0.22, r * 0.5), chassisMat(accent, 0.03));
+  jaw.position.set(0, -r * 0.62, -r * 0.9);
+  g.add(jaw);
+  // Tusks at the mouth corners.
+  for (const side of [-1, 1]) {
+    const tusk = new Mesh(new ConeGeometry(r * 0.06, r * 0.2, 5), darkMat());
+    tusk.rotation.x = Math.PI;
+    tusk.position.set(side * r * 0.22, -r * 0.5, -r * 1.18);
+    g.add(tusk);
+  }
+  // Cheek fur tufts (angled plates).
+  for (const side of [-1, 1]) {
+    const tuft = new Mesh(new BoxGeometry(r * 0.12, r * 0.5, r * 0.42), chassisMat(accent, 0.04));
+    tuft.position.set(side * r * 0.82, -r * 0.12, -r * 0.42);
+    tuft.rotation.set(0, side * 0.3, side * 0.5);
+    g.add(tuft);
+  }
+  return g;
+}
+
+/** CRIMSON → PANTHER: sleek narrow skull, tall pointed ears, fangs, whiskers. */
+function buildPantherHead(accent: number): Group {
+  const r = BODY_IK.headRadius;
+  const g = taggedHead('crimson');
+
+  const skull = new Mesh(new SphereGeometry(r * 0.86, 16, 12), chassisMat(accent, 0.06));
+  skull.scale.set(0.9, 0.92, 1.2);
+  skull.position.y = r * 0.12;
+  g.add(skull);
+  // Dorsal ridge from brow over the crown.
+  const ridge = new Mesh(new BoxGeometry(r * 0.12, r * 0.16, r * 1.25), chassisMat(accent, 0.06));
+  ridge.position.set(0, r * 0.42, -r * 0.28);
+  ridge.rotation.x = -0.16;
+  g.add(ridge);
+  // Angular brow + slanted glowing slit eyes.
+  for (const side of [-1, 1]) {
+    const brow = new Mesh(new BoxGeometry(r * 0.5, r * 0.1, r * 0.34), darkMat());
+    brow.position.set(side * r * 0.34, r * 0.2, -r * 0.86);
+    brow.rotation.z = side * 0.34;
+    g.add(brow);
+    const eye = new Mesh(new BoxGeometry(r * 0.34, r * 0.08, r * 0.08), glowMat(accent, 2.4));
+    eye.position.set(side * r * 0.38, r * 0.05, -r * 0.93);
+    eye.rotation.z = side * 0.42;
+    g.add(eye);
+  }
+  // Tall pointed ears + dark inner.
+  for (const side of [-1, 1]) {
+    const ear = new Mesh(new ConeGeometry(r * 0.24, r * 0.62, 4), chassisMat(accent, 0.05));
+    ear.position.set(side * r * 0.5, r * 0.95, r * 0.05);
+    ear.rotation.set(-0.15, 0, side * -0.18);
+    g.add(ear);
+    const inner = new Mesh(new ConeGeometry(r * 0.12, r * 0.42, 4), darkMat());
+    inner.position.set(side * r * 0.5, r * 0.92, r * 0.01);
+    inner.rotation.set(-0.15, 0, side * -0.18);
+    g.add(inner);
+  }
+  // Narrow muzzle + nose + fangs.
+  const muzzle = new Mesh(new BoxGeometry(r * 0.44, r * 0.42, r * 0.74), chassisMat(accent, 0.04));
+  muzzle.position.set(0, -r * 0.32, -r * 1.0);
+  g.add(muzzle);
+  const nose = new Mesh(new SphereGeometry(r * 0.12, 8, 6), darkMat());
+  nose.scale.set(1.4, 0.7, 0.8);
+  nose.position.set(0, -r * 0.2, -r * 1.36);
+  g.add(nose);
+  for (const side of [-1, 1]) {
+    const fang = new Mesh(new ConeGeometry(r * 0.05, r * 0.22, 5), darkMat());
+    fang.rotation.x = Math.PI;
+    fang.position.set(side * r * 0.13, -r * 0.52, -r * 1.2);
+    g.add(fang);
+  }
+  // Swept cheek blades.
+  for (const side of [-1, 1]) {
+    const blade = new Mesh(new BoxGeometry(r * 0.06, r * 0.32, r * 0.7), chassisMat(accent, 0.05));
+    blade.position.set(side * r * 0.6, -r * 0.05, -r * 0.48);
+    blade.rotation.set(0, side * 0.55, side * 0.22);
+    g.add(blade);
+  }
+  // Glowing metal whisker spines.
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 2; i++) {
+      const wsp = new Mesh(new CylinderGeometry(r * 0.012, r * 0.004, r * 0.5, 4), glowMat(accent, 0.6));
+      wsp.rotation.set(0, i * 0.2, Math.PI / 2 + side * 0.2);
+      wsp.position.set(side * r * 0.45, -r * 0.36 - i * r * 0.12, -r * 1.0);
+      g.add(wsp);
+    }
+  }
+  return g;
+}
+
+/** VALKYRIE → EAGLE: scowling brow, big hooked beak, swept feather crest. */
+function buildEagleHead(accent: number): Group {
+  const r = BODY_IK.headRadius;
+  const g = taggedHead('valkyrie');
+
+  const skull = new Mesh(new SphereGeometry(r * 0.82, 16, 12), chassisMat(accent, 0.06));
+  skull.scale.set(0.96, 0.98, 1.0);
+  skull.position.y = r * 0.18;
+  g.add(skull);
+  // Scowling brow (two angled plates) + fierce forward eyes.
+  for (const side of [-1, 1]) {
+    const brow = new Mesh(new BoxGeometry(r * 0.56, r * 0.18, r * 0.32), chassisMat(accent, 0.05));
+    brow.position.set(side * r * 0.3, r * 0.3, -r * 0.7);
+    brow.rotation.z = side * 0.5;
+    g.add(brow);
+    const eye = new Mesh(new BoxGeometry(r * 0.22, r * 0.16, r * 0.1), glowMat(accent, 2.6));
+    eye.position.set(side * r * 0.34, r * 0.1, -r * 0.82);
+    g.add(eye);
+  }
+  // Upper beak: base box → forward cone → downturned hook; shorter lower beak.
+  const beakBase = new Mesh(new BoxGeometry(r * 0.36, r * 0.36, r * 0.42), chassisMat(accent, 0.05));
+  beakBase.position.set(0, -r * 0.12, -r * 0.9);
+  g.add(beakBase);
+  const beak = new Mesh(new ConeGeometry(r * 0.22, r * 0.72, 4), chassisMat(accent, 0.06));
+  beak.rotation.x = -Math.PI / 2;
+  beak.position.set(0, -r * 0.18, -r * 1.22);
+  g.add(beak);
+  const hook = new Mesh(new ConeGeometry(r * 0.13, r * 0.26, 4), darkMat());
+  hook.rotation.x = -Math.PI * 0.78;
+  hook.position.set(0, -r * 0.34, -r * 1.44);
+  g.add(hook);
+  const lower = new Mesh(new ConeGeometry(r * 0.16, r * 0.44, 4), darkMat());
+  lower.rotation.x = -Math.PI / 2;
+  lower.position.set(0, -r * 0.4, -r * 1.12);
+  g.add(lower);
+  // Cere (nostril band).
+  const cere = new Mesh(new BoxGeometry(r * 0.3, r * 0.14, r * 0.2), darkMat());
+  cere.position.set(0, -r * 0.04, -r * 1.0);
+  g.add(cere);
+  // Swept-back feather crest — fanning glowing blades.
+  for (let i = -2; i <= 2; i++) {
+    const len = r * 0.52 - Math.abs(i) * r * 0.07;
+    const feather = new Mesh(new BoxGeometry(r * 0.05, len, r * 0.16), glowMat(accent, 0.6 + (2 - Math.abs(i)) * 0.2));
+    feather.position.set(i * r * 0.16, r * 0.7, r * 0.12);
+    feather.rotation.set(0.7, 0, i * 0.12);
+    g.add(feather);
+  }
+  // Layered cheek feather plates.
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 2; i++) {
+      const plate = new Mesh(new BoxGeometry(r * 0.07, r * 0.34, r * 0.4 - i * r * 0.1), chassisMat(accent, 0.04));
+      plate.position.set(side * (r * 0.55 - i * r * 0.08), -r * 0.05 - i * r * 0.12, -r * 0.48 + i * r * 0.1);
+      plate.rotation.set(0, side * 0.5, side * 0.25);
+      g.add(plate);
+    }
+  }
+  return g;
+}
+
 /** Build the full opponent rig. Pieces start hidden; add them to the scene. */
 export function buildBoxer(team: number): BoxerRig {
   const accent = teamColor(team);
 
-  // --- Head: a metallic BEAST skull (front is −z), customised per skin into a
-  //     bear / panther / eagle. The base reads as a generic mech-beast so the
-  //     bot (no skin tag) still has a face; each skin adds its own features. ---
-  const r = BODY_IK.headRadius;
+  // --- Head: a detailed metallic ANIMAL head per skin (front is −z). All
+  //     three are built and ONE is shown by applyAvatarSkin; the bot defaults
+  //     to the panther (see OPPONENT_DEFAULT_AVATAR). Hitboxes are the BODY_IK
+  //     spheres and never change, so every fighter is equally hittable. ---
   const head = new Group();
   head.name = 'opponent-head';
-
-  // Cranium: faceted metal skull + dark crown cap.
-  const helm = new Mesh(new CylinderGeometry(r * 0.82, r * 0.98, r * 2.05, 8), chassisMat(accent, 0.08));
-  head.add(helm);
-  const crown = new Mesh(new CylinderGeometry(r * 0.5, r * 0.84, r * 0.5, 8), darkMat());
-  crown.position.y = r * 1.25;
-  head.add(crown);
-  // Brow ridge + two glowing eyes (the skin accent reads as the eye colour).
-  const brow = new Mesh(new BoxGeometry(r * 1.5, 0.04, 0.05), darkMat());
-  brow.position.set(0, r * 0.24, -r * 0.82);
-  head.add(brow);
-  for (const side of [-1, 1]) {
-    const eye = new Mesh(new BoxGeometry(0.032, 0.024, 0.02), glowMat(accent, 2.0));
-    eye.position.set(side * r * 0.4, r * 0.05, -r * 0.9);
-    head.add(eye);
-  }
-  // Muzzle/jaw block — the lower face the animal features build onto.
-  const snout = new Mesh(new BoxGeometry(r * 1.02, r * 0.5, r * 0.55), chassisMat(accent, 0.04));
-  snout.position.set(0, -r * 0.5, -r * 0.72);
-  head.add(snout);
-
-  // --- Per-skin animal features (hidden; applyAvatarSkin shows ONE set) ---
-  const tagged = (g: Group, id: string): Group => {
-    g.userData.skinTag = id;
-    g.visible = false;
-    return g;
-  };
-
-  // COBALT → BEAR: rounded ears (forward-facing discs) + a broad snout cap.
-  const bear = tagged(new Group(), 'cobalt');
-  for (const side of [-1, 1]) {
-    const ear = new Mesh(new CylinderGeometry(r * 0.3, r * 0.3, 0.05, 12), chassisMat(accent, 0.05));
-    ear.rotation.x = Math.PI / 2; // disc faces forward
-    ear.position.set(side * r * 0.62, r * 1.02, -r * 0.05);
-    bear.add(ear);
-    const inner = new Mesh(new CylinderGeometry(r * 0.17, r * 0.17, 0.06, 12), darkMat());
-    inner.rotation.x = Math.PI / 2;
-    inner.position.set(side * r * 0.62, r * 1.02, -r * 0.08);
-    bear.add(inner);
-  }
-  const muzzleCap = new Mesh(new BoxGeometry(r * 0.78, r * 0.34, r * 0.34), darkMat());
-  muzzleCap.position.set(0, -r * 0.52, -r * 1.02);
-  bear.add(muzzleCap);
-  const snoutTip = new Mesh(new SphereGeometry(r * 0.13, 8, 6), darkMat());
-  snoutTip.position.set(0, -r * 0.46, -r * 1.2);
-  bear.add(snoutTip);
-  head.add(bear);
-
-  // CRIMSON → PANTHER: tall pointed ears + a pair of glowing fangs.
-  const panther = tagged(new Group(), 'crimson');
-  for (const side of [-1, 1]) {
-    const ear = new Mesh(new ConeGeometry(r * 0.22, r * 0.52, 4), chassisMat(accent, 0.05));
-    ear.position.set(side * r * 0.46, r * 1.15, 0.02);
-    ear.rotation.z = side * -0.12;
-    panther.add(ear);
-  }
-  for (const side of [-1, 1]) {
-    const fang = new Mesh(new ConeGeometry(0.012, 0.06, 4), glowMat(accent, 1.0));
-    fang.rotation.x = Math.PI; // point down
-    fang.position.set(side * r * 0.2, -r * 0.78, -r * 0.86);
-    panther.add(fang);
-  }
-  head.add(panther);
-
-  // VALKYRIE → EAGLE: a hooked beak over the muzzle + a swept glowing crest.
-  const eagle = tagged(new Group(), 'valkyrie');
-  const beakTop = new Mesh(new ConeGeometry(r * 0.26, r * 0.7, 4), chassisMat(accent, 0.05));
-  beakTop.rotation.x = -Math.PI / 2; // point forward (−z)
-  beakTop.position.set(0, -r * 0.28, -r * 1.16);
-  eagle.add(beakTop);
-  const beakHook = new Mesh(new ConeGeometry(r * 0.12, r * 0.2, 4), darkMat());
-  beakHook.rotation.x = -Math.PI * 0.72; // tip curls down at the front
-  beakHook.position.set(0, -r * 0.42, -r * 1.34);
-  eagle.add(beakHook);
-  const crest = new Mesh(new BoxGeometry(0.02, r * 0.55, r * 0.45), glowMat(accent, 0.8));
-  crest.position.set(0, r * 0.95, 0.06);
-  crest.rotation.x = 0.5; // swept back
-  eagle.add(crest);
-  head.add(eagle);
+  head.add(buildBearHead(accent), buildPantherHead(accent), buildEagleHead(accent));
 
   // --- Chest assembly: shoulders are the widest point of the machine ---
   const chest = new Group();
