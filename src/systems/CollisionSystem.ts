@@ -34,12 +34,30 @@ import { FIREBALL } from '../config.js';
 
 const _ballPos = new Vector3();
 const _otherPos = new Vector3();
+/** Where the ball under test sat LAST frame — the start of its sweep. */
+const _ballPrev = new Vector3();
+const _seg = new Vector3();
+const _ap = new Vector3();
+
+/** Squared distance from point `p` to the segment `a`→`b`. */
+function pointSegDistSq(p: Vector3, a: Vector3, b: Vector3): number {
+  _seg.subVectors(b, a);
+  const len2 = _seg.lengthSq();
+  let t = len2 > 1e-9 ? _ap.subVectors(p, a).dot(_seg) / len2 : 0;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  _seg.multiplyScalar(t).add(a); // closest point on the segment
+  return _seg.distanceToSquared(p);
+}
 
 export class CollisionSystem extends createSystem({
   balls: { required: [Fireball] },
   hitboxes: { required: [Hitbox] },
   targets: { required: [TrainingTarget] },
 }) {
+  /** Last frame's world position per ball, so a fast ball is tested along the
+   *  PATH it travelled (a parry can't be tunnelled through between frames). */
+  private prevPos = new Map<Entity, Vector3>();
+
   update(): void {
     const inMatch = app.state === 'playing' && match.phase === 'playing';
     const inTraining = app.state === 'training';
@@ -47,6 +65,7 @@ export class CollisionSystem extends createSystem({
 
     const balls = [...this.queries.balls.entities];
     const hitboxes = [...this.queries.hitboxes.entities];
+    const seen = new Map<Entity, Vector3>();
 
     for (const ball of balls) {
       const obj = ball.object3D;
@@ -58,6 +77,14 @@ export class CollisionSystem extends createSystem({
       if (returning && (ball.getValue(Fireball, 'returnHit') ?? 0) === 1) continue;
 
       obj.getWorldPosition(_ballPos);
+      // Sweep from where this ball sat last frame, so a fast return can't skip
+      // past a defending ball between frames — but treat an implausibly large
+      // jump (a throw/reset teleport) as a fresh point, not a swept segment.
+      const prev = this.prevPos.get(ball);
+      if (prev && prev.distanceToSquared(_ballPos) < 2.25) _ballPrev.copy(prev);
+      else _ballPrev.copy(_ballPos);
+      seen.set(ball, _ballPos.clone());
+
       const owner = ball.getValue(Fireball, 'owner') ?? 0;
       const radius = ball.getValue(Fireball, 'radius') ?? FIREBALL.radius;
       const damage = ball.getValue(Fireball, 'damage') ?? FIREBALL.damage;
@@ -78,6 +105,8 @@ export class CollisionSystem extends createSystem({
       // Online (`mode === 'net'`): hits on the rival are ruled by THEIR
       // client and arrive as a `hit` message — see NetworkSystem.
     }
+
+    this.prevPos = seen; // remember this frame's positions for next frame's sweep
   }
 
   /** An enemy ball (flying, or recalled through me) connecting with my body. */
@@ -178,7 +207,10 @@ export class CollisionSystem extends createSystem({
       if (!mObj) continue;
       mObj.getWorldPosition(_otherPos);
       const reach = radius + (mine.getValue(Fireball, 'radius') ?? FIREBALL.radius) + FIREBALL.deflectBonus;
-      if (_ballPos.distanceToSquared(_otherPos) > reach * reach) continue;
+      // Test my defending ball against the enemy ball's whole swept path this
+      // frame, not just its current point — that's what lets you block a fast
+      // returning ball instead of it tunnelling clean through your guard.
+      if (pointSegDistSq(_otherPos, _ballPrev, _ballPos) > reach * reach) continue;
 
       emberBurst(_ballPos, 22, true);
       spawnFireImpact(this.world, _ballPos, 1);
