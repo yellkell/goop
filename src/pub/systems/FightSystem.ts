@@ -45,7 +45,7 @@ import {
   updateFirePools,
   type FireVisual,
 } from '../../fx/fire.js';
-import { spawnDamagePopup, spawnFireImpact } from '../../fx/effects.js';
+import { spawnDamagePopup, spawnFireImpact, spawnGestureCue, spawnPopup } from '../../fx/effects.js';
 import * as sfx from '../../audio/sfx.js';
 import { pulseHand } from '../../input/haptics.js';
 import { FIGHT } from '../config.js';
@@ -132,6 +132,10 @@ const _offset = new Vector3();
 const _camQ = new Quaternion();
 const _head = new Vector3();
 const _headQ = new Quaternion();
+const _myFist = new Vector3();
+const _oppFist = new Vector3();
+const _ggMid = new Vector3();
+const _ggLift = new Vector3();
 
 export class FightSystem extends createSystem({}) {
   private time = 0;
@@ -159,6 +163,8 @@ export class FightSystem extends createSystem({}) {
    *  down here and snap to the server's value whenever a live one arrives. */
   private roundClock = 0;
   private lastServerTimer = -1;
+  /** Throttle glove-touches so one bump pops a single GG. */
+  private fistBumpCooldown = 0;
 
   init(): void {
     // The local fighter's body: an ember (team 0) torso wearing my avatar
@@ -214,6 +220,17 @@ export class FightSystem extends createSystem({}) {
                 spawnFireImpact(this.world, ball.pos, 0, 1.2);
                 sfx.ballClash();
               }
+            }
+            break;
+          case 'FIGHT_GG':
+            // Someone landed a glove-touch: pop GG for the whole room at the
+            // spot they sent (one side detecting is enough for everyone to see
+            // it). Our own bumps pop locally and set the cooldown, so this
+            // skips the echo of a bump we just made.
+            if (this.fistBumpCooldown <= 0) {
+              _ggMid.set(ev.pos[0], ev.pos[1], ev.pos[2]);
+              this.popGg(_ggMid);
+              this.fistBumpCooldown = 1.25;
             }
             break;
           default:
@@ -281,6 +298,7 @@ export class FightSystem extends createSystem({}) {
     if (fighting) this.roundClock = Math.max(0, this.roundClock - delta);
 
     this.updateMatchBoard();
+    this.tryFistBump(delta);
 
     if (this.amFighter() && live) {
       this.solveMyBody();
@@ -423,6 +441,74 @@ export class FightSystem extends createSystem({}) {
     if (Math.hypot(_head.x - FIGHT.centerX, _head.z - z) > FIGHT.forfeitRadius) {
       pubSendRaw({ t: 'leave-fight' });
     }
+  }
+
+  // --- glove-touch (fist bump the other fighter) ------------------------------
+
+  /**
+   * Touch gloves with your opponent between rounds and after the bell. The
+   * fighters stand a pit apart, so a literal hand-to-hand isn't possible —
+   * instead BOTH reaching a clenched fist out over the pit (toward centre,
+   * roughly aligned) reads as a bump, the same trick the arena uses across its
+   * gap. Closing right up also counts, for when the corners free up and you can
+   * actually meet. We pop GG locally and broadcast it so everyone sees it.
+   */
+  private tryFistBump(delta: number): void {
+    this.fistBumpCooldown = Math.max(0, this.fistBumpCooldown - delta);
+    if (this.fistBumpCooldown > 0) return;
+    const side = this.mySide();
+    if (side === -1) return;
+    // The moments you actually want it: the pre-bell stare-down, between rounds
+    // and after the match — never mid-exchange.
+    const phase = pub.fight.phase;
+    if (phase !== 'starting' && phase !== 'roundOver' && phase !== 'over') return;
+
+    const oppId = pub.fight.sides[side === 0 ? 1 : 0];
+    const opp = oppId ? pub.punters.get(oppId) : null;
+    if (!opp) return;
+    const oppSide: 0 | 1 = side === 0 ? 1 : 0;
+
+    for (const hand of [0, 1] as const) {
+      const gp = this.input.xr.gamepads[HANDS[hand]];
+      const clenched =
+        (gp?.getButtonPressed(InputComponent.Squeeze) ?? false) &&
+        !(gp?.getButtonPressed(InputComponent.Trigger) ?? false);
+      if (!clenched) continue;
+      const grip = this.player.gripSpaces[HANDS[hand]];
+      if (!grip) continue;
+      grip.getWorldPosition(_myFist);
+      const iReach = this.reachingToCentre(_myFist.z, side);
+
+      for (const oh of [opp.left, opp.right]) {
+        _oppFist.set(oh[0], oh[1], oh[2]);
+        const contact = _myFist.distanceTo(_oppFist);
+        const lane = Math.hypot(_myFist.x - _oppFist.x, _myFist.y - _oppFist.y);
+        const bothReach = iReach && this.reachingToCentre(_oppFist.z, oppSide) && lane < 0.42;
+        if (contact > 0.4 && !bothReach) continue;
+
+        _ggMid.copy(_myFist).add(_oppFist).multiplyScalar(0.5);
+        this.popGg(_ggMid);
+        pubSendEvent({ e: 'FIGHT_GG', pos: [_ggMid.x, _ggMid.y, _ggMid.z] });
+        pulseHand(this.world.session, HANDS[hand], 0.6, 90);
+        this.fistBumpCooldown = 1.25;
+        return;
+      }
+    }
+  }
+
+  /** A fist `z` that has reached out over the pit toward the centreline. */
+  private reachingToCentre(z: number, side: 0 | 1): boolean {
+    const t = FIGHT.platformZ * 0.5; // crossed halfway in toward the centre
+    return side === 0 ? z < t : z > -t;
+  }
+
+  /** The celebratory GG: a spark, a big floating GG and the metal donk. */
+  private popGg(pos: Vector3): void {
+    spawnGestureCue(this.world, pos, 0.32);
+    _ggLift.copy(pos);
+    _ggLift.y += 0.18;
+    spawnPopup(this.world, _ggLift, 'GG', '#ffffff', 'rgba(255,255,255,0.95)', 2.6);
+    sfx.fistBump();
   }
 
   /**

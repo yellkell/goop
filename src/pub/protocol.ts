@@ -111,6 +111,9 @@ export type PubEvent =
   | { e: 'FIGHT_CLASH'; ball: 0 | 1 }
   /** Fighter reporting their own hp after taking a hit. */
   | { e: 'FIGHT_HP'; hp: number }
+  /** A fighter touched gloves with their opponent — pop GG for the whole room
+   *  at `pos` (one side detecting is enough for everyone to see it). */
+  | { e: 'FIGHT_GG'; pos: Vec3T }
   /** Streamed by the player at the arcade machine so spectators see the screen. */
   | {
       e: 'SNAKE_STATE';

@@ -213,18 +213,20 @@ export function trainingTargetHit(kind: 0 | 1): void {
   }
 }
 
+/** A single solid metallic CLINK — two iron gauntlets striking, not a papery
+ *  clap: a short bright inharmonic strike with a tight decay and a touch of
+ *  iron body under it. No airy hiss, no cartoon glide. */
 export function clap(): void {
-  clank(1180, 0.18, 0.16);
-  clank(1680, 0.08, 0.1, 0.018);
-  whooshNoise(0.055, 0.16, 1800, 5200);
-  tone({ freq: 1250, to: 840, type: 'triangle', dur: 0.07, gain: 0.16 });
-  tone({ freq: 260, to: 150, type: 'sine', dur: 0.08, gain: 0.1 });
+  clank(1040, 0.3, 0.12);
+  clank(1560, 0.13, 0.07, 0.004); // bright overtone a hair later
+  tone({ freq: 300, to: 188, type: 'sine', dur: 0.05, gain: 0.09 }); // iron thump
 }
 
+/** Knuckle plates meeting — a deeper, fuller metal DONK with a short ring. */
 export function fistBump(): void {
-  clank(1550, 0.14, 0.28);
-  clank(2450, 0.055, 0.16, 0.018);
-  servo(420, 760, 0.12, 0.035);
+  clank(720, 0.28, 0.22);
+  clank(1180, 0.12, 0.13, 0.01);
+  tone({ freq: 150, to: 80, type: 'sine', dur: 0.1, gain: 0.14 });
 }
 
 export function boundaryBuzz(intensity = 1): void {
