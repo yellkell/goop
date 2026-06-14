@@ -6,7 +6,7 @@
  */
 
 import type { PubClientMsg, PubServerMsg, PubEvent, PubPlayerNet } from './protocol.js';
-import { bus, pub } from './state.js';
+import { bus, normalizeFight, pub } from './state.js';
 
 let ws: WebSocket | null = null;
 
@@ -77,13 +77,13 @@ function handle(msg: PubServerMsg): void {
       pub.board = msg.board;
       pub.snakeHi = msg.snakeHi;
       pub.snakePlayer = msg.snakePlayer;
-      pub.fight = msg.fight;
+      pub.fight = normalizeFight(msg.fight);
       for (const prop of msg.props) pub.props.set(prop.id, prop);
       for (const p of msg.players) if (p.id !== msg.id) spawnHook?.(p);
       bus.emit('connected', undefined);
       bus.emit('board', msg.board);
       bus.emit('snakeHi', msg.snakeHi);
-      bus.emit('fight', msg.fight);
+      bus.emit('fight', pub.fight);
       break;
     case 'full':
       console.warn('[pub] room is full (12 punters max)');
@@ -146,8 +146,8 @@ function handle(msg: PubServerMsg): void {
       bus.emit('snakeHi', msg.hi);
       break;
     case 'fight':
-      pub.fight = msg.fight;
-      bus.emit('fight', msg.fight);
+      pub.fight = normalizeFight(msg.fight);
+      bus.emit('fight', pub.fight);
       break;
     case 'glass-out': {
       const prop = pub.props.get(msg.id);

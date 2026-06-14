@@ -93,6 +93,44 @@ class Bus {
 
 export const bus = new Bus();
 
+/** A fresh, fully-formed fight card — every field present, arrays the right
+ *  length. The single source of truth for what a FightNet must look like. */
+export function defaultFight(): FightNet {
+  return {
+    phase: 'idle',
+    sides: [null, null],
+    hp: [100, 100],
+    score: [0, 0],
+    round: 1,
+    roundTimer: 0,
+    winner: null,
+  };
+}
+
+/**
+ * Coerce whatever the room server sent into a complete FightNet, filling any
+ * missing field from {@link defaultFight}. The client and the room server
+ * deploy from separate pipelines, so a server even one version behind can omit
+ * newer fields (hp/score/round/roundTimer). Without this, the match HUD would
+ * read `f.hp[side]` on `undefined` the instant a player takes the match pad and
+ * throw every frame — killing the WebXR render loop (a whole-game freeze).
+ */
+export function normalizeFight(f: Partial<FightNet> | null | undefined): FightNet {
+  const d = defaultFight();
+  if (!f) return d;
+  const pair = <T>(v: unknown, fallback: [T, T]): [T, T] =>
+    Array.isArray(v) && v.length >= 2 ? [v[0] as T, v[1] as T] : fallback;
+  return {
+    phase: f.phase ?? d.phase,
+    sides: pair(f.sides, d.sides),
+    hp: pair(f.hp, d.hp),
+    score: pair(f.score, d.score),
+    round: typeof f.round === 'number' ? f.round : d.round,
+    roundTimer: typeof f.roundTimer === 'number' ? f.roundTimer : d.roundTimer,
+    winner: f.winner ?? null,
+  };
+}
+
 export const pub = {
   myId: '',
   myName: '',
@@ -104,14 +142,6 @@ export const pub = {
   board: [] as BoardRow[],
   snakeHi: { name: '—', score: 0 } as SnakeHi,
   snakePlayer: null as string | null,
-  fight: {
-    phase: 'idle',
-    sides: [null, null],
-    hp: [100, 100],
-    score: [0, 0],
-    round: 1,
-    roundTimer: 0,
-    winner: null,
-  } as FightNet,
+  fight: defaultFight(),
   refs: null as PubRefs | null,
 };
