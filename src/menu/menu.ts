@@ -156,13 +156,45 @@ function drawDuel(ctx: CanvasRenderingContext2D, hover: boolean): void {
     queueing ? UI.amber : UI.cool,
     hover,
   );
+
+  // Live "N searching" badge riding the top-right of the QUICK MATCH plate, so
+  // you can see the queue filling before you commit. Hidden while you're the
+  // one queueing (the status line speaks for you) and when the count's unknown.
+  if (!queueing && app.searching > 0) {
+    const label = `${app.searching} SEARCHING`;
+    ctx.font = '800 18px system-ui, sans-serif';
+    const pillW = ctx.measureText(label).width + 38;
+    const pillH = 30;
+    const px = PW - 70 - pillW;
+    const py = 102;
+    plate(ctx, px, py, pillW, pillH, {
+      cut: 8,
+      fill: 'rgba(79,183,255,0.22)',
+      stroke: UI.cool,
+      rivets: false,
+    });
+    ctx.fillStyle = UI.coolBright; // a "live" dot
+    ctx.beginPath();
+    ctx.arc(px + 16, py + pillH / 2, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.textAlign = 'left';
+    ctx.fillStyle = UI.coolBright;
+    ctx.fillText(label, px + 28, py + pillH / 2 + 1);
+    ctx.textAlign = 'center';
+  }
+
   buttonPlate(ctx, 70, 240, PW - 140, 96, 'VS BOT', UI.ember, hover);
 
   ctx.font = '600 22px system-ui, sans-serif';
   ctx.fillStyle = 'rgba(159,226,255,0.85)';
-  ctx.fillText(queueing ? 'searching for an opponent…' : app.netStatus, PW / 2, 352);
-  ctx.fillStyle = UI.textDim;
-  ctx.fillText('online duels carry positional voice chat', PW / 2, 380);
+  const status = queueing
+    ? 'searching for an opponent…'
+    : app.searching > 0
+      ? `${app.searching} ${app.searching === 1 ? 'boxer' : 'boxers'} in the queue now`
+      : app.searching === 0
+        ? 'no one queued yet — be the first'
+        : app.netStatus;
+  ctx.fillText(status, PW / 2, 366);
 }
 
 function hitDuel(_u: number, v: number): MenuAction | null {

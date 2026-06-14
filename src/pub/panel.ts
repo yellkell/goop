@@ -126,6 +126,17 @@ export class Panel {
     this.texture.needsUpdate = true;
   }
 
+  /**
+   * Like {@link draw} but starts from a fully TRANSPARENT canvas — no steel
+   * backplate — so the caller can paint its own (e.g. the sleek smoked-glass
+   * match card that wants the arena's translucent look, not an opaque slab).
+   */
+  drawBare(fn: (ctx: CanvasRenderingContext2D, w: number, h: number) => void): void {
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    fn(this.ctx, this.canvas.width, this.canvas.height);
+    this.texture.needsUpdate = true;
+  }
+
   dispose(): void {
     this.texture.dispose();
     (this.mesh.material as MeshBasicMaterial).dispose();

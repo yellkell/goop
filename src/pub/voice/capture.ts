@@ -30,6 +30,9 @@ let stream: MediaStream | null = null;
 let source: MediaStreamAudioSourceNode | null = null;
 let processor: ScriptProcessorNode | null = null;
 let sink: GainNode | null = null;
+/** Muted element the mic stream is also attached to — see the quirk note in
+ *  startVoiceCapture. Without it the WebAudio graph pumps silence. */
+let pump: HTMLAudioElement | null = null;
 let running = false;
 let muted = false;
 let sender: VoiceSender | null = null;
@@ -83,6 +86,18 @@ export async function startVoiceCapture(send: VoiceSender): Promise<boolean> {
   }
 
   sender = send;
+
+  // Chromium quirk (same one net/voice.ts works around for the rival's WebRTC
+  // voice): a getUserMedia MediaStream routed through WebAudio produces SILENCE
+  // unless the stream is also sunk into a media element. Without this the mic
+  // graph below processes zeros — the silence gate eats every frame and nobody
+  // in the pub ever hears you. The element stays muted so we don't echo your
+  // own mic back at you locally.
+  pump = new Audio();
+  pump.srcObject = stream;
+  pump.muted = true;
+  void pump.play().catch(() => {});
+
   source = ctx.createMediaStreamSource(stream);
 
   // ScriptProcessorNode is deprecated but rock-solid across the headset
@@ -129,6 +144,10 @@ export function stopVoiceCapture(): void {
   source?.disconnect();
   processor?.disconnect();
   sink?.disconnect();
+  if (pump) {
+    pump.srcObject = null;
+    pump = null;
+  }
   for (const t of stream?.getTracks() ?? []) t.stop();
   source = null;
   processor = null;

@@ -63,9 +63,10 @@ export class CollisionSystem extends createSystem({
       const damage = ball.getValue(Fireball, 'damage') ?? FIREBALL.damage;
 
       if (owner === 1) {
-        // Parry first: your roaring orbit is also your shield. (Only flying
-        // balls can be parried — a recalled ball is already leaving.)
-        if (!returning && this.tryParry(ball, balls, radius)) continue;
+        // Parry first: your roaring orbit is also your shield — and you can
+        // slap a ball out of the air even on its RETURN leg, so a recall-through
+        // aimed past you can be blocked if you spin round in time.
+        if (this.tryParry(ball, balls, radius)) continue;
         // Mid-air block: two thrown balls meeting cancel each other out.
         if (!returning && this.tryClash(ball, balls, radius)) continue;
         this.enemyBallVsMe(ball, hitboxes, radius, damage, returning);
