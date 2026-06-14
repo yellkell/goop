@@ -158,14 +158,16 @@ function beginRound() {
   broadcastFight();
 }
 
-/** A round was decided (KO or time): score it, then the next round or the match. */
+/** A round was decided (KO, time, or draw): score it, then the next round or the match. */
 function endRound(winnerSide) {
-  if (winnerSide !== 0 && winnerSide !== 1) return;
-  fight.score[winnerSide] += 1;
-  fight.winner = fight.sides[winnerSide];
-  if (fight.score[winnerSide] >= WIN_TARGET) {
-    endMatch(fight.sides[winnerSide]);
-    return;
+  if (winnerSide !== null && winnerSide !== 0 && winnerSide !== 1) return;
+  fight.winner = winnerSide === null ? null : fight.sides[winnerSide];
+  if (winnerSide !== null) {
+    fight.score[winnerSide] += 1;
+    if (fight.score[winnerSide] >= WIN_TARGET) {
+      endMatch(fight.sides[winnerSide]);
+      return;
+    }
   }
   fight.phase = 'roundOver';
   broadcastFight();
@@ -206,7 +208,7 @@ setInterval(() => {
   if (fight.phase !== 'fighting') return;
   fight.roundTimer = Math.max(0, fight.roundTimer - 0.25);
   if (fight.roundTimer <= 0) {
-    endRound(fight.hp[0] >= fight.hp[1] ? 0 : 1);
+    endRound(fight.hp[0] === fight.hp[1] ? null : fight.hp[0] > fight.hp[1] ? 0 : 1);
   } else if (Math.ceil(fight.roundTimer) !== lastTimerSent) {
     broadcastFight(); // push the clock only when the displayed second changes
   }
@@ -280,7 +282,7 @@ function handleEvent(senderId, ev) {
       if (side !== -1 && fight.phase === 'fighting') {
         fight.hp[side] = ev.hp;
         if (ev.hp <= 0) {
-          endRound(side === 0 ? 1 : 0); // the OTHER corner won the round
+          endRound(fight.hp[0] <= 0 && fight.hp[1] <= 0 ? null : side === 0 ? 1 : 0); // the OTHER corner won the round
         } else {
           broadcastFight();
         }

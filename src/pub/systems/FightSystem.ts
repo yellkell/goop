@@ -193,6 +193,7 @@ export class FightSystem extends createSystem({}) {
           case 'FIGHT_HIT':
             // My ball connected on their side.
             if (this.amFighter() && this.myBalls) {
+              const dmg = ev.dmg ?? FIREBALL.damage;
               const ball = this.myBalls[ev.ball];
               if (ev.ret) {
                 // Return-pass: it keeps homing, never spent on the connect.
@@ -201,7 +202,7 @@ export class FightSystem extends createSystem({}) {
                 ball.vel.set(0, 0, 0);
               }
               spawnFireImpact(this.world, ball.pos, 0);
-              spawnDamagePopup(this.world, ball.pos, FIREBALL.damage);
+              spawnDamagePopup(this.world, ball.pos, dmg);
               sfx.hitDealt();
             }
             break;
@@ -419,9 +420,9 @@ export class FightSystem extends createSystem({}) {
           break;
         case 'roundOver': {
           // A round (not the match) was decided — winner takes the pip.
-          const iWon = f.winner === pub.myId;
-          if (this.amFighter()) sfx.roundEnd(iWon);
-          else sfx.roundEnd(true);
+          const cue = !f.winner ? 'draw' : f.winner === pub.myId;
+          if (this.amFighter()) sfx.roundEnd(cue);
+          else sfx.roundEnd(!f.winner ? 'draw' : true);
           break;
         }
         case 'over': {
@@ -794,10 +795,10 @@ export class FightSystem extends createSystem({}) {
     this.player.head.getWorldPosition(_head);
     // Head, chest and pelvis spheres — the SAME three IK volumes (and radii)
     // the arena solves, so dodging plays identically.
-    const spheres: [Vector3, number][] = [
-      [_head, BODY_IK.headRadius],
-      [this.myChest, BODY_IK.chestRadius],
-      [this.myPelvis, BODY_IK.pelvisRadius],
+    const spheres: [Vector3, number, number][] = [
+      [_head, BODY_IK.headRadius, FIREBALL.headDamage],
+      [this.myChest, BODY_IK.chestRadius, FIREBALL.damage],
+      [this.myPelvis, BODY_IK.pelvisRadius, FIREBALL.damage],
     ];
 
     for (const idx of [0, 1] as const) {
@@ -817,24 +818,24 @@ export class FightSystem extends createSystem({}) {
       if (this.tryParry(enemy, idx, ePos)) continue;
 
       // Body: head/chest/pelvis.
-      for (const [centre, radius] of spheres) {
+      for (const [centre, radius, damage] of spheres) {
         if (ePos.distanceTo(centre) <= radius + FIREBALL.radius) {
           enemy.hitCooldown = 0.8;
-          this.myHp = Math.max(0, this.myHp - FIREBALL.damage);
+          this.myHp = Math.max(0, this.myHp - damage);
           // Taking a hit is the loudest moment: oversized fiery burst, damage
           // number, hard double-hand buzz (arena's spawnFireImpact at 1.7).
           spawnFireImpact(this.world, ePos, 1, 1.7);
-          spawnDamagePopup(this.world, ePos, FIREBALL.damage);
+          spawnDamagePopup(this.world, ePos, damage);
           sfx.hitTaken();
           pulseHand(this.world.session, 'left', 1, 160);
           pulseHand(this.world.session, 'right', 1, 160);
           // A return-pass keeps homing home; a thrown ball is spent on contact.
           if (returning) {
             enemy.returnHit = 1;
-            pubSendEvent({ e: 'FIGHT_HIT', ball: idx, ret: true });
+            pubSendEvent({ e: 'FIGHT_HIT', ball: idx, dmg: damage, ret: true });
           } else {
             enemy.state = DEAD;
-            pubSendEvent({ e: 'FIGHT_HIT', ball: idx });
+            pubSendEvent({ e: 'FIGHT_HIT', ball: idx, dmg: damage });
           }
           pubSendEvent({ e: 'FIGHT_HP', hp: this.myHp });
           break;
@@ -1069,7 +1070,9 @@ export class FightSystem extends createSystem({}) {
         : f.phase === 'fighting'
           ? 'FIGHT'
           : f.phase === 'roundOver'
-            ? f.winner === pub.myId
+            ? !f.winner
+              ? 'DRAW'
+              : f.winner === pub.myId
               ? 'WIN'
               : 'LOSS'
             : f.winner === pub.myId
@@ -1084,6 +1087,7 @@ export class FightSystem extends createSystem({}) {
     const headlineColour =
       f.phase === 'fighting' ? UI.danger
       : f.phase === 'starting' ? UI.amber
+      : !f.winner ? UI.amber
       : f.winner === pub.myId ? UI.emberBright
       : UI.cool;
 
@@ -1211,12 +1215,15 @@ export class FightSystem extends createSystem({}) {
             : f.phase === 'fighting'
               ? 'FIGHT'
               : f.phase === 'roundOver'
-                ? `${winnerName} KO`
+                ? f.winner
+                  ? `${winnerName} KO`
+                  : 'DRAW'
                 : `${winnerName} WINS`;
       const statusAccent =
         f.phase === 'fighting' ? UI.danger
         : f.phase === 'starting' ? UI.amber
         : f.phase === 'idle' ? UI.coolBright
+        : !f.winner ? UI.amber
         : colours[winnerSide];
       const statusPx = fitStencilText(ctx, status, w * 0.9, Math.round(h * 0.2), 28);
       metalText(ctx, status, w / 2, h * 0.82, statusPx, statusAccent);

@@ -22,7 +22,7 @@ import {
 import { Combatant } from '../components/Combatant.js';
 import { Health } from '../components/Health.js';
 import { feedback } from '../fx/feedback.js';
-import { app } from '../menu/appState.js';
+import { app, training } from '../menu/appState.js';
 import { match } from '../combat/matchState.js';
 import { pulseHand } from '../input/haptics.js';
 import * as sfx from '../audio/sfx.js';
@@ -135,14 +135,17 @@ export class BoundarySystem extends createSystem({
     }
 
     const outside = worst > BOUNDARY.graceDepth;
-    if (outside) {
+    const damaging = outside && this.canDamage();
+    if (damaging) {
       // Everything burns red and your health drains, fast.
       for (const e of this.edges) e.mat.color.setHex(PALETTE.danger);
+      feedback.boundaryBuzz = Math.max(feedback.boundaryBuzz, 0.72);
       this.drainTick += delta;
       if (this.drainTick >= 0.2) {
         this.drainTick = 0;
         this.drain(BOUNDARY.drainPerSec * 0.2);
         feedback.playerHitFlash = Math.max(feedback.playerHitFlash, 1);
+        feedback.boundaryBuzz = 1;
         feedback.srcX = 0; feedback.srcY = -1; feedback.srcZ = 0;
         sfx.boundaryBuzz(1);
         pulseHand(this.world.session, 'left', 0.75, 140);
@@ -153,7 +156,7 @@ export class BoundarySystem extends createSystem({
       for (const e of this.edges) e.mat.color.setHex(PALETTE.ember);
       this.drainTick = 0;
     }
-    this.wasOutside = outside;
+    this.wasOutside = damaging;
   }
 
   /** True if the head projects onto this edge segment (with a little slack). */
@@ -165,11 +168,15 @@ export class BoundarySystem extends createSystem({
 
   /** Drain only during live play (not round-over pauses / passive training). */
   private drain(amount: number): void {
-    if (app.state === 'playing' && match.phase !== 'playing') return;
     for (const e of this.queries.combatants.entities) {
       if ((e.getValue(Combatant, 'team') ?? 0) !== 0) continue;
       const next = Math.max(0, (e.getValue(Health, 'current') ?? 0) - amount);
       e.setValue(Health, 'current', next);
     }
+  }
+
+  private canDamage(): boolean {
+    return (app.state === 'playing' && match.phase === 'playing')
+      || (app.state === 'training' && training.active && training.timeLeft > 0);
   }
 }

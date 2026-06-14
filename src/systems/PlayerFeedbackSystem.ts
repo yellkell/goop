@@ -16,6 +16,7 @@ export class PlayerFeedbackSystem extends createSystem({}) {
   private mat?: MeshBasicMaterial;
   private _q = new Quaternion();
   private _v = new Vector3();
+  private t = 0;
 
   init(): void {
     const canvas = document.createElement('canvas');
@@ -33,11 +34,19 @@ export class PlayerFeedbackSystem extends createSystem({}) {
   }
 
   update(delta: number): void {
+    this.t += delta;
     feedback.playerHitFlash = Math.max(0, feedback.playerHitFlash - delta * 2.6);
-    const f = feedback.playerHitFlash;
+    feedback.boundaryBuzz = Math.max(0, feedback.boundaryBuzz - delta * 1.8);
+    const f = Math.max(feedback.playerHitFlash, feedback.boundaryBuzz);
     if (!this.mat) return;
     if (f <= 0) {
       this.mat.opacity = 0;
+      return;
+    }
+
+    if (feedback.boundaryBuzz > feedback.playerHitFlash * 0.65) {
+      this.drawBoundaryBuzz(feedback.boundaryBuzz);
+      this.mat.opacity = Math.min(0.78, 0.28 + feedback.boundaryBuzz * 0.5);
       return;
     }
 
@@ -53,6 +62,33 @@ export class PlayerFeedbackSystem extends createSystem({}) {
 
     this.drawGlow(theta, behind);
     this.mat.opacity = f * 0.42;
+  }
+
+  private drawBoundaryBuzz(f: number): void {
+    const ctx = this.ctx!;
+    ctx.clearRect(0, 0, S, S);
+    const pulse = 0.5 + 0.5 * Math.sin(this.t * 34);
+    const g = ctx.createRadialGradient(S / 2, S * 0.78, S * 0.08, S / 2, S * 0.62, S * 0.72);
+    g.addColorStop(0, `rgba(255,190,70,${0.45 + f * 0.25})`);
+    g.addColorStop(0.42, `rgba(232,45,25,${0.36 + pulse * 0.16})`);
+    g.addColorStop(1, 'rgba(120,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, S, S);
+
+    ctx.strokeStyle = `rgba(255,55,32,${0.25 + f * 0.28})`;
+    ctx.lineWidth = 4;
+    ctx.strokeRect(6, 6, S - 12, S - 12);
+    ctx.lineWidth = 2;
+    for (let y = 18 + ((this.t * 90) % 18); y < S; y += 18) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(S, y - 22);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = `rgba(0,0,0,${0.16 + pulse * 0.08})`;
+    for (let y = 0; y < S; y += 9) ctx.fillRect(0, y, S, 3);
+    this.tex!.needsUpdate = true;
   }
 
   private drawGlow(theta: number, behind: boolean): void {

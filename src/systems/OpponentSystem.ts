@@ -21,7 +21,7 @@ import {
 import { Combatant } from '../components/Combatant.js';
 import { BallState, Fireball } from '../components/Fireball.js';
 import { Health } from '../components/Health.js';
-import { Hitbox } from '../components/Hitbox.js';
+import { Hitbox, HitboxKind } from '../components/Hitbox.js';
 import { opponent } from '../combat/opponentBus.js';
 import { app } from '../menu/appState.js';
 import { rival } from '../net/leaderboard.js';
@@ -125,14 +125,14 @@ export class OpponentSystem extends createSystem({
     }
     if (!owner) return;
 
-    const make = (radius: number): Entity => {
+    const make = (radius: number, kind: number): Entity => {
       const seg = this.world.createTransformEntity(new Object3D(), { persistent: true });
-      seg.addComponent(Hitbox, { radius, team: 1, owner });
+      seg.addComponent(Hitbox, { radius, team: 1, kind, owner });
       return seg;
     };
-    this.hitboxes.head = make(BODY_IK.headRadius);
-    this.hitboxes.chest = make(BODY_IK.chestRadius);
-    this.hitboxes.pelvis = make(BODY_IK.pelvisRadius);
+    this.hitboxes.head = make(BODY_IK.headRadius, HitboxKind.Head);
+    this.hitboxes.chest = make(BODY_IK.chestRadius, HitboxKind.Body);
+    this.hitboxes.pelvis = make(BODY_IK.pelvisRadius, HitboxKind.Body);
     this.parkHitboxes();
     this.built = true;
   }

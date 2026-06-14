@@ -64,6 +64,7 @@ export const ARENA_GAP = 3.0;
 export const FIREBALL = {
   radius: 0.09, // iron core radius (also the collision radius)
   damage: 20, // damage per landed hit — five clean hits is a knockout
+  headDamage: 25, // clean headshots hit harder
 
   // Orbit (trigger held): the ball circles the fist.
   orbitRadius: 0.17, // distance from the fist while orbiting

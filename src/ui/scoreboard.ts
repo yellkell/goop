@@ -23,6 +23,7 @@ import {
 import { ARENA_GAP, MATCH } from '../config.js';
 import type { MatchState } from '../combat/matchState.js';
 import { app, training } from '../menu/appState.js';
+import { myName, rival } from '../net/leaderboard.js';
 import { UI, fitStencilText, hazardStrip, metalText, plate, segmentBar, stencilFont } from './industrial.js';
 
 const W = 880;
@@ -72,7 +73,8 @@ function header(ctx: CanvasRenderingContext2D, title: string, neon: string): voi
   ctx.clearRect(0, 0, W, H);
   hazardStrip(ctx, 32, 38, 64, 22, UI.amber);
   ctx.textAlign = 'left';
-  ctx.font = stencilFont(54);
+  const px = fitStencilText(ctx, title, W - 148, 54, 26);
+  ctx.font = stencilFont(px);
   ctx.fillStyle = neon;
   ctx.fillText(title, 116, 54);
   ctx.strokeStyle = neon;
@@ -115,9 +117,15 @@ function fmtTime(seconds: number): string {
 
 function verdictAccent(message: string): string {
   if (message.includes('LOSE') || message === 'LOSS' || message === "KO'D") return UI.coolBright;
+  if (message === 'DRAW') return UI.amber;
   if (message === 'FIGHT' || message === 'TIME') return UI.danger;
   if (message === 'WIN') return UI.amber;
   return UI.emberBright;
+}
+
+function displayName(name: string, fallback: string): string {
+  const clean = name.trim();
+  return clean ? clean.toUpperCase() : fallback;
 }
 
 export function createScoreboard(scene: Scene): Scoreboard {
@@ -189,20 +197,11 @@ export function createScoreboard(scene: Scene): Scoreboard {
     const { ctx, tex } = centre;
     ctx.clearRect(0, 0, W, H);
     if (message) {
-      // Dark smoked plate plus chromed type: shorter and heavier than the old
-      // explanatory copy, but still rim-lit in the bout colours.
+      // No backing plate: just the short chromed verdict floating over the gap.
       ctx.textAlign = 'center';
       const accent = verdictAccent(message);
       const px = fitStencilText(ctx, message, W - 120, message.includes('YOU') ? 124 : 152, 44);
       const midY = sub ? 188 : 216;
-      const textW = ctx.measureText(message).width;
-      const plateW = Math.min(W - 72, Math.max(300, textW + 128));
-      plate(ctx, (W - plateW) / 2, midY - px * 0.62, plateW, px * 1.18, {
-        cut: 28,
-        fill: 'rgba(2,3,7,0.78)',
-        stroke: accent,
-        rivets: false,
-      });
       metalText(ctx, message, W / 2, midY, px, accent);
       if (sub) {
         ctx.font = stencilFont(40);
@@ -222,8 +221,8 @@ export function createScoreboard(scene: Scene): Scoreboard {
   return {
     updateMatch(state, pHp, pMax, oHp, oMax) {
       drawTimer(fmtTime(state.roundTimer));
-      drawSide(left, 'YOU', UI.emberBright, pHp / pMax, state.myScore);
-      drawSide(right, app.mode === 'net' ? 'RIVAL' : 'BOT', UI.cool, oHp / oMax, state.oppScore);
+      drawSide(left, app.mode === 'net' ? displayName(myName(), 'YOU') : 'YOU', UI.emberBright, pHp / pMax, state.myScore);
+      drawSide(right, app.mode === 'net' ? displayName(rival.name, 'RIVAL') : 'BOT', UI.cool, oHp / oMax, state.oppScore);
       drawCentre(state.message, state.phase === 'matchOver' ? '' : state.message ? `R${state.round}` : '');
     },
 

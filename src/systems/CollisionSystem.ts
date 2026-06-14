@@ -19,7 +19,7 @@
 
 import { createSystem, Vector3, type Entity } from '@iwsdk/core';
 import { BallState, Fireball } from '../components/Fireball.js';
-import { Hitbox } from '../components/Hitbox.js';
+import { Hitbox, HitboxKind } from '../components/Hitbox.js';
 import { Health } from '../components/Health.js';
 import { TargetState, TrainingTarget } from '../components/TrainingTarget.js';
 import { spawnDamagePopup, spawnFireImpact } from '../fx/effects.js';
@@ -119,13 +119,14 @@ export class CollisionSystem extends createSystem({
       const reach = radius + (hitbox.getValue(Hitbox, 'radius') ?? 0.2);
       if (_ballPos.distanceToSquared(_otherPos) > reach * reach) continue;
 
+      const actualDamage = this.damageFor(hitbox, damage);
       const me = (hitbox.getValue(Hitbox, 'owner') as Entity | null) ?? hitbox;
-      this.applyDamage(me, damage);
+      this.applyDamage(me, actualDamage);
       // Taking a hit is the loudest moment in the game: oversized burst,
       // extra spark spray, plate-clink sound, hard double-hand buzz.
       spawnFireImpact(this.world, _ballPos, 1, 1.7);
       emberBurst(_ballPos, 18, true);
-      spawnDamagePopup(this.world, _ballPos, damage);
+      spawnDamagePopup(this.world, _ballPos, actualDamage);
       sfx.hitTaken();
       feedback.playerHitFlash = 1;
       const v = ball.getVectorView(Fireball, 'velocity');
@@ -143,7 +144,7 @@ export class CollisionSystem extends createSystem({
         net.send({
           k: 'hit',
           hand: (ball.getValue(Fireball, 'hand') ?? 0) as 0 | 1,
-          dmg: damage,
+          dmg: actualDamage,
           ...(returning ? { ret: true } : {}),
         });
       }
@@ -161,10 +162,11 @@ export class CollisionSystem extends createSystem({
       const reach = radius + (hitbox.getValue(Hitbox, 'radius') ?? 0.2);
       if (_ballPos.distanceToSquared(_otherPos) > reach * reach) continue;
 
+      const actualDamage = this.damageFor(hitbox, damage);
       const them = (hitbox.getValue(Hitbox, 'owner') as Entity | null) ?? hitbox;
-      this.applyDamage(them, damage);
+      this.applyDamage(them, actualDamage);
       spawnFireImpact(this.world, _ballPos, 0);
-      spawnDamagePopup(this.world, _ballPos, damage);
+      spawnDamagePopup(this.world, _ballPos, actualDamage);
       sfx.hitDealt();
       app.stats.hitsLanded += 1;
       if (returning) ball.setValue(Fireball, 'returnHit', 1);
@@ -275,5 +277,11 @@ export class CollisionSystem extends createSystem({
     if (!combatant.active || !combatant.hasComponent(Health)) return;
     const next = (combatant.getValue(Health, 'current') ?? 0) - damage;
     combatant.setValue(Health, 'current', Math.max(0, next));
+  }
+
+  private damageFor(hitbox: Entity, baseDamage: number): number {
+    return (hitbox.getValue(Hitbox, 'kind') ?? HitboxKind.Body) === HitboxKind.Head
+      ? FIREBALL.headDamage
+      : baseDamage;
   }
 }

@@ -27,6 +27,7 @@ interface Boxers {
 }
 
 type RoundResult = 'ko' | 'time';
+type RoundOutcome = 'win' | 'loss' | 'draw';
 
 export class GameStateSystem extends createSystem({
   combatants: { required: [Combatant, Health] },
@@ -90,9 +91,13 @@ export class GameStateSystem extends createSystem({
   private runAuthority(c: Boxers, pHp: number, oHp: number, delta: number): void {
     if (match.phase === 'playing') {
       match.roundTimer = Math.max(0, match.roundTimer - delta);
-      if (oHp <= 0) this.endRound(true, 'ko');
-      else if (pHp <= 0) this.endRound(false, 'ko');
-      else if (match.roundTimer <= 0) this.endRound(pHp >= oHp, 'time');
+      if (pHp <= 0 || oHp <= 0) {
+        if (pHp <= 0 && oHp <= 0) this.endRound('draw', 'ko');
+        else this.endRound(oHp <= 0 ? 'win' : 'loss', 'ko');
+      } else if (match.roundTimer <= 0) {
+        if (pHp === oHp) this.endRound('draw', 'time');
+        else this.endRound(pHp > oHp ? 'win' : 'loss', 'time');
+      }
     } else if (match.phase === 'matchOver' && app.mode === 'net') {
       // Net bouts HOLD at FIGHT OVER — the panel decides. Both boxers
       // pressing REMATCH restarts the match; RETURN (or the rival leaving)
@@ -128,13 +133,13 @@ export class GameStateSystem extends createSystem({
     }
   }
 
-  private endRound(iWon: boolean, result: RoundResult): void {
-    if (iWon) match.myScore += 1;
-    else match.oppScore += 1;
+  private endRound(outcome: RoundOutcome, result: RoundResult): void {
+    if (outcome === 'win') match.myScore += 1;
+    else if (outcome === 'loss') match.oppScore += 1;
     match.phase = 'roundOver';
     match.resultTimer = MATCH.roundOverDelay;
-    match.message = result === 'ko' ? (iWon ? 'KO' : "KO'D") : iWon ? 'WIN' : 'LOSS';
-    sfx.roundEnd(iWon);
+    match.message = outcome === 'draw' ? 'DRAW' : result === 'ko' ? (outcome === 'win' ? 'KO' : "KO'D") : outcome === 'win' ? 'WIN' : 'LOSS';
+    sfx.roundEnd(outcome === 'draw' ? 'draw' : outcome === 'win');
     if (app.mode === 'net') this.echoState();
   }
 

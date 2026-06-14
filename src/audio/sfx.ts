@@ -336,9 +336,12 @@ export function roundBell(): void {
 }
 
 /** End-of-round cue. */
-export function roundEnd(win: boolean): void {
+export function roundEnd(win: boolean | 'draw'): void {
   bellStrike(0);
-  if (win) {
+  if (win === 'draw') {
+    tone({ freq: 440, type: 'triangle', dur: 0.12, gain: 0.16, delay: 0.24 });
+    tone({ freq: 440, type: 'sine', dur: 0.16, gain: 0.12, delay: 0.4 });
+  } else if (win) {
     tone({ freq: 523, type: 'triangle', dur: 0.1, gain: 0.2, delay: 0.25 });
     tone({ freq: 784, type: 'triangle', dur: 0.12, gain: 0.2, delay: 0.35 });
   } else {

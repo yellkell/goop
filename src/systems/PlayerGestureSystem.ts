@@ -1,10 +1,10 @@
 /**
  * Social hand gestures in the arena.
  *
- * Clap is local physical feedback. Self fist bumps pop GG when both clenched
- * hands meet. Opponent fist bump works during a match: true fist contact if
- * the hands get close, plus a strict same-lane/extended-forward test because
- * the arena gap makes literal mesh contact impractical.
+ * Clap is local physical feedback. Press B to pop a self-GG from that hand.
+ * Opponent fist bump works during a match: true fist contact if the hands get
+ * close, plus a strict same-lane/extended-forward test because the arena gap
+ * makes literal mesh contact impractical.
  */
 
 import { createSystem, InputComponent, Vector3 } from '@iwsdk/core';
@@ -24,7 +24,6 @@ const FIST_TOUCH_DISTANCE = 0.26;
 const FIST_LANE_RADIUS = 0.3;
 const FIST_FORWARD_REACH = 0.45;
 const FIST_CLOSING_SPEED = 1.45;
-const FIST_COMBINED_SPEED = 2.2;
 const FIST_LOCAL_HAND_SPEED = 1.25;
 const FIST_BUMP_COOLDOWN = 1.25;
 
@@ -60,7 +59,7 @@ export class PlayerGestureSystem extends createSystem({}) {
     this.fistBumpCooldown = Math.max(0, this.fistBumpCooldown - delta);
 
     this.tryClap(delta);
-    this.trySelfFistBump(delta);
+    this.trySelfGgButton();
     this.tryFistBump(delta);
 
     this.prevLeft.copy(_left);
@@ -88,21 +87,10 @@ export class PlayerGestureSystem extends createSystem({}) {
     this.clapCooldown = CLAP_COOLDOWN;
   }
 
-  private trySelfFistBump(delta: number): void {
-    if (!this.hasPrev || this.fistBumpCooldown > 0 || delta <= 0) return;
-    const leftFist = this.fistPressed('left');
-    const rightFist = this.fistPressed('right');
-    if (!leftFist || !rightFist) return;
-
-    const distance = _left.distanceTo(_right);
-    if (distance > FIST_TOUCH_DISTANCE) return;
-    const closingSpeed = (this.prevDistance - distance) / delta;
-    const leftSpeed = _left.distanceTo(this.prevLeft) / delta;
-    const rightSpeed = _right.distanceTo(this.prevRight) / delta;
-    if (closingSpeed < FIST_CLOSING_SPEED && leftSpeed + rightSpeed < FIST_COMBINED_SPEED) return;
-
-    _mid.copy(_left).add(_right).multiplyScalar(0.5);
-    this.emitGg(_mid, 'both');
+  private trySelfGgButton(): void {
+    if (this.fistBumpCooldown > 0) return;
+    if (!(this.input.xr.gamepads.right?.getButtonDown(InputComponent.B_Button) ?? false)) return;
+    this.emitGg(_right, 'right');
   }
 
   private tryFistBump(delta: number): void {

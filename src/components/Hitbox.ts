@@ -7,11 +7,18 @@
 
 import { createComponent, Types } from '@iwsdk/core';
 
+export const HitboxKind = {
+  Head: 0,
+  Body: 1,
+} as const;
+
 export const Hitbox = createComponent(
   'Hitbox',
   {
     radius: { type: Types.Float32, default: 0.25 },
     team: { type: Types.Int32, default: 0 },
+    /** Head hitboxes deal headshot damage; body hitboxes use ball damage. */
+    kind: { type: Types.Int32, default: HitboxKind.Body },
     /** Entity carrying the Health this hitbox belongs to. */
     owner: { type: Types.Entity, default: null },
   },

@@ -104,7 +104,7 @@ export type PubEvent =
    * RETURN-PASS connect (a recalled ball caught me on its way home): it keeps
    * homing instead of dying, exactly like the arena's recall-through technique.
    */
-  | { e: 'FIGHT_HIT'; ball: 0 | 1; ret?: boolean }
+  | { e: 'FIGHT_HIT'; ball: 0 | 1; dmg?: number; ret?: boolean }
   /** I parried your ball `ball` out of the air. */
   | { e: 'FIGHT_DEFLECT'; ball: 0 | 1 }
   /** Your ball `ball` clashed mid-air with one of mine — both are spent. */

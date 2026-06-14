@@ -245,7 +245,7 @@ export class NetworkSystem extends createSystem({
 
     if (msg.phase !== prevPhase) {
       if (msg.phase === 'playing') sfx.roundBell();
-      else if (msg.phase === 'roundOver') sfx.roundEnd(match.message === 'KO' || match.message === 'WIN');
+      else if (msg.phase === 'roundOver') sfx.roundEnd(this.roundCue(match.message));
       else if (msg.phase === 'matchOver') {
         const win = match.myScore > match.oppScore;
         match.message = win ? 'YOU WIN' : 'YOU LOSE';
@@ -275,6 +275,7 @@ export class NetworkSystem extends createSystem({
       case "KO'D": return 'KO';
       case 'WIN': return 'LOSS';
       case 'LOSS': return 'WIN';
+      case 'DRAW': return 'DRAW';
       case 'YOU WIN': return 'YOU LOSE';
       case 'YOU LOSE': return 'YOU WIN';
       // Back-compat for any in-flight peers still running the old copy.
@@ -285,6 +286,11 @@ export class NetworkSystem extends createSystem({
       case 'YOU WIN THE FIGHT': return 'YOU LOSE';
       default: return msg;
     }
+  }
+
+  private roundCue(message: string): boolean | 'draw' {
+    if (message === 'DRAW') return 'draw';
+    return message === 'KO' || message === 'WIN';
   }
 
   // --- helpers ---------------------------------------------------------------
