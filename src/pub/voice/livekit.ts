@@ -19,6 +19,9 @@ import { Room, RoomEvent, Track, type RemoteTrack, type RemoteParticipant } from
 let room: Room | null = null;
 let connecting = false;
 let muted = false;
+let micOk = false;
+/** Short human-readable state for the in-world voice readout. */
+let statusText = 'press trigger to talk';
 /** Identities LiveKit currently reports as actively talking. */
 const speaking = new Set<string>();
 /** Hidden <audio> sinks, one per remote speaker, so we can tear them down. */
@@ -30,6 +33,24 @@ export function isPubVoiceLive(): boolean {
 
 export function isSpeaking(id: string): boolean {
   return speaking.has(id);
+}
+
+/** One-line status for the pub's voice readout panel. */
+export function pubVoiceStatus(): string {
+  if (!room) return statusText;
+  const peers = room.remoteParticipants?.size ?? 0;
+  if (!room.canPlaybackAudio) return 'tap trigger to enable sound';
+  const mic = micOk ? '' : ' · mic blocked';
+  return peers > 0 ? `live · ${peers} here${mic}` : `live · waiting for others${mic}`;
+}
+
+/**
+ * Browsers gate audio PLAYBACK behind a user gesture, and our connect runs
+ * async so the press that started it has lapsed by the time tracks arrive.
+ * Call this on later controller presses (fresh gestures) to unlock sound.
+ */
+export function pokePubAudio(): void {
+  if (room && !room.canPlaybackAudio) void room.startAudio().catch(() => {});
 }
 
 /** Flip the local mic; returns the new muted state. */
@@ -73,12 +94,16 @@ export async function connectPubVoice(
 ): Promise<boolean> {
   if (room || connecting) return room !== null;
   connecting = true;
+  statusText = 'connecting…';
   try {
     const q = `identity=${encodeURIComponent(identity)}&name=${encodeURIComponent(name)}&room=${encodeURIComponent(roomName)}`;
     const res = await fetch(`${tokenUrl}?${q}`);
     if (!res.ok) throw new Error(`token ${res.status}`);
     const { token, url } = (await res.json()) as { token?: string; url?: string };
-    if (!token || !url) throw new Error('voice not configured on the server');
+    if (!token || !url) {
+      statusText = 'server voice off';
+      throw new Error('voice not configured on the server');
+    }
 
     const r = new Room({ adaptiveStream: false, dynacast: false });
     r.on(RoomEvent.TrackSubscribed, (track, _pub, participant) => attach(track, participant));
@@ -87,16 +112,29 @@ export async function connectPubVoice(
     r.on(RoomEvent.Disconnected, () => {
       for (const id of [...sinks.keys()]) detach(id);
       room = null;
+      statusText = 'disconnected';
     });
     r.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
       speaking.clear();
       for (const s of speakers) speaking.add(s.identity);
     });
 
-    await r.connect(url, token);
-    await r.localParticipant.setMicrophoneEnabled(!muted);
-    await r.startAudio().catch(() => {}); // satisfy autoplay policy (we're in a gesture)
+    try {
+      await r.connect(url, token);
+    } catch (e) {
+      statusText = 'connect failed';
+      throw e;
+    }
     room = r;
+    // Mic failure (denied/busy) must NOT abort — we still want to HEAR others.
+    try {
+      await r.localParticipant.setMicrophoneEnabled(!muted);
+      micOk = true;
+    } catch (e) {
+      micOk = false;
+      console.warn('[pub voice] mic publish failed (still receiving)', e);
+    }
+    await r.startAudio().catch(() => {}); // unlock playback (poked again on later presses)
     // eslint-disable-next-line no-console
     console.info('[pub voice] LiveKit room joined');
     return true;
