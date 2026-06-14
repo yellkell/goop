@@ -433,6 +433,250 @@ function buildEagleHead(accent: number): Group {
   return g;
 }
 
+// ---------------------------------------------------------------------------
+// Torso armour — a distinct cuirass + hip set per skin, each tagged so
+// applyAvatarSkin shows ONE. Same silhouette envelope (wide shoulders → taper)
+// and the same BODY_IK hitbox spheres, so they stay equally hittable.
+// ---------------------------------------------------------------------------
+
+/** COBALT → BEAR: heavy, broad — thick rounded pauldrons with rivet studs, a
+ *  big domed chest slab, chunky abs. Brutish. */
+function buildBearChest(accent: number): Group {
+  const g = taggedHead('cobalt');
+  const collar = new Mesh(new BoxGeometry(0.46, 0.11, 0.22), chassisMat(accent, 0.05));
+  collar.position.y = 0.1;
+  g.add(collar);
+  const neck = new Mesh(new CylinderGeometry(0.08, 0.1, 0.1, 8), darkMat());
+  neck.position.y = 0.16;
+  g.add(neck);
+  for (const side of [-1, 1]) {
+    const up = new Mesh(new BoxGeometry(0.24, 0.12, 0.3), chassisMat(accent, 0.05));
+    up.position.set(side * 0.3, 0.12, 0);
+    up.rotation.z = side * -0.18;
+    g.add(up);
+    const lo = new Mesh(new BoxGeometry(0.22, 0.09, 0.28), darkMat());
+    lo.position.set(side * 0.33, 0.02, 0);
+    lo.rotation.z = side * -0.22;
+    g.add(lo);
+    for (let i = 0; i < 3; i++) {
+      const stud = new Mesh(new BoxGeometry(0.022, 0.022, 0.022), glowMat(accent, 0.7));
+      stud.position.set(side * (0.24 + i * 0.03), 0.18, -0.1 + i * 0.1);
+      g.add(stud);
+    }
+  }
+  const trunk = new Mesh(new CylinderGeometry(0.2, 0.12, 0.42, 8), darkMat());
+  trunk.scale.z = 0.78;
+  trunk.position.y = -0.12;
+  g.add(trunk);
+  const slab = new Mesh(new BoxGeometry(0.3, 0.26, 0.08), chassisMat(accent, 0.05));
+  slab.position.set(0, -0.02, -0.13);
+  g.add(slab);
+  const core = new Mesh(new CylinderGeometry(0.05, 0.05, 0.03, 12), glowMat(accent, 1.4));
+  core.rotation.x = Math.PI / 2;
+  core.position.set(0, 0.0, -0.18);
+  g.add(core);
+  for (let i = 0; i < 2; i++) {
+    const w = 0.26 - i * 0.04;
+    const ab = new Mesh(new BoxGeometry(w, 0.08, 0.08), chassisMat(accent, 0.04));
+    ab.position.set(0, -0.16 - i * 0.1, -0.1);
+    g.add(ab);
+    const seam = new Mesh(new BoxGeometry(w * 0.92, 0.012, 0.082), glowMat(accent, 0.28));
+    seam.position.set(0, -0.205 - i * 0.1, -0.1);
+    g.add(seam);
+  }
+  for (const side of [-1, 1]) {
+    const flank = new Mesh(new BoxGeometry(0.06, 0.28, 0.22), chassisMat(accent, 0.04));
+    flank.position.set(side * 0.17, -0.07, 0);
+    flank.rotation.z = side * 0.1;
+    g.add(flank);
+  }
+  return g;
+}
+
+/** CRIMSON → PANTHER: sleek bladed cuirass — sharp angled plates, shoulder
+ *  blades, V pecs, chevron abs. Predatory. */
+function buildPantherChest(accent: number): Group {
+  const g = taggedHead('crimson');
+  const collar = new Mesh(new BoxGeometry(0.4, 0.08, 0.19), chassisMat(accent, 0.05));
+  collar.position.y = 0.11;
+  g.add(collar);
+  const neck = new Mesh(new CylinderGeometry(0.065, 0.085, 0.1, 8), darkMat());
+  neck.position.y = 0.17;
+  g.add(neck);
+  for (const side of [-1, 1]) {
+    const pad = new Mesh(new BoxGeometry(0.19, 0.07, 0.26), chassisMat(accent, 0.05));
+    pad.position.set(side * 0.27, 0.12, 0);
+    pad.rotation.z = side * -0.26;
+    g.add(pad);
+    const blade = new Mesh(new ConeGeometry(0.03, 0.2, 4), darkMat());
+    blade.position.set(side * 0.34, 0.16, -0.04);
+    blade.rotation.set(-0.5, 0, side * -0.5);
+    g.add(blade);
+    const lip = new Mesh(new BoxGeometry(0.195, 0.015, 0.265), glowMat(accent, 0.55));
+    lip.position.set(side * 0.27, 0.165, 0);
+    lip.rotation.z = side * -0.26;
+    g.add(lip);
+  }
+  const trunk = new Mesh(new CylinderGeometry(0.155, 0.08, 0.42, 8), darkMat());
+  trunk.scale.z = 0.72;
+  trunk.position.y = -0.13;
+  g.add(trunk);
+  for (const side of [-1, 1]) {
+    const pec = new Mesh(new BoxGeometry(0.14, 0.17, 0.06), chassisMat(accent, 0.05));
+    pec.position.set(side * 0.08, 0.0, -0.13);
+    pec.rotation.set(0.1, side * 0.4, side * 0.12);
+    g.add(pec);
+  }
+  const core = new Mesh(new BoxGeometry(0.04, 0.16, 0.04), glowMat(accent, 1.4));
+  core.position.set(0, -0.02, -0.16);
+  g.add(core);
+  for (let i = 0; i < 3; i++) {
+    const w = 0.18 - i * 0.035;
+    const ab = new Mesh(new BoxGeometry(w, 0.05, 0.07), chassisMat(accent, 0.04));
+    ab.position.set(0, -0.15 - i * 0.072, -0.1);
+    ab.rotation.x = -0.1;
+    g.add(ab);
+    const seam = new Mesh(new BoxGeometry(w * 0.9, 0.009, 0.072), glowMat(accent, 0.32));
+    seam.position.set(0, -0.178 - i * 0.072, -0.1);
+    g.add(seam);
+  }
+  for (const side of [-1, 1]) {
+    const flank = new Mesh(new BoxGeometry(0.045, 0.26, 0.2), chassisMat(accent, 0.04));
+    flank.position.set(side * 0.14, -0.08, 0);
+    flank.rotation.z = side * 0.14;
+    g.add(flank);
+  }
+  return g;
+}
+
+/** VALKYRIE → EAGLE: regal, winged — a crest emblem, glowing winglet pauldrons,
+ *  layered feather breast plates, a chevron sigil. Ornate. */
+function buildEagleChest(accent: number): Group {
+  const g = taggedHead('valkyrie');
+  const collar = new Mesh(new BoxGeometry(0.4, 0.08, 0.19), chassisMat(accent, 0.05));
+  collar.position.y = 0.11;
+  g.add(collar);
+  const neck = new Mesh(new CylinderGeometry(0.06, 0.08, 0.1, 8), darkMat());
+  neck.position.y = 0.17;
+  g.add(neck);
+  const crest = new Mesh(new BoxGeometry(0.05, 0.07, 0.04), glowMat(accent, 1.2));
+  crest.position.set(0, 0.2, -0.06);
+  crest.rotation.z = Math.PI / 4;
+  g.add(crest);
+  for (const side of [-1, 1]) {
+    const base = new Mesh(new BoxGeometry(0.16, 0.07, 0.24), chassisMat(accent, 0.05));
+    base.position.set(side * 0.26, 0.12, 0);
+    base.rotation.z = side * -0.22;
+    g.add(base);
+    for (let i = 0; i < 3; i++) {
+      const feather = new Mesh(new BoxGeometry(0.04, 0.14 - i * 0.02, 0.1), glowMat(accent, 0.5 + (2 - i) * 0.18));
+      feather.position.set(side * (0.3 + i * 0.05), 0.16 + i * 0.02, 0.02 + i * 0.03);
+      feather.rotation.set(0.2, side * 0.3, side * (0.5 + i * 0.1));
+      g.add(feather);
+    }
+  }
+  const trunk = new Mesh(new CylinderGeometry(0.155, 0.08, 0.42, 8), darkMat());
+  trunk.scale.z = 0.72;
+  trunk.position.y = -0.13;
+  g.add(trunk);
+  for (let i = 0; i < 3; i++) {
+    const w = 0.26 - i * 0.05;
+    const plate = new Mesh(new BoxGeometry(w, 0.09, 0.06), chassisMat(accent, 0.05));
+    plate.position.set(0, 0.06 - i * 0.08, -0.12 - i * 0.005);
+    plate.rotation.x = -0.18;
+    g.add(plate);
+  }
+  const chevron = new Mesh(new BoxGeometry(0.16, 0.02, 0.05), glowMat(accent, 0.9));
+  chevron.position.set(0, -0.03, -0.16);
+  g.add(chevron);
+  for (let i = 0; i < 3; i++) {
+    const w = 0.16 - i * 0.03;
+    const ab = new Mesh(new BoxGeometry(w, 0.045, 0.07), chassisMat(accent, 0.04));
+    ab.position.set(0, -0.2 - i * 0.065, -0.1);
+    g.add(ab);
+  }
+  for (const side of [-1, 1]) {
+    const flank = new Mesh(new BoxGeometry(0.045, 0.24, 0.2), chassisMat(accent, 0.04));
+    flank.position.set(side * 0.14, -0.08, 0);
+    flank.rotation.z = side * 0.13;
+    g.add(flank);
+  }
+  return g;
+}
+
+/** BEAR hips: broad belt, chunky tassets, wide guard — heavy. */
+function buildBearPelvis(accent: number): Group {
+  const g = taggedHead('cobalt');
+  const belt = new Mesh(new BoxGeometry(0.24, 0.07, 0.18), chassisMat(accent, 0.04));
+  belt.position.y = 0.05;
+  g.add(belt);
+  const buckle = new Mesh(new BoxGeometry(0.07, 0.06, 0.03), glowMat(accent, 1.0));
+  buckle.position.set(0, 0.05, -0.095);
+  g.add(buckle);
+  const guard = new Mesh(new CylinderGeometry(0.12, 0.05, 0.15, 6), chassisMat(accent, 0.03));
+  guard.position.set(0, -0.05, -0.02);
+  g.add(guard);
+  for (const side of [-1, 1]) {
+    const tasset = new Mesh(new BoxGeometry(0.1, 0.16, 0.15), chassisMat(accent, 0.04));
+    tasset.position.set(side * 0.12, -0.04, 0);
+    tasset.rotation.z = side * 0.26;
+    g.add(tasset);
+  }
+  return g;
+}
+
+/** PANTHER hips: slim belt, a pointed guard, bladed glow-edged tassets. */
+function buildPantherPelvis(accent: number): Group {
+  const g = taggedHead('crimson');
+  const belt = new Mesh(new BoxGeometry(0.19, 0.05, 0.15), chassisMat(accent, 0.04));
+  belt.position.y = 0.05;
+  g.add(belt);
+  const buckle = new Mesh(new BoxGeometry(0.045, 0.045, 0.03), glowMat(accent, 1.1));
+  buckle.position.set(0, 0.05, -0.08);
+  g.add(buckle);
+  const guard = new Mesh(new ConeGeometry(0.08, 0.18, 5), chassisMat(accent, 0.03));
+  guard.rotation.x = Math.PI;
+  guard.position.set(0, -0.06, -0.03);
+  g.add(guard);
+  for (const side of [-1, 1]) {
+    const tasset = new Mesh(new BoxGeometry(0.055, 0.18, 0.12), chassisMat(accent, 0.04));
+    tasset.position.set(side * 0.1, -0.05, 0);
+    tasset.rotation.z = side * 0.34;
+    g.add(tasset);
+    const edge = new Mesh(new BoxGeometry(0.06, 0.013, 0.125), glowMat(accent, 0.4));
+    edge.position.set(side * 0.12, -0.13, 0);
+    edge.rotation.z = side * 0.34;
+    g.add(edge);
+  }
+  return g;
+}
+
+/** EAGLE hips: glow-trimmed belt, tapered guard, layered feathered tassets. */
+function buildEaglePelvis(accent: number): Group {
+  const g = taggedHead('valkyrie');
+  const belt = new Mesh(new BoxGeometry(0.2, 0.05, 0.16), chassisMat(accent, 0.04));
+  belt.position.y = 0.05;
+  g.add(belt);
+  const beltGlow = new Mesh(new BoxGeometry(0.205, 0.015, 0.165), glowMat(accent, 0.5));
+  beltGlow.position.y = 0.075;
+  g.add(beltGlow);
+  const guard = new Mesh(new CylinderGeometry(0.08, 0.03, 0.14, 6), chassisMat(accent, 0.03));
+  guard.position.set(0, -0.05, -0.02);
+  g.add(guard);
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 2; i++) {
+      const t = new Mesh(
+        new BoxGeometry(0.05, 0.12 - i * 0.02, 0.11),
+        i === 0 ? chassisMat(accent, 0.04) : glowMat(accent, 0.4),
+      );
+      t.position.set(side * (0.09 + i * 0.03), -0.04 - i * 0.04, 0);
+      t.rotation.z = side * (0.28 + i * 0.1);
+      g.add(t);
+    }
+  }
+  return g;
+}
+
 /** Build the full opponent rig. Pieces start hidden; add them to the scene. */
 export function buildBoxer(team: number): BoxerRig {
   const accent = teamColor(team);
@@ -445,147 +689,17 @@ export function buildBoxer(team: number): BoxerRig {
   head.name = 'opponent-head';
   head.add(buildBearHead(accent), buildPantherHead(accent), buildEagleHead(accent));
 
-  // --- Chest assembly: shoulders are the widest point of the machine ---
+  // --- Torso: a DISTINCT armoured cuirass + hip set per skin. All three are
+  //     built and applyAvatarSkin shows one (the bot defaults to the panther).
+  //     Same silhouette envelope and the same BODY_IK hitbox spheres, so every
+  //     fighter stays equally hittable. ---
   const chest = new Group();
   chest.name = 'opponent-chest';
+  chest.add(buildBearChest(accent), buildPantherChest(accent), buildEagleChest(accent));
 
-  // Collar beam across the shoulders + a raised neck guard.
-  const collar = new Mesh(new BoxGeometry(0.42, 0.09, 0.2), chassisMat(accent, 0.05));
-  collar.position.y = 0.11;
-  chest.add(collar);
-  const neck = new Mesh(new CylinderGeometry(0.07, 0.09, 0.1, 8), darkMat());
-  neck.position.y = 0.17;
-  chest.add(neck);
-
-  // Layered pauldrons — two stacked sloping plates per side + a glow lip, so
-  // the shoulders read as curved armour, not a single block.
-  for (const side of [-1, 1]) {
-    const up = new Mesh(new BoxGeometry(0.2, 0.08, 0.28), chassisMat(accent, 0.05));
-    up.position.set(side * 0.27, 0.13, 0);
-    up.rotation.z = side * -0.24;
-    chest.add(up);
-    const lo = new Mesh(new BoxGeometry(0.18, 0.06, 0.26), darkMat());
-    lo.position.set(side * 0.3, 0.04, 0);
-    lo.rotation.z = side * -0.28;
-    chest.add(lo);
-    const lip = new Mesh(new BoxGeometry(0.205, 0.016, 0.285), glowMat(accent, 0.5));
-    lip.position.set(side * 0.27, 0.176, 0);
-    lip.rotation.z = side * -0.24;
-    chest.add(lip);
-  }
-
-  // The underlying torso volume — kept DARK so the bolted-on plates read as the
-  // surface, an 8-sided wedge tapering hard to the waist.
-  const trunk = new Mesh(new CylinderGeometry(0.165, 0.085, 0.42, 8), darkMat());
-  trunk.scale.z = 0.74;
-  trunk.position.y = -0.13;
-  chest.add(trunk);
-
-  // Pectoral plates angled in toward a glowing sternum + reactor core.
-  for (const side of [-1, 1]) {
-    const pec = new Mesh(new BoxGeometry(0.15, 0.16, 0.07), chassisMat(accent, 0.05));
-    pec.position.set(side * 0.085, 0.0, -0.13);
-    pec.rotation.y = side * 0.34;
-    chest.add(pec);
-  }
-  const sternum = new Mesh(new BoxGeometry(0.05, 0.2, 0.05), darkMat());
-  sternum.position.set(0, -0.02, -0.15);
-  chest.add(sternum);
-  const core = new Mesh(new CylinderGeometry(0.036, 0.036, 0.03, 12), glowMat(accent, 1.5));
-  core.rotation.x = Math.PI / 2;
-  core.position.set(0, 0.0, -0.17);
-  chest.add(core);
-
-  // Segmented abdominal plates tapering to the waist, each underlined by a
-  // faint glow seam — the "design lines" instead of a smooth cylinder.
-  for (let i = 0; i < 3; i++) {
-    const w = 0.2 - i * 0.035;
-    const ab = new Mesh(new BoxGeometry(w, 0.055, 0.075), chassisMat(accent, 0.04));
-    ab.position.set(0, -0.16 - i * 0.075, -0.1 + i * 0.012);
-    chest.add(ab);
-    const seam = new Mesh(new BoxGeometry(w * 0.9, 0.01, 0.078), glowMat(accent, 0.3));
-    seam.position.set(0, -0.195 - i * 0.075, -0.1 + i * 0.012);
-    chest.add(seam);
-  }
-  // Flank rib plates + a back plate close the armour around the sides.
-  for (const side of [-1, 1]) {
-    const flank = new Mesh(new BoxGeometry(0.05, 0.26, 0.2), chassisMat(accent, 0.04));
-    flank.position.set(side * 0.145, -0.08, 0);
-    flank.rotation.z = side * 0.12;
-    chest.add(flank);
-  }
-  const backPlate = new Mesh(new BoxGeometry(0.26, 0.34, 0.05), chassisMat(accent, 0.04));
-  backPlate.position.set(0, -0.05, 0.1);
-  chest.add(backPlate);
-
-  // --- Per-skin chest ornaments (hidden; applyAvatarSkin shows ONE set) ---
-  const chestTag = (g: Group, id: string): Group => {
-    g.userData.skinTag = id;
-    g.visible = false;
-    return g;
-  };
-
-  // COBALT: shoulder sensor mast + a glowing data stripe across the yoke.
-  const sensor = chestTag(new Group(), 'cobalt');
-  const mast = new Mesh(new CylinderGeometry(0.005, 0.007, 0.16, 6), darkMat());
-  mast.position.set(0.3, 0.23, 0.02);
-  sensor.add(mast);
-  const beacon = new Mesh(new BoxGeometry(0.02, 0.02, 0.02), glowMat(accent, 1.6));
-  beacon.position.set(0.3, 0.32, 0.02);
-  sensor.add(beacon);
-  const stripe = new Mesh(new BoxGeometry(0.4, 0.016, 0.205), glowMat(accent, 0.7));
-  stripe.position.y = 0.145;
-  sensor.add(stripe);
-  chest.add(sensor);
-
-  // CRIMSON: rows of pauldron spikes — pure pit-fighter menace.
-  const spikes = chestTag(new Group(), 'crimson');
-  for (const side of [-1, 1]) {
-    for (let i = 0; i < 3; i++) {
-      const spike = new Mesh(new CylinderGeometry(0.001, 0.015, 0.075, 6), darkMat());
-      spike.position.set(side * (0.2 + i * 0.07), 0.21 - i * 0.012, 0);
-      spike.rotation.z = side * -(0.15 + i * 0.2);
-      spikes.add(spike);
-    }
-  }
-  chest.add(spikes);
-
-  // VALKYRIE: angled glowing winglets off the pauldrons.
-  const wings = chestTag(new Group(), 'valkyrie');
-  for (const side of [-1, 1]) {
-    const wing = new Mesh(new BoxGeometry(0.17, 0.014, 0.07), glowMat(accent, 0.6));
-    wing.position.set(side * 0.37, 0.17, 0.02);
-    wing.rotation.z = side * 0.5;
-    wings.add(wing);
-  }
-  chest.add(wings);
-
-  // --- Pelvis: armoured hips, NOT a slab. A slim belt with a glowing buckle,
-  //     a tapered groin guard and two angled hip tassets — the silhouette ends
-  //     in plates, so there's no big square block at the bottom of anyone. ---
   const pelvis = new Group();
   pelvis.name = 'opponent-pelvis';
-  const belt = new Mesh(new BoxGeometry(0.2, 0.055, 0.16), chassisMat(accent, 0.04));
-  belt.position.y = 0.05;
-  pelvis.add(belt);
-  const buckle = new Mesh(new BoxGeometry(0.05, 0.045, 0.03), glowMat(accent, 1.0));
-  buckle.position.set(0, 0.05, -0.085);
-  pelvis.add(buckle);
-  // Tapered groin guard — narrows to a point, no square bottom.
-  const guard = new Mesh(new CylinderGeometry(0.09, 0.028, 0.15, 6), chassisMat(accent, 0.03));
-  guard.position.set(0, -0.055, -0.02);
-  pelvis.add(guard);
-  // Hip tassets: angled armour flaps hanging at each side, glow-edged.
-  for (const side of [-1, 1]) {
-    const tasset = new Mesh(new BoxGeometry(0.07, 0.15, 0.13), chassisMat(accent, 0.04));
-    tasset.position.set(side * 0.1, -0.03, 0);
-    tasset.rotation.z = side * 0.3;
-    pelvis.add(tasset);
-    const edge = new Mesh(new BoxGeometry(0.076, 0.014, 0.135), glowMat(accent, 0.35));
-    edge.position.set(side * 0.115, -0.1, 0);
-    edge.rotation.z = side * 0.3;
-    pelvis.add(edge);
-  }
+  pelvis.add(buildBearPelvis(accent), buildPantherPelvis(accent), buildEaglePelvis(accent));
 
   const torso = new Group();
   torso.name = 'opponent-torso';
