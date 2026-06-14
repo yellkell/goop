@@ -254,3 +254,12 @@ export function pubServerUrl(): string {
   if (host === 'localhost' || host === '127.0.0.1') return `ws://${host}:8788`;
   return PUB_SERVER;
 }
+
+/** The pub server's HTTP origin (same host as the WS relay) + the LiveKit voice
+ *  token route. ws→http, wss→https. The room server mints the join token. */
+export function pubVoiceTokenUrl(): string {
+  return `${pubServerUrl().replace(/^ws/, 'http')}/token`;
+}
+
+/** The single shared LiveKit room every punter's voice joins. */
+export const PUB_VOICE_ROOM = 'iron-balls-pub';
