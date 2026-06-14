@@ -170,9 +170,12 @@ export class FireballSystem extends createSystem({
 
     const obj = ball.object3D!;
     const state = ball.getValue(Fireball, 'state') ?? BallState.Hover;
+    // Balls only come alive during a live round — no charging (or throwing) in
+    // the off time between rounds / after the match. Training has no rounds.
+    const roundLive = app.state === 'training' || match.phase === 'playing';
 
     if (down) {
-      if (state === BallState.Hover || obj.position.distanceTo(_grip) <= FIREBALL.nearHandRadius) {
+      if (roundLive && (state === BallState.Hover || obj.position.distanceTo(_grip) <= FIREBALL.nearHandRadius)) {
         if (state !== BallState.Orbit) {
           ball.setValue(Fireball, 'state', BallState.Orbit);
           ball.setValue(Fireball, 'spin', 0);
@@ -193,9 +196,6 @@ export class FireballSystem extends createSystem({
     if (released && state === BallState.Orbit) {
       tracker.velocity(_vel, this.time);
       const speed = _vel.length();
-      // No throwing in the off time between rounds / after the match — only
-      // while a round is actually live (training has no rounds, so always on).
-      const roundLive = app.state === 'training' || match.phase === 'playing';
       if (roundLive && speed >= FIREBALL.minPunchSpeed) {
         this.throwBall(ball, hand, speed);
       } else {

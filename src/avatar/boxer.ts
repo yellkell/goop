@@ -449,34 +449,74 @@ export function buildBoxer(team: number): BoxerRig {
   const chest = new Group();
   chest.name = 'opponent-chest';
 
-  // Shoulder yoke: the wide armoured beam across the top.
-  const yoke = new Mesh(new BoxGeometry(0.46, 0.1, 0.2), chassisMat(accent, 0.05));
-  yoke.position.y = 0.09;
-  chest.add(yoke);
+  // Collar beam across the shoulders + a raised neck guard.
+  const collar = new Mesh(new BoxGeometry(0.42, 0.09, 0.2), chassisMat(accent, 0.05));
+  collar.position.y = 0.11;
+  chest.add(collar);
+  const neck = new Mesh(new CylinderGeometry(0.07, 0.09, 0.1, 8), darkMat());
+  neck.position.y = 0.17;
+  chest.add(neck);
 
-  // Pauldrons sloping off either end — the robot-wars wedge look.
+  // Layered pauldrons — two stacked sloping plates per side + a glow lip, so
+  // the shoulders read as curved armour, not a single block.
   for (const side of [-1, 1]) {
-    const pad = new Mesh(new BoxGeometry(0.17, 0.14, 0.24), darkMat());
-    pad.position.set(side * 0.27, 0.1, 0);
-    pad.rotation.z = side * -0.2; // slope down and out
-    chest.add(pad);
-    const trim = new Mesh(new BoxGeometry(0.175, 0.018, 0.245), glowMat(accent, 0.5));
-    trim.position.set(side * 0.27, 0.175, 0);
-    trim.rotation.z = side * -0.2;
-    chest.add(trim);
+    const up = new Mesh(new BoxGeometry(0.2, 0.08, 0.28), chassisMat(accent, 0.05));
+    up.position.set(side * 0.27, 0.13, 0);
+    up.rotation.z = side * -0.24;
+    chest.add(up);
+    const lo = new Mesh(new BoxGeometry(0.18, 0.06, 0.26), darkMat());
+    lo.position.set(side * 0.3, 0.04, 0);
+    lo.rotation.z = side * -0.28;
+    chest.add(lo);
+    const lip = new Mesh(new BoxGeometry(0.205, 0.016, 0.285), glowMat(accent, 0.5));
+    lip.position.set(side * 0.27, 0.176, 0);
+    lip.rotation.z = side * -0.24;
+    chest.add(lip);
   }
 
-  // Trunk: an 8-sided wedge tapering hard from shoulders to waist —
-  // nothing bulbous below the yoke.
-  const trunk = new Mesh(new CylinderGeometry(0.19, 0.1, 0.42, 8), chassisMat(accent, 0.04));
-  trunk.scale.z = 0.72;
+  // The underlying torso volume — kept DARK so the bolted-on plates read as the
+  // surface, an 8-sided wedge tapering hard to the waist.
+  const trunk = new Mesh(new CylinderGeometry(0.165, 0.085, 0.42, 8), darkMat());
+  trunk.scale.z = 0.74;
   trunk.position.y = -0.13;
   chest.add(trunk);
 
-  // Glowing reactor core slit on the chest plate.
-  const core = new Mesh(new BoxGeometry(0.06, 0.11, 0.02), glowMat(accent, 1.3));
-  core.position.set(0, -0.05, -0.135);
+  // Pectoral plates angled in toward a glowing sternum + reactor core.
+  for (const side of [-1, 1]) {
+    const pec = new Mesh(new BoxGeometry(0.15, 0.16, 0.07), chassisMat(accent, 0.05));
+    pec.position.set(side * 0.085, 0.0, -0.13);
+    pec.rotation.y = side * 0.34;
+    chest.add(pec);
+  }
+  const sternum = new Mesh(new BoxGeometry(0.05, 0.2, 0.05), darkMat());
+  sternum.position.set(0, -0.02, -0.15);
+  chest.add(sternum);
+  const core = new Mesh(new CylinderGeometry(0.036, 0.036, 0.03, 12), glowMat(accent, 1.5));
+  core.rotation.x = Math.PI / 2;
+  core.position.set(0, 0.0, -0.17);
   chest.add(core);
+
+  // Segmented abdominal plates tapering to the waist, each underlined by a
+  // faint glow seam — the "design lines" instead of a smooth cylinder.
+  for (let i = 0; i < 3; i++) {
+    const w = 0.2 - i * 0.035;
+    const ab = new Mesh(new BoxGeometry(w, 0.055, 0.075), chassisMat(accent, 0.04));
+    ab.position.set(0, -0.16 - i * 0.075, -0.1 + i * 0.012);
+    chest.add(ab);
+    const seam = new Mesh(new BoxGeometry(w * 0.9, 0.01, 0.078), glowMat(accent, 0.3));
+    seam.position.set(0, -0.195 - i * 0.075, -0.1 + i * 0.012);
+    chest.add(seam);
+  }
+  // Flank rib plates + a back plate close the armour around the sides.
+  for (const side of [-1, 1]) {
+    const flank = new Mesh(new BoxGeometry(0.05, 0.26, 0.2), chassisMat(accent, 0.04));
+    flank.position.set(side * 0.145, -0.08, 0);
+    flank.rotation.z = side * 0.12;
+    chest.add(flank);
+  }
+  const backPlate = new Mesh(new BoxGeometry(0.26, 0.34, 0.05), chassisMat(accent, 0.04));
+  backPlate.position.set(0, -0.05, 0.1);
+  chest.add(backPlate);
 
   // --- Per-skin chest ornaments (hidden; applyAvatarSkin shows ONE set) ---
   const chestTag = (g: Group, id: string): Group => {
@@ -520,14 +560,32 @@ export function buildBoxer(team: number): BoxerRig {
   }
   chest.add(wings);
 
-  // --- Pelvis: a small armoured block, the narrow end of the wedge ---
+  // --- Pelvis: armoured hips, NOT a slab. A slim belt with a glowing buckle,
+  //     a tapered groin guard and two angled hip tassets — the silhouette ends
+  //     in plates, so there's no big square block at the bottom of anyone. ---
   const pelvis = new Group();
   pelvis.name = 'opponent-pelvis';
-  const hipBlock = new Mesh(new BoxGeometry(0.21, 0.15, 0.17), chassisMat(accent, 0.03));
-  pelvis.add(hipBlock);
-  const beltTrim = new Mesh(new BoxGeometry(0.215, 0.02, 0.175), glowMat(accent, 0.4));
-  beltTrim.position.y = 0.06;
-  pelvis.add(beltTrim);
+  const belt = new Mesh(new BoxGeometry(0.2, 0.055, 0.16), chassisMat(accent, 0.04));
+  belt.position.y = 0.05;
+  pelvis.add(belt);
+  const buckle = new Mesh(new BoxGeometry(0.05, 0.045, 0.03), glowMat(accent, 1.0));
+  buckle.position.set(0, 0.05, -0.085);
+  pelvis.add(buckle);
+  // Tapered groin guard — narrows to a point, no square bottom.
+  const guard = new Mesh(new CylinderGeometry(0.09, 0.028, 0.15, 6), chassisMat(accent, 0.03));
+  guard.position.set(0, -0.055, -0.02);
+  pelvis.add(guard);
+  // Hip tassets: angled armour flaps hanging at each side, glow-edged.
+  for (const side of [-1, 1]) {
+    const tasset = new Mesh(new BoxGeometry(0.07, 0.15, 0.13), chassisMat(accent, 0.04));
+    tasset.position.set(side * 0.1, -0.03, 0);
+    tasset.rotation.z = side * 0.3;
+    pelvis.add(tasset);
+    const edge = new Mesh(new BoxGeometry(0.076, 0.014, 0.135), glowMat(accent, 0.35));
+    edge.position.set(side * 0.115, -0.1, 0);
+    edge.rotation.z = side * 0.3;
+    pelvis.add(edge);
+  }
 
   const torso = new Group();
   torso.name = 'opponent-torso';
@@ -542,6 +600,8 @@ export function buildBoxer(team: number): BoxerRig {
 }
 
 const UP = new Vector3(0, 1, 0);
+/** Platform top in the solve's local space — the torso never sinks below it. */
+const GROUND_Y = 0.14;
 const _hips = new Vector3();
 const _chest = new Vector3();
 const _spine = new Vector3();
@@ -580,17 +640,21 @@ export function solveTorso(
   const hl = Math.hypot(_fwd.x, _fwd.z);
   const nx = hl > 1e-3 ? _fwd.x / hl : 0;
   const nz = hl > 1e-3 ? _fwd.z / hl : -1;
-  _anchor.set(
-    headPos.x - nx * BODY_IK.spineSetBack,
-    headPos.y,
-    headPos.z - nz * BODY_IK.spineSetBack,
-  );
+  // How far the head has dropped toward the platform — 0 standing, →1 laid
+  // right out. As you go down, the spine anchor backs FURTHER off so the torso
+  // stretches flat out BEHIND you along the slab instead of folding straight
+  // down through it.
+  const duck = Math.min(1, Math.max(0, (BODY_IK.hipHeight - headPos.y + 0.35) / 0.8));
+  const setBack = BODY_IK.spineSetBack + duck * 0.5;
+  _anchor.set(headPos.x - nx * setBack, headPos.y, headPos.z - nz * setBack);
 
-  // Hips track the anchor laterally a bit so big leans drag the torso along,
-  // and follow it down on a duck (never higher than standing hip height).
-  const hipY = Math.min(BODY_IK.hipHeight, headPos.y - 0.5);
+  // Hips track the anchor laterally so big leans drag the torso along, and
+  // follow it down on a duck — but NEVER below the platform top, so a low
+  // lay-out smushes up against the slab rather than clipping through it.
+  const hipY = Math.max(GROUND_Y, Math.min(BODY_IK.hipHeight, headPos.y - 0.5));
   _hips.set(padX * 0.4 + _anchor.x * 0.6, hipY, padZ * 0.4 + _anchor.z * 0.6);
   _chest.copy(_hips).lerp(_anchor, BODY_IK.chestAlong);
+  _chest.y = Math.max(GROUND_Y + 0.12, _chest.y); // chest stays off the slab too
 
   // Orientation: lean the chest along the hips→anchor spine, yaw with the head.
   _spine.copy(_anchor).sub(_hips).normalize();
