@@ -25,7 +25,7 @@ import {
   Vector3,
   type Intersection,
 } from 'three';
-import { app, saveShootBack, type AppState } from '../menu/appState.js';
+import { app, saveEnvironment, saveShootBack, type AppState } from '../menu/appState.js';
 import {
   createActionPanel,
   createMenu,
@@ -170,6 +170,10 @@ export class MenuSystem extends createSystem({}) {
       case 'vs-bot':
         app.mode = 'bot';
         app.state = 'playing';
+        break;
+      case 'toggle-environment':
+        app.environment = app.environment === 'desert' ? 'ar' : 'desert';
+        saveEnvironment();
         break;
       case 'lb-duel':
         leaderboard.tab = 'duel';

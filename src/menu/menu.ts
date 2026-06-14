@@ -33,6 +33,7 @@ export type MenuAction =
   | 'quick-match'
   | 'cancel-queue'
   | 'vs-bot'
+  | 'toggle-environment'
   | 'lb-duel'
   | 'lb-training'
   | 'open-pub'
@@ -151,7 +152,7 @@ function drawDuel(ctx: CanvasRenderingContext2D, hover: boolean): void {
 
   const queueing = app.state === 'queueing';
   buttonPlate(
-    ctx, 70, 116, PW - 140, 96,
+    ctx, 70, 108, PW - 140, 84,
     queueing ? 'CANCEL' : 'QUICK MATCH',
     queueing ? UI.amber : UI.cool,
     hover,
@@ -164,9 +165,9 @@ function drawDuel(ctx: CanvasRenderingContext2D, hover: boolean): void {
     const label = `${app.searching} SEARCHING`;
     ctx.font = '800 18px system-ui, sans-serif';
     const pillW = ctx.measureText(label).width + 38;
-    const pillH = 30;
+    const pillH = 28;
     const px = PW - 70 - pillW;
-    const py = 102;
+    const py = 96;
     plate(ctx, px, py, pillW, pillH, {
       cut: 8,
       fill: 'rgba(79,183,255,0.22)',
@@ -183,8 +184,27 @@ function drawDuel(ctx: CanvasRenderingContext2D, hover: boolean): void {
     ctx.textAlign = 'center';
   }
 
-  buttonPlate(ctx, 70, 240, PW - 140, 96, 'VS BOT', UI.ember, hover);
+  buttonPlate(ctx, 70, 200, PW - 140, 84, 'VS BOT', UI.ember, hover);
 
+  // Desert-arena breaker switch, right under VS BOT: flips the whole arena
+  // between the papercraft desert and bare AR passthrough, held across modes.
+  const on = app.environment === 'desert';
+  ctx.font = '700 26px system-ui, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = UI.textDim;
+  ctx.fillText('desert arena', 64, 322);
+  const sw = 120, sh = 48, sx = PW - 64 - sw, sy = 298;
+  plate(ctx, sx, sy, sw, sh, {
+    cut: 10,
+    fill: on ? 'rgba(255,176,0,0.22)' : 'rgba(150,150,170,0.12)',
+    stroke: on ? UI.amber : UI.steelDim,
+    rivets: false,
+  });
+  ctx.fillStyle = on ? UI.amber : UI.steelDim;
+  const kw = sw / 2 - 12;
+  ctx.fillRect(on ? sx + sw - kw - 8 : sx + 8, sy + 8, kw, sh - 16);
+
+  ctx.textAlign = 'center';
   ctx.font = '600 22px system-ui, sans-serif';
   ctx.fillStyle = 'rgba(159,226,255,0.85)';
   const status = queueing
@@ -194,13 +214,14 @@ function drawDuel(ctx: CanvasRenderingContext2D, hover: boolean): void {
       : app.searching === 0
         ? 'no one queued yet — be the first'
         : app.netStatus;
-  ctx.fillText(status, PW / 2, 366);
+  ctx.fillText(status, PW / 2, 378);
 }
 
 function hitDuel(_u: number, v: number): MenuAction | null {
   const y = (1 - v) * PH;
-  if (y >= 108 && y <= 220) return app.state === 'queueing' ? 'cancel-queue' : 'quick-match';
-  if (y >= 232 && y <= 344) return 'vs-bot';
+  if (y >= 100 && y <= 194) return app.state === 'queueing' ? 'cancel-queue' : 'quick-match';
+  if (y >= 196 && y <= 288) return 'vs-bot';
+  if (y >= 292 && y <= 354) return 'toggle-environment';
   return null;
 }
 

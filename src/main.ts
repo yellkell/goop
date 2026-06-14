@@ -29,6 +29,7 @@ import { PlayerFeedbackSystem } from './systems/PlayerFeedbackSystem.js';
 import { PlayerGloveSystem } from './systems/PlayerGloveSystem.js';
 import { PlayerGestureSystem } from './systems/PlayerGestureSystem.js';
 import { FXSystem } from './systems/FXSystem.js';
+import { DesertSystem } from './systems/DesertSystem.js';
 
 const container = document.getElementById('scene-container') as HTMLDivElement;
 
@@ -50,6 +51,9 @@ World.create(container, {
     // We light the scene ourselves (see setupEnvironment) and let passthrough
     // provide the backdrop, so the default sky is off.
     defaultLighting: false,
+    // Far enough to render the optional desert's horizon mesas + sun disc when
+    // that backdrop is switched on; harmless in bare AR (nothing's out there).
+    far: 1600,
     camera: { position: [0, 1.6, 0] },
   },
 }).then((world) => {
@@ -78,6 +82,8 @@ World.create(container, {
   world.registerSystem(PlayerGloveSystem);
   world.registerSystem(PlayerGestureSystem);
   world.registerSystem(FXSystem);
+  // The optional papercraft desert backdrop (off = bare AR passthrough).
+  world.registerSystem(DesertSystem);
 
   // eslint-disable-next-line no-console
   console.info('[FIRE FIGHT] World ready — platforms set, fists hot.');
