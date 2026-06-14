@@ -12,7 +12,6 @@ import { opponent } from '../combat/opponentBus.js';
 import { spawnGestureCue, spawnPopup } from '../fx/effects.js';
 import { pulseHand } from '../input/haptics.js';
 import { app } from '../menu/appState.js';
-import { match } from '../combat/matchState.js';
 import * as sfx from '../audio/sfx.js';
 import { ARENA_GAP } from '../config.js';
 
@@ -21,9 +20,9 @@ const CLAP_CLOSING_SPEED = 0.75;
 const CLAP_COMBINED_SPEED = 1.1;
 const CLAP_COOLDOWN = 0.55;
 
-const FIST_TOUCH_DISTANCE = 0.24;
-const FIST_LANE_RADIUS = 0.26;
-const FIST_FORWARD_REACH = 0.55;
+const FIST_TOUCH_DISTANCE = 0.32;
+const FIST_LANE_RADIUS = 0.36;
+const FIST_FORWARD_REACH = 0.45;
 const FIST_BUMP_COOLDOWN = 1.25;
 
 const _left = new Vector3();
@@ -104,7 +103,10 @@ export class PlayerGestureSystem extends createSystem({}) {
   }
 
   private tryFistBump(): void {
-    if (app.state !== 'playing' || match.phase !== 'playing' || !opponent.active || this.fistBumpCooldown > 0) return;
+    // Works in EVERY match phase — the bump you most want is the touch of
+    // gloves between rounds and after the final bell, so don't gate it to the
+    // live round (that was why "nothing happened" the moment the bell went).
+    if (app.state !== 'playing' || !opponent.active || this.fistBumpCooldown > 0) return;
 
     const localFist: [boolean, boolean] = [
       this.pressed('left', InputComponent.Squeeze) && !this.pressed('left', InputComponent.Trigger),
@@ -137,9 +139,9 @@ export class PlayerGestureSystem extends createSystem({}) {
   }
 
   private emitGg(cue: Vector3, hands: 'left' | 'right' | 'both'): void {
-    spawnGestureCue(this.world, cue, 0.25);
-    _mid.copy(cue).y += 0.14;
-    spawnPopup(this.world, _mid, 'GG', '#ffffff', 'rgba(255,255,255,0.95)');
+    spawnGestureCue(this.world, cue, 0.32);
+    _mid.copy(cue).y += 0.18;
+    spawnPopup(this.world, _mid, 'GG', '#ffffff', 'rgba(255,255,255,0.95)', 2.4);
     sfx.fistBump();
     if (hands === 'both') {
       pulseHand(this.world.session, 'left', 0.55, 80);

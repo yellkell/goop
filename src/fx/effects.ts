@@ -51,8 +51,16 @@ function popupTexture(text: string, fill: string, glow: string): CanvasTexture {
   return tex;
 }
 
-/** A billboard popup that pops at the impact, rises and fades. */
-export function spawnPopup(world: World, pos: Vector3, text: string, fill = '#ff1605', glow = 'rgba(255,30,10,1)'): void {
+/** A billboard popup that pops at the impact, rises and fades. `scale` grows
+ *  the whole label — damage numbers stay at 1, a celebratory GG rides bigger. */
+export function spawnPopup(
+  world: World,
+  pos: Vector3,
+  text: string,
+  fill = '#ff1605',
+  glow = 'rgba(255,30,10,1)',
+  scale = 1,
+): void {
   const mesh = new Mesh(
     POPUP_GEO,
     new MeshBasicMaterial({
@@ -66,7 +74,7 @@ export function spawnPopup(world: World, pos: Vector3, text: string, fill = '#ff
   const e = world.createTransformEntity(mesh);
   e.object3D!.position.copy(pos);
   e.object3D!.position.y += 0.1;
-  e.addComponent(Effect, { kind: EffectKind.Popup, life: 0.9, baseScale: 1 });
+  e.addComponent(Effect, { kind: EffectKind.Popup, life: 0.9, baseScale: scale });
 }
 
 /** A little red damage number that pops at the impact, rises and fades. */
@@ -74,17 +82,25 @@ export function spawnDamagePopup(world: World, pos: Vector3, dmg: number): void 
   spawnPopup(world, pos, String(dmg));
 }
 
-/** Small white confirmation flash for social hand gestures. */
+/**
+ * A crisp metallic spark for social hand gestures (clap / fist bump): a quick
+ * bright pop, a snappy warm ring, and a short spray of sparks — it reads like
+ * two iron gauntlets clinking, not a soft white puff.
+ */
 export function spawnGestureCue(world: World, pos: Vector3, scale = 0.28): void {
-  const flash = glowSprite(0xffffff, scale);
+  const flash = glowSprite(0xfff1d0, scale);
   const fe = world.createTransformEntity(flash);
   fe.object3D!.position.copy(pos);
-  fe.addComponent(Effect, { kind: EffectKind.Flash, life: 0.14, baseScale: scale });
+  fe.addComponent(Effect, { kind: EffectKind.Flash, life: 0.1, baseScale: scale });
 
-  const ring = glowSprite(0xffffff, scale * 0.65, 0.75);
+  const ring = glowSprite(0xffe19a, scale * 0.6, 0.85);
   const re = world.createTransformEntity(ring);
   re.object3D!.position.copy(pos);
-  re.addComponent(Effect, { kind: EffectKind.Ring, life: 0.22, baseScale: scale * 0.55 });
+  re.addComponent(Effect, { kind: EffectKind.Ring, life: 0.26, baseScale: scale * 0.5 });
+
+  // A few warm sparks off the strike — scaled to the gesture so a big bump
+  // throws more than a light clap.
+  emberBurst(pos, Math.max(5, Math.round(scale * 28)), false);
 }
 
 /**
