@@ -152,6 +152,12 @@ export class FightSystem extends createSystem({}) {
   private matchBoard?: Panel;
   private boardSide: 0 | 1 | -1 = -1;
   private boardKey = '';
+  /** Locally-ticked round clock. The server owns the authoritative timer, but
+   *  it only broadcasts on whole-second changes (and an out-of-date room server
+   *  may not send it at all — which left the HUD frozen at 0:00). So we count
+   *  down here and snap to the server's value whenever a live one arrives. */
+  private roundClock = 0;
+  private lastServerTimer = -1;
 
   init(): void {
     // The local fighter's body: an ember (team 0) torso wearing my avatar
@@ -257,13 +263,23 @@ export class FightSystem extends createSystem({}) {
 
     this.checkConsoles();
     this.dressRims();
-    this.updateMatchBoard();
 
     const f = pub.fight;
     const fighting = f.phase === 'fighting';
     // Between rounds (roundOver) the fighters stay embodied with their balls
     // hovering — only KO-gated throws pause — so keep the body/ball sim live.
     const live = f.phase === 'starting' || f.phase === 'roundOver' || fighting;
+
+    // Round clock: adopt the server's value whenever it sends a fresh live one,
+    // otherwise tick down locally so it always moves (a stale room server that
+    // never broadcasts the clock used to leave it stuck at 0:00).
+    if (f.roundTimer !== this.lastServerTimer) {
+      this.lastServerTimer = f.roundTimer;
+      if (f.roundTimer > 0) this.roundClock = f.roundTimer;
+    }
+    if (fighting) this.roundClock = Math.max(0, this.roundClock - delta);
+
+    this.updateMatchBoard();
 
     if (this.amFighter() && live) {
       this.solveMyBody();
@@ -369,6 +385,10 @@ export class FightSystem extends createSystem({}) {
           // Every round opens with the bell + full health + balls back at fists.
           sfx.roundBell();
           this.myHp = FIGHT.hpMax;
+          // Start the local clock at a full round; the server's live ticks (if
+          // it sends them) snap it from here in update().
+          this.roundClock = FIGHT.roundTime;
+          this.lastServerTimer = -1;
           if (this.amFighter() && this.myBalls) this.resetMyBalls();
           break;
         case 'roundOver': {
@@ -910,7 +930,8 @@ export class FightSystem extends createSystem({}) {
     const oppName = this.nameOf(f.sides[opp]);
     const myHp = Math.max(0, f.hp[side]) / FIGHT.hpMax;
     const oppHp = Math.max(0, f.hp[opp]) / FIGHT.hpMax;
-    const clk = Math.max(0, Math.ceil(f.roundTimer));
+    const secs = Math.max(0, Math.ceil(this.roundClock));
+    const clk = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
     const headline =
       f.phase === 'starting'
         ? `ROUND ${f.round}`
@@ -942,7 +963,7 @@ export class FightSystem extends createSystem({}) {
       // One shared round clock, centred under the headline.
       ctx.font = `900 ${Math.round(h * 0.15)}px "Arial Black", system-ui, sans-serif`;
       ctx.fillStyle = '#e8ecf2';
-      ctx.fillText(`0:${String(clk).padStart(2, '0')}`, w / 2, h * 0.42);
+      ctx.fillText(clk, w / 2, h * 0.42);
 
       const barW = w * 0.36;
       const barH = h * 0.15;

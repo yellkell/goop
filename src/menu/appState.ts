@@ -42,6 +42,9 @@ export const app: {
   netStatus: string;
   /** Aim Training option: targets shoot back so you can train dodging. */
   shootBack: boolean;
+  /** How many boxers are in the quick-match queue right now (−1 = unknown,
+   *  e.g. before the matchmaker is reachable). Drives the 1V1 panel. */
+  searching: number;
   stats: LifetimeStats;
 } = {
   state: 'menu',
@@ -50,6 +53,7 @@ export const app: {
   netStatus: 'not connected',
   // Off unless the player has explicitly switched it on.
   shootBack: localStorage.getItem('ff-shootback') === '1',
+  searching: -1,
   stats: loadStats(),
 };
 

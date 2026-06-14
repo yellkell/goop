@@ -49,6 +49,7 @@ import {
 import { match } from '../combat/matchState.js';
 import { UI } from '../ui/industrial.js';
 import { net } from '../net/client.js';
+import { startQueueWatch, stopQueueWatch } from '../net/queueWatch.js';
 import { hasCustomName, leaderboard, myStats, refreshLeaderboard, setPlayerName } from '../net/leaderboard.js';
 import { pubUrl } from '../config.js';
 import * as sfx from '../audio/sfx.js';
@@ -454,6 +455,16 @@ export class MenuSystem extends createSystem({}) {
     this.menu.setVisible(inLobby);
     // Fresh board standings whenever you land back in the lobby (throttled).
     if (inLobby) void refreshLeaderboard();
+
+    // Live "N searching" count on the 1V1 panel — only watched in the lobby.
+    if (inLobby) {
+      startQueueWatch((n) => {
+        app.searching = n;
+      });
+    } else {
+      stopQueueWatch();
+      app.searching = -1;
+    }
 
     // The action panel only lives inside training runs and bouts; the
     // keyboard only in the lobby.
