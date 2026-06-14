@@ -53,6 +53,7 @@ import { pubSendEvent, pubSendRaw } from '../net.js';
 import type { FightNet, FireballNet } from '../protocol.js';
 import { bus, pub } from '../state.js';
 import { Panel } from '../panel.js';
+import { UI, hazardStrip, plate, segmentBar, stencilFont } from '../../ui/industrial.js';
 import { teleportPlayer } from './TeleportSystem.js';
 
 const HANDS = ['left', 'right'] as const;
@@ -950,62 +951,77 @@ export class FightSystem extends createSystem({}) {
     if (key === this.boardKey) return;
     this.boardKey = key;
 
-    board.draw((ctx, w, h) => {
-      const ember = '#ff7a18';
-      const blue = '#4fb7ff';
+    const headlineColour =
+      f.phase === 'fighting' ? UI.danger
+      : f.phase === 'starting' ? UI.amber
+      : f.winner === pub.myId ? UI.emberBright
+      : UI.cool;
 
-      // Headline across the top.
-      ctx.textAlign = 'center';
-      ctx.font = `900 ${Math.round(h * 0.17)}px "Arial Black", system-ui, sans-serif`;
-      ctx.fillStyle = f.phase === 'fighting' ? '#e8352a' : '#fff3cf';
-      ctx.fillText(headline, w / 2, h * 0.17);
+    // Painted on a TRANSPARENT canvas so the only backing is one sleek
+    // smoked-glass plate — the arena scoreboard's language, not an opaque slab.
+    board.drawBare((ctx, w, h) => {
+      plate(ctx, 6, 6, w - 12, h - 12, { cut: 30, fill: UI.ink, stroke: UI.steel, rivets: false });
+      ctx.textBaseline = 'middle';
 
-      // One shared round clock, centred under the headline.
-      ctx.font = `900 ${Math.round(h * 0.15)}px "Arial Black", system-ui, sans-serif`;
-      ctx.fillStyle = '#e8ecf2';
-      ctx.fillText(clk, w / 2, h * 0.42);
+      // Header band: hazard chip + headline (left), round clock (right), under a
+      // neon rule tinted to the moment.
+      hazardStrip(ctx, 44, 40, 76, 24, UI.amber);
+      ctx.textAlign = 'left';
+      ctx.font = stencilFont(54);
+      ctx.fillStyle = headlineColour;
+      ctx.fillText(headline, 146, 58);
+      ctx.textAlign = 'right';
+      ctx.font = stencilFont(62);
+      ctx.fillStyle = UI.text;
+      ctx.fillText(clk, w - 46, 58);
+      ctx.strokeStyle = headlineColour;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(44, 100);
+      ctx.lineTo(w - 44, 100);
+      ctx.stroke();
 
-      const barW = w * 0.36;
-      const barH = h * 0.15;
-      const barY = h * 0.55;
-      const nameY = h * 0.45;
-      const cols: [string, string, number, number, 0 | 1][] = [
-        [myName, ember, myHp, f.score[side], 0],
-        [oppName, blue, oppHp, f.score[opp], 1],
+      // Two stacked fighter readouts: YOU (ember) over RIVAL (blue), each a
+      // stencilled name + chamfered round pips + a segmented health bar.
+      const rows: [string, string, number, number][] = [
+        [myName, UI.emberBright, myHp, f.score[side]],
+        [oppName, UI.cool, oppHp, f.score[opp]],
       ];
-      for (const [name, colour, hp, pips, col] of cols) {
-        const x = col === 0 ? w * 0.05 : w * 0.59;
-        ctx.textAlign = col === 0 ? 'left' : 'right';
-        ctx.font = `900 ${Math.round(h * 0.12)}px "Arial Black", system-ui, sans-serif`;
+      rows.forEach(([name, colour, hp, pips], i) => {
+        const top = 168 + i * 184;
+        ctx.textAlign = 'left';
+        ctx.font = stencilFont(46);
         ctx.fillStyle = colour;
-        ctx.fillText(name.toUpperCase().slice(0, 12), col === 0 ? x : x + barW, nameY);
-        // Health bar — the opponent's drains from the inner edge, mirror-style.
-        ctx.fillStyle = 'rgba(172,182,198,0.25)';
-        ctx.fillRect(x, barY, barW, barH);
-        ctx.fillStyle = colour;
-        const fillW = barW * hp;
-        ctx.fillRect(col === 0 ? x : x + barW - fillW, barY, fillW, barH);
-        ctx.strokeStyle = 'rgba(232,236,242,0.6)';
-        ctx.lineWidth = 3;
-        ctx.strokeRect(x, barY, barW, barH);
-        // Round-win pips below the bar.
-        const pipR = h * 0.045;
-        const pipY = barY + barH + h * 0.14;
-        for (let i = 0; i < FIGHT.winTarget; i++) {
-          const px = col === 0 ? x + pipR + i * pipR * 2.6 : x + barW - pipR - i * pipR * 2.6;
-          ctx.beginPath();
-          ctx.arc(px, pipY, pipR, 0, Math.PI * 2);
-          if (i < pips) {
-            ctx.fillStyle = colour;
-            ctx.fill();
-          } else {
-            ctx.strokeStyle = 'rgba(172,182,198,0.5)';
-            ctx.lineWidth = 3;
-            ctx.stroke();
-          }
-        }
-      }
+        ctx.fillText(name.toUpperCase().slice(0, 14), 48, top);
+        this.drawPips(ctx, w - 48, top, pips, colour);
+        segmentBar(ctx, 48, top + 34, w - 96, 58, hp, colour);
+      });
     });
+  }
+
+  /** Round-win pips as chamfered studs, ending at rightX (arena scoreboard
+   *  language): filled + glowing once taken, hollow steel otherwise. */
+  private drawPips(ctx: CanvasRenderingContext2D, rightX: number, y: number, won: number, colour: string): void {
+    const n = FIGHT.winTarget;
+    const gap = 52;
+    for (let i = 0; i < n; i++) {
+      const px = rightX - (n - 1 - i) * gap;
+      ctx.save();
+      ctx.translate(px, y);
+      ctx.rotate(Math.PI / 4);
+      if (i < won) {
+        ctx.fillStyle = colour;
+        ctx.shadowColor = colour;
+        ctx.shadowBlur = 12;
+        ctx.fillRect(-13, -13, 26, 26);
+        ctx.shadowBlur = 0;
+      } else {
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = UI.steelDim;
+        ctx.strokeRect(-13, -13, 26, 26);
+      }
+      ctx.restore();
+    }
   }
 
   private renderDisplay(): void {
