@@ -193,7 +193,10 @@ export class FireballSystem extends createSystem({
     if (released && state === BallState.Orbit) {
       tracker.velocity(_vel, this.time);
       const speed = _vel.length();
-      if (speed >= FIREBALL.minPunchSpeed) {
+      // No throwing in the off time between rounds / after the match — only
+      // while a round is actually live (training has no rounds, so always on).
+      const roundLive = app.state === 'training' || match.phase === 'playing';
+      if (roundLive && speed >= FIREBALL.minPunchSpeed) {
         this.throwBall(ball, hand, speed);
       } else {
         ball.setValue(Fireball, 'state', BallState.Hover);

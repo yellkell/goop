@@ -91,7 +91,7 @@ let joinCount = 0;
 const HP_MAX = 100;
 const WIN_TARGET = 3; // round wins to take the match (best of 5)
 const ROUND_TIME = 60; // seconds per round
-const ROUND_OVER_DELAY = 3; // seconds of round-result pause
+const ROUND_OVER_DELAY = 5; // seconds of round-result pause
 const MATCH_OVER_DELAY = 6; // seconds of match-result pause
 const fight = {
   phase: 'idle',

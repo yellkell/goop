@@ -120,7 +120,7 @@ export const FIGHT = {
   // keep the two in sync.
   winTarget: 3, // round wins needed to take the match
   roundTime: 60, // seconds per round before higher-HP wins on time
-  roundOverDelay: 3, // pause shown after a round before the next begins
+  roundOverDelay: 5, // pause shown after a round before the next begins
   matchOverDelay: 6, // pause after the match before the corners free up
 } as const;
 

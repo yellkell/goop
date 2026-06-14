@@ -156,7 +156,7 @@ export const BOT = {
 export const MATCH = {
   roundTime: 60, // seconds per round
   winTarget: 3, // first to N round wins takes the match
-  roundOverDelay: 3, // pause after a round
+  roundOverDelay: 5, // pause between rounds — a real breather to reset
   matchOverDelay: 6, // pause after the match before returning to the lobby
 };
 
