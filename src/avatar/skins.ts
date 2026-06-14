@@ -35,9 +35,11 @@ export interface PlatformSkin {
 }
 
 export const AVATAR_SKINS: AvatarSkin[] = [
-  { id: 'cobalt', name: 'COBALT', chassis: 0x122039, trim: 0x0a111e, accent: 0x4fb7ff },
-  { id: 'crimson', name: 'CRIMSON', chassis: 0x2e1013, trim: 0x170809, accent: 0xff3b4e },
-  { id: 'valkyrie', name: 'VALKYRIE', chassis: 0x261b33, trim: 0x120d1a, accent: 0xff9ad5, slim: true },
+  // ids are stable (saved prefs + per-skin geometry tags key off them); the
+  // display names follow the metallic-animal heads buildBoxer gives each one.
+  { id: 'cobalt', name: 'BEAR', chassis: 0x122039, trim: 0x0a111e, accent: 0x4fb7ff },
+  { id: 'crimson', name: 'PANTHER', chassis: 0x2e1013, trim: 0x170809, accent: 0xff3b4e },
+  { id: 'valkyrie', name: 'EAGLE', chassis: 0x261b33, trim: 0x120d1a, accent: 0xff9ad5, slim: true },
   { id: 'soon-av', name: 'SOON', locked: true, chassis: 0, trim: 0, accent: 0 },
 ];
 
