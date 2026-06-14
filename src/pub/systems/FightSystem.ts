@@ -269,7 +269,11 @@ export class FightSystem extends createSystem({}) {
       this.solveMyBody();
       this.ensureMyBalls();
       this.updateMyBalls(delta, fighting);
-      this.checkForfeit();
+      // Only hold fighters to their platform while a round is actually LIVE.
+      // During the pre-bell countdown and the between-round pause the leash
+      // was still armed, so a half-step after winning round 1 was read as
+      // walking off — forfeiting the whole best-of-5 before round 2 rang.
+      if (fighting) this.checkForfeit();
       this.checkIncomingHits(fighting);
       this.streamBalls(delta);
     } else {
