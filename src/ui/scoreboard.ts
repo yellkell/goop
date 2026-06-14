@@ -12,7 +12,9 @@
  */
 
 import {
+  AdditiveBlending,
   CanvasTexture,
+  Color,
   Group,
   LinearFilter,
   Mesh,
@@ -128,6 +130,38 @@ function displayName(name: string, fallback: string): string {
   return clean ? clean.toUpperCase() : fallback;
 }
 
+/** Soft additive aura that sits behind the verdict and pulses with it. A
+ *  radial-gradient sprite — animated purely by transform/opacity/colour, so it
+ *  never costs a canvas redraw. */
+function makeVerdictGlow(): Mesh {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 128;
+  const g = canvas.getContext('2d')!;
+  const grad = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  grad.addColorStop(0, 'rgba(255,255,255,0.95)');
+  grad.addColorStop(0.45, 'rgba(255,255,255,0.32)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 128, 128);
+  const tex = new CanvasTexture(canvas);
+  tex.minFilter = LinearFilter;
+  const mesh = new Mesh(
+    new PlaneGeometry(3.0, 1.7),
+    new MeshBasicMaterial({
+      map: tex,
+      transparent: true,
+      blending: AdditiveBlending,
+      depthWrite: false,
+      depthTest: false,
+      opacity: 0,
+    }),
+  );
+  mesh.visible = false;
+  return mesh;
+}
+
+const easeOutCubic = (t: number): number => 1 - (1 - t) ** 3;
+
 export function createScoreboard(scene: Scene): Scoreboard {
   const group = new Group();
   group.name = 'scoreboards';
@@ -148,10 +182,54 @@ export function createScoreboard(scene: Scene): Scoreboard {
   // Headline strip (KO, YOU WIN...) floating just above the boards.
   // Sized to the canvas aspect so the stencil type renders undistorted.
   const centre = makeBoard(2.2, 1.05);
-  centre.mesh.position.set(0, 2.9, -ARENA_GAP - 1.15);
+  const CENTRE_Y = 2.9;
+  const CENTRE_Z = -ARENA_GAP - 1.15;
+  centre.mesh.position.set(0, CENTRE_Y, CENTRE_Z);
+  centre.mesh.renderOrder = 12;
 
-  group.add(left.mesh, right.mesh, timer.mesh, centre.mesh);
+  // The accent aura behind the verdict.
+  const glow = makeVerdictGlow();
+  glow.position.set(0, CENTRE_Y, CENTRE_Z - 0.04);
+  glow.renderOrder = 11;
+  const glowColor = new Color();
+
+  group.add(left.mesh, right.mesh, timer.mesh, glow, centre.mesh);
   scene.add(group);
+
+  // --- verdict animation (transform/opacity only — no canvas redraws) -------
+  let verdictMsg = '';
+  let verdictStart = 0;
+  const glowMat = glow.material as MeshBasicMaterial;
+
+  const animateVerdict = (message: string): void => {
+    const now = performance.now();
+    if (message !== verdictMsg) {
+      verdictMsg = message;
+      verdictStart = now;
+    }
+    if (!message) {
+      centre.mesh.scale.setScalar(1);
+      centre.mesh.position.y = CENTRE_Y;
+      glow.visible = false;
+      return;
+    }
+    const t = (now - verdictStart) / 1000;
+    // Slam in: a quick overshoot that springs to rest, then a slow breathe.
+    const spring = 1 + 0.6 * Math.exp(-t * 8) * Math.cos(t * 17);
+    const breathe = 1 + 0.02 * Math.sin(now * 0.0042);
+    centre.mesh.scale.setScalar(Math.max(0.25, spring * breathe));
+    centre.mesh.position.y = CENTRE_Y + 0.012 * Math.sin(now * 0.0032);
+
+    // Aura: a bright impact flash on arrival decaying into a steady pulse.
+    glow.visible = true;
+    glowColor.set(verdictAccent(message));
+    glowMat.color.copy(glowColor);
+    const intro = easeOutCubic(Math.min(1, t / 0.25));
+    const flash = 0.55 * Math.exp(-t * 5);
+    const pulse = 0.26 + 0.12 * Math.sin(now * 0.005);
+    glowMat.opacity = Math.min(0.95, intro * pulse + flash);
+    glow.scale.setScalar(spring * (1 + 0.18 * Math.exp(-t * 6) + 0.05 * Math.sin(now * 0.005)));
+  };
 
   const drawTimer = (text: string): void => {
     const key = `clk|${text}`;
@@ -224,6 +302,7 @@ export function createScoreboard(scene: Scene): Scoreboard {
       drawSide(left, app.mode === 'net' ? displayName(myName(), 'YOU') : 'YOU', UI.emberBright, pHp / pMax, state.myScore);
       drawSide(right, app.mode === 'net' ? displayName(rival.name, 'RIVAL') : 'BOT', UI.cool, oHp / oMax, state.oppScore);
       drawCentre(state.message, state.phase === 'matchOver' ? '' : state.message ? `R${state.round}` : '');
+      animateVerdict(state.message);
     },
 
     updateTraining(hp, hpMax) {
@@ -250,6 +329,7 @@ export function createScoreboard(scene: Scene): Scoreboard {
       // Right board: dodge readout (health only matters with shoot-back on).
       drawSide(right, 'DODGE', UI.cool, app.shootBack ? hp / hpMax : 1, 0);
       drawCentre('', '');
+      animateVerdict('');
     },
 
     setVisible(v) {
