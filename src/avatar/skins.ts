@@ -128,8 +128,7 @@ export function applyPlatformSkin(root: Object3D, skin: PlatformSkin): void {
         m.emissive.setHex(skin.neon);
         break;
       case 'neon-core':
-        // Dim-tagged piping (the azure inner ring) stays an underglow.
-        m.color.copy(new Color(skin.neon).lerp(_white, m.userData.dim ? 0.18 : 0.45));
+        m.color.copy(new Color(skin.neon).lerp(_white, 0.45));
         break;
       case 'neon-halo':
         m.color.setHex(skin.neon);

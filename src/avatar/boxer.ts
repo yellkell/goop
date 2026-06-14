@@ -299,6 +299,7 @@ function buildBearHead(accent: number): Group {
 function buildPantherHead(accent: number): Group {
   const r = BODY_IK.headRadius;
   const g = taggedHead('crimson');
+  g.scale.setScalar(1.08);
 
   const skull = new Mesh(new SphereGeometry(r * 0.86, 16, 12), chassisMat(accent, 0.06));
   skull.scale.set(0.9, 0.92, 1.2);

@@ -1,7 +1,7 @@
 /**
  * Papercraft western desert — art-direction knobs. Ported from the `vrenv`
- * Paper Frontier project (yellkell/vrenv, claude/papercraft-desert): a golden
- * hour desert of folded-paper dunes, layered mesas, saguaro cacti and rolling
+ * Paper Frontier project (yellkell/vrenv, claude/papercraft-desert): a low-sun
+ * desert of folded-paper dunes, layered mesas, saguaro cacti and rolling
  * tumbleweeds, dropped in behind FIRE FIGHT's platforms as an optional arena.
  *
  * Almost every "feeling" of the scene is a number in here.
@@ -11,32 +11,32 @@ export const CONFIG = {
   /** Overall art direction. */
   mood: {
     /** Sun height: 0 = on the horizon (long shadows), 1 = overhead. */
-    sunElevation: 0.22,
-    exposure: 1.0,
+    sunElevation: 0.13,
+    exposure: 0.86,
     haze: 0.5,
     viewDistance: 1500,
   },
 
-  /** Warm golden-hour sky gradient (the inward-facing dome). */
+  /** Dawn-or-dusk sky gradient (the inward-facing dome). */
   sky: {
-    top: '#5f93cf', // warm daytime blue overhead
-    horizon: '#f6cf94', // golden dust band at the horizon
-    bottom: '#caa676', // sandy glow below
+    top: '#3d5f91', // muted blue-violet overhead, not midday cyan
+    horizon: '#eda36f', // peach dust band at the low sun line
+    bottom: '#8d6a69', // rosy earth glow below the horizon
     intensity: 1.0,
   },
 
-  /** Image-based lighting tint — warm, so paper glows at golden hour. */
+  /** Image-based lighting tint — warm enough for dawn, cool enough for dusk. */
   ibl: {
-    sky: '#ffe9c6',
-    ground: '#a98353',
-    intensity: 1.05,
+    sky: '#f3b895',
+    ground: '#76545c',
+    intensity: 0.82,
   },
 
   /** The construction-paper palette. */
   palette: {
-    sandLight: '#e8c992',
-    sandDark: '#cda86e',
-    sun: '#ffdf8a',
+    sandLight: '#d9aa72',
+    sandDark: '#a8684f',
+    sun: '#ffb36f',
     rockStrata: ['#a85638', '#c06b41', '#cf8350', '#b85a3a', '#9d4a30'],
     boulder: ['#bd7048', '#a9603c', '#caa06a'],
     cactus: '#6f9a5b',

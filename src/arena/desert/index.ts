@@ -80,11 +80,11 @@ export function buildDesert(): Desert {
 
   root.add(makeSkyDome());
 
-  // The low golden sun — drives long shadows and a flat paper sun disc.
+  // A low warm sun — ambiguous sunrise/sunset, with long readable shadows.
   const e = CONFIG.mood.sunElevation * (Math.PI / 2);
   const sunDir = new Vector3(0.35 * Math.cos(e), Math.sin(e), -0.94 * Math.cos(e)).normalize();
 
-  const sun = new DirectionalLight(new Color('#ffdca0'), 2.4);
+  const sun = new DirectionalLight(new Color('#ffb879'), 1.75);
   sun.position.copy(sunDir).multiplyScalar(55);
   sun.castShadow = true;
   sun.shadow.mapSize.set(1024, 1024);
@@ -98,11 +98,11 @@ export function buildDesert(): Desert {
   root.add(sun);
   root.add(sun.target); // target sits at the origin → sun points at the platforms
 
-  root.add(new AmbientLight(new Color('#d8b38a'), 0.5));
-  root.add(new HemisphereLight(new Color(CONFIG.ibl.sky), new Color(CONFIG.ibl.ground), 0.6));
+  root.add(new AmbientLight(new Color('#705c7a'), 0.32));
+  root.add(new HemisphereLight(new Color(CONFIG.ibl.sky), new Color(CONFIG.ibl.ground), 0.5));
 
   // Stylised paper sun low on the horizon (with a fainter halo behind it).
-  const halo = new Mesh(new CircleGeometry(44, 36), makePaperDouble('#ffe7ad', 0.5));
+  const halo = new Mesh(new CircleGeometry(44, 36), makePaperDouble('#ffc090', 0.42));
   halo.position.copy(sunDir).multiplyScalar(602);
   halo.lookAt(0, halo.position.y, 0);
   root.add(halo);

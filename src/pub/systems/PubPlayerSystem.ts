@@ -18,7 +18,7 @@ import { spawnGestureCue } from '../../fx/effects.js';
 import { pulseHand } from '../../input/haptics.js';
 import { clap, micToggle, saloonEntry } from '../../audio/sfx.js';
 import { onSnap, onSpawn, pubSendRaw } from '../net.js';
-import { connectPubVoice, isSpeaking, pokePubAudio, pubVoiceStatus, togglePubMic } from '../voice/livekit.js';
+import { connectPubVoice, isSpeaking, pokePubAudio, togglePubMic } from '../voice/livekit.js';
 import { PUB_VOICE_ROOM, pubVoiceTokenUrl } from '../config.js';
 import { Panel } from '../panel.js';
 import type { PoseTuple, PubPlayerNet } from '../protocol.js';
@@ -90,9 +90,6 @@ export class PubPlayerSystem extends createSystem({}) {
   private voiceStarting = false;
   /** Seconds to wait before re-asking for the mic after a failed attempt. */
   private voiceRetryCooldown = 0;
-  /** In-world voice status readout (debugging the SFU connection at a glance). */
-  private voicePanel?: Panel;
-  private voicePanelTimer = 0;
 
   init(): void {
     onSpawn((p) => this.spawn(p));
@@ -116,12 +113,6 @@ export class PubPlayerSystem extends createSystem({}) {
         for (const glove of this.localGloves) retintLocal(glove, pub.myAccent);
       }),
     );
-
-    // A small voice readout on the north wall above the bar (visible from the
-    // door you walk in through) so the SFU connection state is legible in-world.
-    this.voicePanel = new Panel(1.2, 0.34, 256);
-    this.voicePanel.mesh.position.set(0, 2.02, -3.42);
-    this.scene.add(this.voicePanel.mesh);
   }
 
   update(delta: number): void {
@@ -131,14 +122,6 @@ export class PubPlayerSystem extends createSystem({}) {
     // A press is a fresh user gesture — use it to unlock audio playback, which
     // the browser blocks until a gesture (our async connect misses that window).
     if (this.anyDown(InputComponent.Trigger) || this.anyDown(InputComponent.Squeeze)) pokePubAudio();
-    this.voicePanelTimer -= delta;
-    if (this.voicePanelTimer <= 0 && this.voicePanel) {
-      this.voicePanelTimer = 0.4;
-      this.voicePanel.setLines([
-        { text: 'PUB VOICE', size: 42, colour: '#ffb000', bold: true },
-        { text: pubVoiceStatus().toUpperCase(), size: 26, colour: '#e8ecf2' },
-      ]);
-    }
     this.tryLocalClap(delta);
 
     // Your fingers track your real squeeze (trigger = index, grip = rest).

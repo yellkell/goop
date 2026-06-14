@@ -23,6 +23,7 @@ import {
   Vector3,
 } from 'three';
 import { buildBoxer, type BoxerRig } from '../../avatar/boxer.js';
+import { applyAvatarSkin, type AvatarSkin } from '../../avatar/skins.js';
 import { PALETTE } from '../../config.js';
 import { PUB } from '../config.js';
 import { buildPintGlass } from '../props.js';
@@ -45,6 +46,13 @@ const WALK_SPEED = 1.1;
 const DELIVER_SPEED = 2.6;
 const AISLE_MIN = -2.35;
 const AISLE_MAX = 2.35;
+const BARTENDER_BEAR_SKIN: AvatarSkin = {
+  id: 'cobalt',
+  name: 'BEAR',
+  chassis: 0x2a2113,
+  trim: 0x120d08,
+  accent: PALETTE.amber,
+};
 
 const _target = new Vector3();
 const _punter = new Vector3();
@@ -87,6 +95,7 @@ export class BartenderSystem extends createSystem({}) {
     // torso pieces are parked at fixed heights on the wheeled base).
     this.rig = buildBoxer(1);
     retintRig(this.rig.all, PALETTE.amber);
+    applyAvatarSkin(this.rig.head, BARTENDER_BEAR_SKIN);
     this.rig.head.position.set(0, 1.52, 0);
     this.rig.chest.position.set(0, 1.22, 0);
     this.rig.pelvis.position.set(0, 0.92, 0);
