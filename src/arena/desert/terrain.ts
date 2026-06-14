@@ -15,14 +15,15 @@ const T = CONFIG.terrain;
 const rng = makeRng(T.seed);
 const noise = valueNoise2D(rng, 16);
 
-/** Ground height at world (x, z). Flat near the platforms, dunes beyond. */
+/** Ground height at world (x, z). Lowered near the platforms, dunes beyond. */
 export function desertHeight(x: number, z: number): number {
   const big = noise(x / 42 + 10, z / 42 + 10);
   const small = noise(x / 14 + 4, z / 14 + 4);
   const dune = (big - 0.45) * T.duneHeight + (small - 0.5) * T.duneHeight * 0.3;
   const d = Math.hypot(x, z);
   const falloff = Math.min(1, Math.max(0, (d - T.flatRadius) / T.flatRadius));
-  return dune * falloff;
+  const platformReveal = T.platformReveal * (1 - falloff);
+  return dune * falloff - platformReveal;
 }
 
 export function buildTerrain(parent: Group): void {

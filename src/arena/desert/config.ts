@@ -54,6 +54,7 @@ export const CONFIG = {
     segments: 56, // facet density
     duneHeight: 3.2,
     flatRadius: 14, // level clearing around the platforms
+    platformReveal: 0.14, // lower the clearing so the platform slabs read as raised
   },
 
   /** Scattered boulders + the big horizon mesas. */
