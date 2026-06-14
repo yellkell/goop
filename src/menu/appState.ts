@@ -14,6 +14,8 @@
 
 export type AppState = 'menu' | 'queueing' | 'playing' | 'training';
 export type AppMode = 'bot' | 'net';
+/** The arena backdrop: bare AR passthrough, or the papercraft desert. */
+export type AppEnvironment = 'ar' | 'desert';
 
 export interface LifetimeStats {
   wins: number;
@@ -45,6 +47,8 @@ export const app: {
   /** How many boxers are in the quick-match queue right now (−1 = unknown,
    *  e.g. before the matchmaker is reachable). Drives the 1V1 panel. */
   searching: number;
+  /** Which backdrop the arena renders — held across every mode. */
+  environment: AppEnvironment;
   stats: LifetimeStats;
 } = {
   state: 'menu',
@@ -54,6 +58,7 @@ export const app: {
   // Off unless the player has explicitly switched it on.
   shootBack: localStorage.getItem('ff-shootback') === '1',
   searching: -1,
+  environment: localStorage.getItem('ff-env') === 'desert' ? 'desert' : 'ar',
   stats: loadStats(),
 };
 
@@ -68,6 +73,14 @@ export function saveStats(): void {
 export function saveShootBack(): void {
   try {
     localStorage.setItem('ff-shootback', app.shootBack ? '1' : '0');
+  } catch {
+    /* ignore */
+  }
+}
+
+export function saveEnvironment(): void {
+  try {
+    localStorage.setItem('ff-env', app.environment);
   } catch {
     /* ignore */
   }
