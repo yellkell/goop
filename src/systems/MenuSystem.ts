@@ -50,7 +50,15 @@ import { match } from '../combat/matchState.js';
 import { UI } from '../ui/industrial.js';
 import { net } from '../net/client.js';
 import { startQueueWatch, stopQueueWatch } from '../net/queueWatch.js';
-import { hasCustomName, leaderboard, myStats, refreshLeaderboard, rival, setPlayerName } from '../net/leaderboard.js';
+import {
+  hasCustomName,
+  myStats,
+  refreshLeaderboard,
+  rival,
+  scrollLeaderboard,
+  setLeaderboardTab,
+  setPlayerName,
+} from '../net/leaderboard.js';
 import { pubUrl } from '../config.js';
 import * as sfx from '../audio/sfx.js';
 
@@ -182,10 +190,16 @@ export class MenuSystem extends createSystem({}) {
         saveEnvironment();
         break;
       case 'lb-duel':
-        leaderboard.tab = 'duel';
+        setLeaderboardTab('duel');
         break;
       case 'lb-training':
-        leaderboard.tab = 'training';
+        setLeaderboardTab('training');
+        break;
+      case 'lb-up':
+        scrollLeaderboard(-1);
+        break;
+      case 'lb-down':
+        scrollLeaderboard(1);
         break;
       case 'rename':
         this.kbPending = null;

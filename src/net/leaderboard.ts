@@ -24,11 +24,17 @@ export interface LbRow {
   me: boolean;
 }
 
+export type LeaderboardTab = 'duel' | 'training';
+
+const LEADERBOARD_FETCH_LIMIT = 50;
+const LEADERBOARD_VISIBLE_ROWS = 6;
+
 /** Live leaderboard state the lobby panel reads each redraw. */
 export const leaderboard = {
-  tab: 'duel' as 'duel' | 'training',
+  tab: 'duel' as LeaderboardTab,
   duel: [] as LbRow[],
   training: [] as LbRow[],
+  scroll: { duel: 0, training: 0 } as Record<LeaderboardTab, number>,
   status: FIREBASE_ENABLED ? 'loading…' : 'leaderboard offline',
 };
 
@@ -43,6 +49,25 @@ const SCORE_WIN = 20;
 const SCORE_BOT_WIN = 2;
 
 const profile = { id: '', name: '', score: 0, elo: 1000, training: 0 };
+
+export function leaderboardRows(tab: LeaderboardTab = leaderboard.tab): LbRow[] {
+  return tab === 'duel' ? leaderboard.duel : leaderboard.training;
+}
+
+export function clampLeaderboardScroll(tab: LeaderboardTab = leaderboard.tab): void {
+  const max = Math.max(0, leaderboardRows(tab).length - LEADERBOARD_VISIBLE_ROWS);
+  leaderboard.scroll[tab] = Math.max(0, Math.min(max, leaderboard.scroll[tab]));
+}
+
+export function setLeaderboardTab(tab: LeaderboardTab): void {
+  leaderboard.tab = tab;
+  clampLeaderboardScroll(tab);
+}
+
+export function scrollLeaderboard(delta: number): void {
+  leaderboard.scroll[leaderboard.tab] += delta;
+  clampLeaderboardScroll(leaderboard.tab);
+}
 
 export function myName(): string {
   return profile.name;
@@ -163,7 +188,7 @@ export function initLeaderboard(): void {
 
 let lastFetch = -Infinity;
 
-/** Pull the top 10 of both boards (throttled — `force` bypasses). */
+/** Pull the top rows of both boards (throttled — `force` bypasses). */
 export async function refreshLeaderboard(force = false): Promise<void> {
   if (!force && performance.now() - lastFetch < 20_000) return;
   lastFetch = performance.now();
@@ -173,7 +198,7 @@ export async function refreshLeaderboard(force = false): Promise<void> {
   try {
     const players = fs.collection(db, 'players');
     const pull = async (field: 'score' | 'training'): Promise<LbRow[]> => {
-      const snap = await fs.getDocs(fs.query(players, fs.orderBy(field, 'desc'), fs.limit(10)));
+      const snap = await fs.getDocs(fs.query(players, fs.orderBy(field, 'desc'), fs.limit(LEADERBOARD_FETCH_LIMIT)));
       return snap.docs
         .map((d) => ({
           name: (d.data().name as string) ?? '???',
@@ -183,6 +208,8 @@ export async function refreshLeaderboard(force = false): Promise<void> {
         .filter((r) => r.value > 0);
     };
     [leaderboard.duel, leaderboard.training] = await Promise.all([pull('score'), pull('training')]);
+    clampLeaderboardScroll('duel');
+    clampLeaderboardScroll('training');
     leaderboard.status = '';
   } catch {
     leaderboard.status = 'leaderboard unreachable';

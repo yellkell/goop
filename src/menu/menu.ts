@@ -22,7 +22,7 @@ import { app } from './appState.js';
 import { customization } from './customization.js';
 import { AVATAR_SKINS, PLATFORM_SKINS } from '../avatar/skins.js';
 import { GAME_TITLE } from '../config.js';
-import { leaderboard, myStats } from '../net/leaderboard.js';
+import { leaderboard, leaderboardRows, myStats } from '../net/leaderboard.js';
 import { UI, buttonPlate, hazardStrip, plate, stencilFont } from '../ui/industrial.js';
 
 export type PanelId = 'train' | 'duel' | 'info' | 'board' | 'custom';
@@ -36,6 +36,8 @@ export type MenuAction =
   | 'toggle-environment'
   | 'lb-duel'
   | 'lb-training'
+  | 'lb-up'
+  | 'lb-down'
   | 'rename'
   | 'open-pub'
   | 'open-custom'
@@ -45,6 +47,7 @@ export type MenuAction =
 
 const PW = 512;
 const PH = 400;
+const BOARD_VISIBLE_ROWS = 6;
 
 export interface MenuPanel {
   id: PanelId;
@@ -342,20 +345,30 @@ function drawBoard(ctx: CanvasRenderingContext2D, hover: boolean): void {
   }
 
   // Ranked rows; your own entry burns ember.
-  const rows = leaderboard.tab === 'duel' ? leaderboard.duel : leaderboard.training;
+  const rows = leaderboardRows();
+  const offset = leaderboard.scroll[leaderboard.tab];
+  const canUp = offset > 0;
+  const canDown = offset + BOARD_VISIBLE_ROWS < rows.length;
   ctx.font = '600 22px system-ui, sans-serif';
-  rows.slice(0, 6).forEach((r, i) => {
+  rows.slice(offset, offset + BOARD_VISIBLE_ROWS).forEach((r, i) => {
     const y = 154 + i * 28;
     ctx.fillStyle = r.me ? UI.emberBright : UI.textDim;
     ctx.textAlign = 'left';
-    ctx.fillText(`${i + 1}.  ${r.name}`, 56, y);
+    ctx.fillText(`${offset + i + 1}.  ${r.name}`, 56, y);
     ctx.textAlign = 'right';
-    ctx.fillText(String(r.value), PW - 56, y);
+    ctx.fillText(String(r.value), PW - 94, y);
   });
   if (!rows.length) {
     ctx.textAlign = 'center';
     ctx.fillStyle = UI.textDim;
     ctx.fillText(leaderboard.status || 'no entries yet', PW / 2, 230);
+  } else if (rows.length > BOARD_VISIBLE_ROWS) {
+    buttonPlate(ctx, PW - 62, 144, 38, 38, 'UP', canUp ? UI.amber : UI.steelDim, hover && canUp);
+    buttonPlate(ctx, PW - 62, 260, 38, 38, 'DN', canDown ? UI.amber : UI.steelDim, hover && canDown);
+    ctx.textAlign = 'center';
+    ctx.font = '700 13px system-ui, sans-serif';
+    ctx.fillStyle = UI.textDim;
+    ctx.fillText(`${offset + 1}-${Math.min(offset + BOARD_VISIBLE_ROWS, rows.length)}/${rows.length}`, PW - 43, 232);
   }
 
   const mine = myStats();
@@ -370,6 +383,12 @@ function hitBoard(u: number, v: number): MenuAction | null {
   const x = u * PW;
   const y = (1 - v) * PH;
   if (y >= 82 && y <= 138) return u < 0.5 ? 'lb-duel' : 'lb-training';
+  const rows = leaderboardRows();
+  const offset = leaderboard.scroll[leaderboard.tab];
+  if (rows.length > BOARD_VISIBLE_ROWS && x >= PW - 70 && x <= PW - 16) {
+    if (y >= 136 && y <= 190 && offset > 0) return 'lb-up';
+    if (y >= 252 && y <= 306 && offset + BOARD_VISIBLE_ROWS < rows.length) return 'lb-down';
+  }
   if (y >= 336 && y <= 394 && x >= 148 && x <= 364) return 'rename';
   return null;
 }
