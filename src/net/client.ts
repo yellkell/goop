@@ -126,7 +126,11 @@ class NetClient {
         detachRemoteVoice();
         this.transport = null;
         app.netStatus = reason;
-        if (app.state !== 'menu') app.state = 'menu';
+        // A background search that dies mid-bot-bout must NOT evict the player
+        // from it — only a foreground queue or a live net bout drops to the
+        // lobby. (vs-bot keeps a search running in the background.)
+        const inBotBout = app.state === 'playing' && app.mode === 'bot';
+        if (app.state !== 'menu' && !inBotBout) app.state = 'menu';
       },
     };
   }

@@ -3,10 +3,10 @@
  * matchmaking (collection `players`, one doc per anonymous player id).
  *
  * Two boards:
- *  - 1V1: ranks SCORE — winners gain +10..30 per match depending on the
- *    quality of the beaten rival; losers lose NOTHING. Quality comes from a
- *    HIDDEN per-player ELO (K=32) that moves on every result but is never
- *    shown in game.
+ *  - 1V1: ranks SCORE — a real win banks a flat +20, a practice win over the
+ *    bot a token +2; losers lose NOTHING. A HIDDEN per-player ELO (K=32) still
+ *    moves on every REAL result (rival-quality signal for matchmaking) but no
+ *    longer weights the score, and the bot has no rating to move.
  *  - AIM TRAINING: personal-best run scores.
  *
  * Identity is a localStorage uuid with a derived IRON-XXXX callsign — no
@@ -36,6 +36,11 @@ export const leaderboard = {
 export const rival = { name: 'RIVAL', elo: 1000, avatarSkin: '', platformSkin: '' };
 
 const ELO_K = 32;
+
+/** Leaderboard score banked per win. A real 1v1 pays a full +20; a practice
+ *  win over the bot is a token +2 — enough to chart, not enough to farm. */
+const SCORE_WIN = 20;
+const SCORE_BOT_WIN = 2;
 
 const profile = { id: '', name: '', score: 0, elo: 1000, training: 0 };
 
@@ -201,14 +206,26 @@ function writeMine(fields: Record<string, unknown>): void {
 }
 
 /**
- * A finished 1v1: winners bank +10..30 score weighted by how strong the
- * rival was; losing costs nothing visible. The hidden ELO moves both ways.
+ * A finished REAL 1v1: a win banks a flat +20 on the board; losing costs
+ * nothing visible. The hidden ELO still moves both ways (rival-quality signal
+ * for matchmaking) but no longer weights the score.
  */
 export function reportResult(win: boolean, oppElo: number): void {
+  if (win) profile.score += SCORE_WIN;
   const expected = 1 / (1 + Math.pow(10, (oppElo - profile.elo) / 400));
-  if (win) profile.score += Math.round(10 + 20 * (1 - expected));
   profile.elo = Math.max(100, Math.round(profile.elo + ELO_K * ((win ? 1 : 0) - expected)));
   writeMine({ score: profile.score, elo: profile.elo });
+  void refreshLeaderboard(true);
+}
+
+/**
+ * A finished BOT bout: a win banks a token +2 (no ELO movement — the bot has
+ * no rating). Losing costs nothing.
+ */
+export function reportBotResult(win: boolean): void {
+  if (!win) return;
+  profile.score += SCORE_BOT_WIN;
+  writeMine({ score: profile.score });
   void refreshLeaderboard(true);
 }
 

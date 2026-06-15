@@ -14,12 +14,12 @@ import { createSystem, type Entity } from '@iwsdk/core';
 import { Combatant } from '../components/Combatant.js';
 import { Health } from '../components/Health.js';
 import { match } from '../combat/matchState.js';
-import { app, saveStats, training } from '../menu/appState.js';
+import { app, saveStats, training, type AppMode } from '../menu/appState.js';
 import * as sfx from '../audio/sfx.js';
 import { MATCH } from '../config.js';
 import { createScoreboard, type Scoreboard } from '../ui/scoreboard.js';
 import { net } from '../net/client.js';
-import { reportResult, rival } from '../net/leaderboard.js';
+import { reportBotResult, reportResult, rival } from '../net/leaderboard.js';
 
 interface Boxers {
   me: Entity;
@@ -34,6 +34,9 @@ export class GameStateSystem extends createSystem({
 }) {
   private scoreboard?: Scoreboard;
   private wasPlaying = false;
+  /** Which mode the live bout is running in — a change while playing means a
+   *  real opponent just replaced the bot, so the match restarts clean. */
+  private lastMode: AppMode = 'bot';
   private stateEchoTimer = 0;
 
   init(): void {
@@ -65,12 +68,16 @@ export class GameStateSystem extends createSystem({
     const c = this.findBoxers();
     if (!c) return;
 
-    // Entering a match: reset scores/round/health and kick off round 1.
-    if (!this.wasPlaying) {
+    // Entering a match — or a real opponent just replaced the bot mid-bout
+    // (the background search paired up). Either way: wipe the slate and
+    // (re)start clean so the live bout never inherits the practice scores
+    // or a half-drained health pool.
+    if (!this.wasPlaying || app.mode !== this.lastMode) {
       this.startMatch(c);
       this.scoreboard?.setVisible(true);
       this.wasPlaying = true;
     }
+    this.lastMode = app.mode;
 
     const pHp = c.me.getValue(Health, 'current') ?? 0;
     const pMax = c.me.getValue(Health, 'max') ?? 1;
@@ -116,7 +123,9 @@ export class GameStateSystem extends createSystem({
             this.beginRound(c);
           }
         } else {
-          // matchOver (bot bouts) → back to the lobby.
+          // matchOver (bot bouts) → back to the lobby; drop the background
+          // search so we're not still queued from the menu.
+          net.cancel();
           app.state = 'menu';
           this.wasPlaying = false;
         }
@@ -151,8 +160,9 @@ export class GameStateSystem extends createSystem({
     if (win) app.stats.wins += 1;
     else app.stats.losses += 1;
     saveStats();
-    // Only real 1v1s feed the leaderboard — no farming the bot.
+    // Both feed the board now: a real 1v1 win banks +20, a bot win a token +2.
     if (app.mode === 'net') reportResult(win, rival.elo);
+    else reportBotResult(win);
     sfx.matchEnd(win);
     if (app.mode === 'net') this.echoState();
   }
@@ -164,6 +174,12 @@ export class GameStateSystem extends createSystem({
     match.rematchMine = false;
     match.rematchTheirs = false;
     training.active = false;
+    // Full pools up front — covers the GUEST, who skips beginRound and would
+    // otherwise carry a half-drained bot-bout pool until the host's first
+    // echo lands.
+    for (const e of [c.me, c.them]) {
+      e.setValue(Health, 'current', e.getValue(Health, 'max') ?? 100);
+    }
     if (app.mode === 'bot' || app.side === 0) this.beginRound(c);
   }
 

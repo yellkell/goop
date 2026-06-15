@@ -142,11 +142,14 @@ export class MenuSystem extends createSystem({}) {
   private run(action: MenuAction): void {
     sfx.ensureAudio();
     sfx.uiClick();
-    // The first leaderboard-relevant act (a training run or a 1v1 queue)
-    // claims a callsign: the keyboard pops once, prefilled with the auto
-    // name, and the pending action resumes after OK. Saved forever after,
-    // shared by both boards.
-    if ((action === 'start-training' || action === 'quick-match') && !hasCustomName()) {
+    // The first leaderboard-relevant act (a training run, a 1v1 queue, or a
+    // bot bout — bot wins score now too) claims a callsign: the keyboard pops
+    // once, prefilled with the auto name, and the pending action resumes after
+    // OK. Saved forever after, shared by both boards.
+    if (
+      (action === 'start-training' || action === 'quick-match' || action === 'vs-bot') &&
+      !hasCustomName()
+    ) {
       this.kbPending = action;
       this.keyboard.open(myStats().name);
       return;
@@ -170,6 +173,9 @@ export class MenuSystem extends createSystem({}) {
       case 'vs-bot':
         app.mode = 'bot';
         app.state = 'playing';
+        // Keep hunting for a real opponent in the background. If one turns up
+        // mid-bout the bot is dropped and we swap straight into the live bout.
+        net.queue();
         break;
       case 'toggle-environment':
         app.environment = app.environment === 'desert' ? 'ar' : 'desert';
@@ -372,7 +378,8 @@ export class MenuSystem extends createSystem({}) {
       case 'forfeit':
       case 'return':
         this.panel.mesh.visible = false;
-        if (app.state === 'playing' && app.mode === 'net') net.cancel();
+        // Ends a live net bout OR stops the bot-bout background search.
+        if (app.state === 'playing') net.cancel();
         app.state = 'menu'; // training tears down unsaved; bouts end here
         this.applyState();
         break;
