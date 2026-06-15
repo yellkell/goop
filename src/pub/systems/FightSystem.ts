@@ -209,7 +209,7 @@ export class FightSystem extends createSystem({}) {
           case 'FIGHT_DEFLECT':
             if (this.amFighter() && this.myBalls) {
               const ball = this.myBalls[ev.ball];
-              if (ball.state === FLYING) {
+              if (ball.state === FLYING || ball.state === RETURNING) {
                 ball.state = DEAD;
                 ball.vel.set(0, 0, 0);
               }
