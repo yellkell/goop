@@ -32,8 +32,10 @@ import { FXSystem } from './systems/FXSystem.js';
 import { DesertSystem } from './systems/DesertSystem.js';
 
 const container = document.getElementById('scene-container') as HTMLDivElement;
-const enterVrButton = document.getElementById('enter-vr') as HTMLButtonElement | null;
+const enterVrSlot = document.getElementById('enter-vr-slot') as HTMLDivElement | null;
 const xrOfferPattern = /\b(enter|start|launch)\b.*\b(ar|vr|xr)\b|\b(ar|vr|xr)\b.*\b(enter|start|launch)\b/i;
+const originalXrOfferStyles = new Map<HTMLElement | SVGElement, string | null>();
+const wiredXrOffers = new WeakSet<HTMLElement>();
 
 function collectXrOfferCandidates(): HTMLElement[] {
   const roots: Array<Document | ShadowRoot> = [document];
@@ -53,43 +55,129 @@ function isNativeXrOffer(element: HTMLElement): boolean {
   return !element.closest('#landing') && xrOfferPattern.test(getElementLabel(element));
 }
 
-function setNativeXrOfferVisibility(visible: boolean): void {
-  collectXrOfferCandidates().forEach((element) => {
-    if (!isNativeXrOffer(element)) return;
-
-    const root = element.getRootNode();
-    if (root instanceof ShadowRoot && root.host instanceof HTMLElement) {
-      root.host.style.visibility = visible ? '' : 'hidden';
-      return;
-    }
-
-    element.style.visibility = visible ? '' : 'hidden';
-  });
-}
-
-function concealNativeXrOffer(): void {
-  if (!document.body.classList.contains('app-entered')) {
-    setNativeXrOfferVisibility(false);
-  }
-}
-
 function findNativeXrOffer(): HTMLElement | null {
   return collectXrOfferCandidates().find(isNativeXrOffer) ?? null;
 }
 
-const nativeXrOfferObserver = new MutationObserver(concealNativeXrOffer);
-nativeXrOfferObserver.observe(document.body, { childList: true, subtree: true });
-concealNativeXrOffer();
-window.setTimeout(concealNativeXrOffer, 500);
+function rememberStyle(element: HTMLElement | SVGElement): void {
+  if (!originalXrOfferStyles.has(element)) {
+    originalXrOfferStyles.set(element, element.getAttribute('style'));
+  }
+}
 
-enterVrButton?.addEventListener('click', () => {
-  const nativeXrOffer = findNativeXrOffer();
+function applyStyles(element: HTMLElement | SVGElement, styles: Partial<CSSStyleDeclaration>): void {
+  rememberStyle(element);
+  Object.assign(element.style, styles);
+}
 
+function restoreNativeXrOfferStyles(): void {
+  originalXrOfferStyles.forEach((style, element) => {
+    if (style === null) {
+      element.removeAttribute('style');
+    } else {
+      element.setAttribute('style', style);
+    }
+  });
+  originalXrOfferStyles.clear();
+}
+
+function handleNativeXrOfferClick(): void {
   document.body.classList.add('app-entered');
-  setNativeXrOfferVisibility(true);
-  nativeXrOfferObserver.disconnect();
-  nativeXrOffer?.click();
-});
+  window.setTimeout(() => {
+    restoreNativeXrOfferStyles();
+    nativeXrOfferObserver.disconnect();
+    window.removeEventListener('resize', syncNativeXrOffer);
+  }, 250);
+}
+
+function wireNativeXrOffer(offer: HTMLElement): void {
+  if (wiredXrOffers.has(offer)) return;
+
+  wiredXrOffers.add(offer);
+  offer.addEventListener('click', handleNativeXrOfferClick, { capture: true });
+}
+
+function syncNativeXrOffer(): void {
+  if (!enterVrSlot || document.body.classList.contains('app-entered')) return;
+
+  const offer = findNativeXrOffer();
+  if (!offer) return;
+
+  const root = offer.getRootNode();
+  const host = root instanceof ShadowRoot && root.host instanceof HTMLElement ? root.host : null;
+  const frame = offer.closest('div');
+  const rect = enterVrSlot.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) return;
+
+  if (host) {
+    applyStyles(host, {
+      visibility: 'visible',
+    });
+  }
+
+  if (frame) {
+    applyStyles(frame, {
+      position: 'fixed',
+      left: `${rect.left}px`,
+      top: `${rect.top}px`,
+      width: `${rect.width}px`,
+      height: `${rect.height}px`,
+      zIndex: '1001',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: '0',
+      padding: '0',
+      border: '0',
+      borderRadius: '8px',
+      background: 'transparent',
+      boxSizing: 'border-box',
+      pointerEvents: 'all',
+      transform: 'none',
+      transition: 'none',
+      visibility: 'visible',
+    });
+
+    Array.from(frame.children).forEach((child) => {
+      if (child instanceof SVGElement) {
+        applyStyles(child, { display: 'none' });
+      }
+    });
+  }
+
+  offer.textContent = 'ENTER VR';
+  offer.setAttribute('aria-label', 'Enter VR');
+  applyStyles(offer, {
+    width: '100%',
+    height: '100%',
+    minWidth: '0',
+    minHeight: '0',
+    padding: '0 34px',
+    border: '1px solid rgba(255, 255, 255, 0.2)',
+    borderRadius: '8px',
+    boxSizing: 'border-box',
+    color: '#120906',
+    background: 'linear-gradient(180deg, #ffb35c 0%, #f25b24 100%)',
+    boxShadow: '0 18px 48px rgba(242, 91, 36, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.5)',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    font: '900 1.08rem/1 system-ui, -apple-system, sans-serif',
+    letterSpacing: '0.12em',
+    pointerEvents: 'all',
+    textTransform: 'uppercase',
+  });
+
+  wireNativeXrOffer(offer);
+}
+
+const nativeXrOfferObserver = new MutationObserver(syncNativeXrOffer);
+nativeXrOfferObserver.observe(document.body, { childList: true, subtree: true });
+window.addEventListener('resize', syncNativeXrOffer);
+requestAnimationFrame(syncNativeXrOffer);
+window.setTimeout(syncNativeXrOffer, 500);
+window.setTimeout(syncNativeXrOffer, 1500);
 
 World.create(container, {
   // Offer an immersive-AR (passthrough) session as soon as the page is
