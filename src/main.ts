@@ -32,6 +32,64 @@ import { FXSystem } from './systems/FXSystem.js';
 import { DesertSystem } from './systems/DesertSystem.js';
 
 const container = document.getElementById('scene-container') as HTMLDivElement;
+const enterVrButton = document.getElementById('enter-vr') as HTMLButtonElement | null;
+const xrOfferPattern = /\b(enter|start|launch)\b.*\b(ar|vr|xr)\b|\b(ar|vr|xr)\b.*\b(enter|start|launch)\b/i;
+
+function collectXrOfferCandidates(): HTMLElement[] {
+  const roots: Array<Document | ShadowRoot> = [document];
+
+  document.querySelectorAll<HTMLElement>('*').forEach((element) => {
+    if (element.shadowRoot) roots.push(element.shadowRoot);
+  });
+
+  return roots.flatMap((root) => Array.from(root.querySelectorAll<HTMLElement>('button, a, [role="button"]')));
+}
+
+function getElementLabel(element: HTMLElement): string {
+  return `${element.textContent ?? ''} ${element.getAttribute('aria-label') ?? ''}`;
+}
+
+function isNativeXrOffer(element: HTMLElement): boolean {
+  return !element.closest('#landing') && xrOfferPattern.test(getElementLabel(element));
+}
+
+function setNativeXrOfferVisibility(visible: boolean): void {
+  collectXrOfferCandidates().forEach((element) => {
+    if (!isNativeXrOffer(element)) return;
+
+    const root = element.getRootNode();
+    if (root instanceof ShadowRoot && root.host instanceof HTMLElement) {
+      root.host.style.visibility = visible ? '' : 'hidden';
+      return;
+    }
+
+    element.style.visibility = visible ? '' : 'hidden';
+  });
+}
+
+function concealNativeXrOffer(): void {
+  if (!document.body.classList.contains('app-entered')) {
+    setNativeXrOfferVisibility(false);
+  }
+}
+
+function findNativeXrOffer(): HTMLElement | null {
+  return collectXrOfferCandidates().find(isNativeXrOffer) ?? null;
+}
+
+const nativeXrOfferObserver = new MutationObserver(concealNativeXrOffer);
+nativeXrOfferObserver.observe(document.body, { childList: true, subtree: true });
+concealNativeXrOffer();
+window.setTimeout(concealNativeXrOffer, 500);
+
+enterVrButton?.addEventListener('click', () => {
+  const nativeXrOffer = findNativeXrOffer();
+
+  document.body.classList.add('app-entered');
+  setNativeXrOfferVisibility(true);
+  nativeXrOfferObserver.disconnect();
+  nativeXrOffer?.click();
+});
 
 World.create(container, {
   // Offer an immersive-AR (passthrough) session as soon as the page is
