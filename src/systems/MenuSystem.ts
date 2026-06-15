@@ -187,6 +187,10 @@ export class MenuSystem extends createSystem({}) {
       case 'lb-training':
         leaderboard.tab = 'training';
         break;
+      case 'rename':
+        this.kbPending = null;
+        this.keyboard.open(myStats().name);
+        return;
       case 'open-pub': {
         // Navigating WHILE an immersive session is live hangs the browser —
         // end the XR session first, then hop pages.
@@ -284,6 +288,7 @@ export class MenuSystem extends createSystem({}) {
           const pending = this.kbPending;
           this.kbPending = null;
           if (pending) this.run(pending);
+          else this.menu.redrawAll(this.hovered);
           return;
         }
       }

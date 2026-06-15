@@ -36,6 +36,7 @@ export type MenuAction =
   | 'toggle-environment'
   | 'lb-duel'
   | 'lb-training'
+  | 'rename'
   | 'open-pub'
   | 'open-custom'
   | 'custom-close'
@@ -342,9 +343,9 @@ function drawBoard(ctx: CanvasRenderingContext2D, hover: boolean): void {
 
   // Ranked rows; your own entry burns ember.
   const rows = leaderboard.tab === 'duel' ? leaderboard.duel : leaderboard.training;
-  ctx.font = '600 24px system-ui, sans-serif';
+  ctx.font = '600 22px system-ui, sans-serif';
   rows.slice(0, 6).forEach((r, i) => {
-    const y = 166 + i * 34;
+    const y = 154 + i * 28;
     ctx.fillStyle = r.me ? UI.emberBright : UI.textDim;
     ctx.textAlign = 'left';
     ctx.fillText(`${i + 1}.  ${r.name}`, 56, y);
@@ -359,14 +360,17 @@ function drawBoard(ctx: CanvasRenderingContext2D, hover: boolean): void {
 
   const mine = myStats();
   ctx.textAlign = 'center';
-  ctx.font = '700 24px system-ui, sans-serif';
+  ctx.font = '700 20px system-ui, sans-serif';
   ctx.fillStyle = UI.amberSoft;
-  ctx.fillText(`${mine.name}  ·  score ${mine.score}  ·  aim best ${mine.training}`, PW / 2, 376);
+  ctx.fillText(`${mine.name}  ·  score ${mine.score}  ·  aim best ${mine.training}`, PW / 2, 326);
+  buttonPlate(ctx, 156, 344, 200, 44, 'RENAME', UI.amber, hover);
 }
 
 function hitBoard(u: number, v: number): MenuAction | null {
+  const x = u * PW;
   const y = (1 - v) * PH;
   if (y >= 82 && y <= 138) return u < 0.5 ? 'lb-duel' : 'lb-training';
+  if (y >= 336 && y <= 394 && x >= 148 && x <= 364) return 'rename';
   return null;
 }
 
