@@ -112,6 +112,7 @@ interface LocalBall {
   elapsed: number;
   heat: number;
   trailAcc: number;
+  recallLock: number;
 }
 
 interface RemoteBall {
@@ -198,8 +199,7 @@ export class FightSystem extends createSystem({}) {
               if (ev.ret) {
                 // Return-pass: it keeps homing, never spent on the connect.
               } else if (ball.state === FLYING || ball.state === RETURNING) {
-                ball.state = DEAD;
-                ball.vel.set(0, 0, 0);
+                this.spendLocalBall(ball);
               }
               spawnFireImpact(this.world, ball.pos, 0);
               spawnDamagePopup(this.world, ball.pos, dmg);
@@ -210,8 +210,7 @@ export class FightSystem extends createSystem({}) {
             if (this.amFighter() && this.myBalls) {
               const ball = this.myBalls[ev.ball];
               if (ball.state === FLYING || ball.state === RETURNING) {
-                ball.state = DEAD;
-                ball.vel.set(0, 0, 0);
+                this.spendLocalBall(ball);
               }
               sfx.deflect();
             }
@@ -221,8 +220,7 @@ export class FightSystem extends createSystem({}) {
             if (this.amFighter() && this.myBalls) {
               const ball = this.myBalls[ev.ball];
               if (ball.state === FLYING || ball.state === RETURNING) {
-                ball.state = DEAD;
-                ball.vel.set(0, 0, 0);
+                this.spendLocalBall(ball);
                 emberBurst(ball.pos, 14, false);
                 emberBurst(ball.pos, 14, true);
                 spawnFireImpact(this.world, ball.pos, 0, 1.2);
@@ -600,6 +598,7 @@ export class FightSystem extends createSystem({}) {
         elapsed: 0,
         heat: 0.8,
         trailAcc: 0,
+        recallLock: 0,
       };
     };
     this.myBalls = [mk(0), mk(1)];
@@ -623,7 +622,14 @@ export class FightSystem extends createSystem({}) {
       b.state = HOVER;
       b.spin = 0;
       b.elapsed = 0;
+      b.recallLock = 0;
     }
+  }
+
+  private spendLocalBall(ball: LocalBall): void {
+    ball.state = DEAD;
+    ball.vel.set(0, 0, 0);
+    ball.recallLock = FIREBALL.recallLockout;
   }
 
   private handPose(hand: Hand): void {
@@ -639,6 +645,7 @@ export class FightSystem extends createSystem({}) {
 
     for (const hand of [0, 1] as const) {
       const ball = this.myBalls[hand];
+      ball.recallLock = Math.max(0, ball.recallLock - delta);
       this.handPose(hand);
       this.trackers[hand].push(_grip, this.time);
 
@@ -654,15 +661,16 @@ export class FightSystem extends createSystem({}) {
         (gp?.getButtonUp(InputComponent.Squeeze) ?? false);
 
       if (down) {
-        if (ball.state === HOVER || ball.pos.distanceTo(_grip) <= FIREBALL.nearHandRadius) {
+        if (ball.state === HOVER || (ball.state !== DEAD && ball.pos.distanceTo(_grip) <= FIREBALL.nearHandRadius)) {
           if (ball.state !== ORBIT) {
             ball.state = ORBIT;
             ball.spin = 0;
             sfx.ignite();
             pulseHand(this.world.session, HANDS[hand], 0.4, 60);
           }
-        } else if (ball.state === FLYING || ball.state === DEAD) {
+        } else if (ball.state === FLYING || (ball.state === DEAD && ball.recallLock <= 0)) {
           ball.state = RETURNING;
+          ball.recallLock = 0;
           sfx.recall();
         }
       }
@@ -712,14 +720,13 @@ export class FightSystem extends createSystem({}) {
           if (this.clampToCage(ball.pos)) {
             emberBurst(ball.pos, 14, cool);
             sfx.wallThud();
-            ball.state = DEAD;
-            ball.vel.set(0, 0, 0);
+            this.spendLocalBall(ball);
             break;
           }
           ball.elapsed += delta;
           // The duel floor is the PIT floor, a level below the stands.
           if (ball.elapsed >= FIREBALL.lifetime || ball.pos.y <= FIREBALL.radius - FIGHT.pitDepth) {
-            ball.state = DEAD;
+            this.spendLocalBall(ball);
             ball.pos.y = Math.max(ball.pos.y, FIREBALL.radius - FIGHT.pitDepth);
           }
           break;
@@ -756,6 +763,7 @@ export class FightSystem extends createSystem({}) {
     ball.vel.copy(_dir).multiplyScalar(speed);
     ball.state = FLYING;
     ball.elapsed = 0;
+    ball.recallLock = 0;
     sfx.throwWhoosh();
     pulseHand(this.world.session, HANDS[hand], 0.8, 110);
   }
@@ -872,8 +880,7 @@ export class FightSystem extends createSystem({}) {
       const reach = FIREBALL.radius * 2 + FIREBALL.deflectBonus;
       if (mine.pos.distanceTo(ePos) > reach) continue;
       // Both balls die where they met — iron on iron, sparks in both colours.
-      mine.state = DEAD;
-      mine.vel.set(0, 0, 0);
+      this.spendLocalBall(mine);
       enemy.hitCooldown = 0.6;
       enemy.state = DEAD;
       emberBurst(ePos, 14, true);

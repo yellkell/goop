@@ -33,7 +33,7 @@ import type { PeerMessage, PoseTuple } from '../net/protocol.js';
 import { spawnDamagePopup, spawnFireImpact, spawnGestureCue, spawnPopup } from '../fx/effects.js';
 import * as sfx from '../audio/sfx.js';
 import { InputComponent } from '@iwsdk/core';
-import { NET } from '../config.js';
+import { FIREBALL, NET } from '../config.js';
 
 const HANDS = ['left', 'right'] as const;
 
@@ -189,7 +189,7 @@ export class NetworkSystem extends createSystem({
         if (ball?.object3D) {
           spawnFireImpact(this.world, ball.object3D.position, 0);
           spawnDamagePopup(this.world, ball.object3D.position, msg.dmg);
-          if (!msg.ret) ball.setValue(Fireball, 'state', BallState.Dead);
+          if (!msg.ret) this.spendMyBall(ball);
         }
         sfx.hitDealt();
         app.stats.hitsLanded += 1;
@@ -199,7 +199,7 @@ export class NetworkSystem extends createSystem({
         const ball = this.findMyBall(msg.hand);
         if (ball?.object3D) {
           spawnFireImpact(this.world, ball.object3D.position, 1);
-          ball.setValue(Fireball, 'state', BallState.Dead);
+          this.spendMyBall(ball);
         }
         sfx.deflect();
         break;
@@ -212,7 +212,7 @@ export class NetworkSystem extends createSystem({
         if (ball?.object3D && (ball.getValue(Fireball, 'state') ?? 0) === BallState.Flying) {
           spawnFireImpact(this.world, ball.object3D.position, 0, 1.2);
           sfx.ballClash();
-          ball.setValue(Fireball, 'state', BallState.Dead);
+          this.spendMyBall(ball);
         }
         ballCommands.push({ type: 'spend', hand: msg.mine });
         break;
@@ -338,6 +338,13 @@ export class NetworkSystem extends createSystem({
       if ((e.getValue(Combatant, 'team') ?? 0) !== 1) continue;
       e.setValue(Health, 'current', Math.max(0, (e.getValue(Health, 'current') ?? 0) - dmg));
     }
+  }
+
+  private spendMyBall(ball: Entity): void {
+    ball.setValue(Fireball, 'state', BallState.Dead);
+    ball.setValue(Fireball, 'recallLock', FIREBALL.recallLockout);
+    const v = ball.getVectorView(Fireball, 'velocity');
+    v[0] = 0; v[1] = 0; v[2] = 0;
   }
 
   /** Track my hp for pose packets, and pin theirs from their reports. */

@@ -269,6 +269,7 @@ export class CollisionSystem extends createSystem({
       return;
     }
     ball.setValue(Fireball, 'state', BallState.Dead);
+    ball.setValue(Fireball, 'recallLock', FIREBALL.recallLockout);
     const v = ball.getVectorView(Fireball, 'velocity');
     v[0] = 0; v[1] = 0; v[2] = 0;
   }

@@ -135,6 +135,8 @@ export class FireballSystem extends createSystem({
         continue;
       }
 
+      const recallLock = ball.getValue(Fireball, 'recallLock') ?? 0;
+      if (recallLock > 0) ball.setValue(Fireball, 'recallLock', Math.max(0, recallLock - delta));
       if (owner === 0) this.updateLocalControl(ball, hand, delta);
       this.integrate(ball, hand, owner, transient, delta);
       this.updateVisual(ball, delta);
@@ -175,15 +177,23 @@ export class FireballSystem extends createSystem({
     const roundLive = app.state === 'training' || match.phase === 'playing';
 
     if (down) {
-      if (roundLive && (state === BallState.Hover || obj.position.distanceTo(_grip) <= FIREBALL.nearHandRadius)) {
+      if (
+        roundLive &&
+        (state === BallState.Hover ||
+          (state !== BallState.Dead && obj.position.distanceTo(_grip) <= FIREBALL.nearHandRadius))
+      ) {
         if (state !== BallState.Orbit) {
           ball.setValue(Fireball, 'state', BallState.Orbit);
           ball.setValue(Fireball, 'spin', 0);
           sfx.ignite();
           pulseHand(this.world.session, HANDS[hand], 0.4, 60);
         }
-      } else if (state === BallState.Flying || state === BallState.Dead) {
+      } else if (
+        state === BallState.Flying ||
+        (state === BallState.Dead && (ball.getValue(Fireball, 'recallLock') ?? 0) <= 0)
+      ) {
         ball.setValue(Fireball, 'state', BallState.Returning);
+        ball.setValue(Fireball, 'recallLock', 0);
         // Fresh return-pass window — but ONLY for a ball recalled mid-
         // flight. A DEAD ball just landed on someone: letting its return
         // leg connect again read as an awful instant double hit.
@@ -236,6 +246,7 @@ export class FireballSystem extends createSystem({
     v[2] = _dir.z * speed;
     ball.setValue(Fireball, 'state', BallState.Flying);
     ball.setValue(Fireball, 'elapsed', 0);
+    ball.setValue(Fireball, 'recallLock', 0);
 
     sfx.throwWhoosh();
     pulseHand(this.world.session, HANDS[hand], 0.8, 110);
@@ -300,7 +311,7 @@ export class FireballSystem extends createSystem({
           if (transient) {
             this.destroyBall(ball);
           } else {
-            ball.setValue(Fireball, 'state', BallState.Dead);
+            this.spendBall(ball);
             v[0] = 0; v[1] = 0; v[2] = 0;
           }
           break;
@@ -311,7 +322,7 @@ export class FireballSystem extends createSystem({
           if (transient) {
             this.destroyBall(ball);
           } else {
-            ball.setValue(Fireball, 'state', BallState.Dead);
+            this.spendBall(ball);
             obj.position.y = Math.max(obj.position.y, FIREBALL.radius);
           }
         }
@@ -412,6 +423,7 @@ export class FireballSystem extends createSystem({
           // otherwise recalling off a fresh hit double-scored on the way out.
           const st = ball.getValue(Fireball, 'state') ?? 0;
           ball.setValue(Fireball, 'state', BallState.Returning);
+          ball.setValue(Fireball, 'recallLock', 0);
           ball.setValue(Fireball, 'returnHit', st === BallState.Dead ? 1 : 0);
           this.netBlend.delete(ball);
           break;
@@ -419,7 +431,7 @@ export class FireballSystem extends createSystem({
         case 'spend':
           // Their sim says this ball is finished (it hit us / was parried
           // on their side) — retire it where it is.
-          ball.setValue(Fireball, 'state', BallState.Dead);
+          this.spendBall(ball);
           this.netBlend.delete(ball);
           break;
       }
@@ -526,9 +538,17 @@ export class FireballSystem extends createSystem({
       ball.setValue(Fireball, 'spin', 0);
       ball.setValue(Fireball, 'elapsed', 0);
       ball.setValue(Fireball, 'returnHit', 0);
+      ball.setValue(Fireball, 'recallLock', 0);
     }
     this.netBlend.clear();
     this.trackers[0].reset();
     this.trackers[1].reset();
+  }
+
+  private spendBall(ball: Entity): void {
+    ball.setValue(Fireball, 'state', BallState.Dead);
+    ball.setValue(Fireball, 'recallLock', FIREBALL.recallLockout);
+    const v = ball.getVectorView(Fireball, 'velocity');
+    v[0] = 0; v[1] = 0; v[2] = 0;
   }
 }

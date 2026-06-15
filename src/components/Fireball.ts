@@ -51,6 +51,8 @@ export const Fireball = createComponent(
      * but only once per recall. Cleared whenever a return starts.
      */
     returnHit: { type: Types.Int32, default: 0 },
+    /** Seconds remaining before a spent ball may be recalled. */
+    recallLock: { type: Types.Float32, default: 0 },
   },
   'A flaming iron ball bonded to one fist.',
 );
