@@ -52,7 +52,7 @@ export type PeerMessage =
   /** Host → guest match-state echo. Scores are in the HOST's perspective. */
   | {
       k: 'state';
-      phase: 'playing' | 'roundOver' | 'matchOver';
+      phase: 'countdown' | 'playing' | 'roundOver' | 'matchOver';
       round: number;
       hostScore: number;
       guestScore: number;

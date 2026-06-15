@@ -389,11 +389,13 @@ export class FireballSystem extends createSystem({
   // --- opponent commands (bot / network) ---------------------------------
 
   private drainCommands(): void {
+    const roundLive = app.state === 'training' || match.phase === 'playing';
     for (const cmd of ballCommands.splice(0)) {
       if (cmd.type === 'transient') {
         this.spawnTransient(cmd.pos, cmd.vel, cmd.damage);
         continue;
       }
+      if (!roundLive && (cmd.type === 'throw' || cmd.type === 'recall')) continue;
       const ball = this.findBall(1, cmd.hand);
       if (!ball) continue;
       switch (cmd.type) {
@@ -441,6 +443,10 @@ export class FireballSystem extends createSystem({
       const ball = this.findBall(1, hand);
       if (!ball) continue;
       const st = ball.getValue(Fireball, 'state') ?? 0;
+      if (!roundLive) {
+        if (st === BallState.Orbit) ball.setValue(Fireball, 'state', BallState.Hover);
+        continue;
+      }
       if (opponent.orbiting[hand] && st === BallState.Hover) {
         ball.setValue(Fireball, 'state', BallState.Orbit);
         ball.setValue(Fireball, 'spin', 0);

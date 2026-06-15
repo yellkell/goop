@@ -157,6 +157,7 @@ export const BOT = {
 
 /** Match format: best-of rounds, Blaston-style pacing. */
 export const MATCH = {
+  startDelay: 7, // quick-match pre-fight hold before the first live round
   roundTime: 60, // seconds per round
   winTarget: 3, // first to N round wins takes the match
   roundOverDelay: 5, // pause between rounds — a real breather to reset

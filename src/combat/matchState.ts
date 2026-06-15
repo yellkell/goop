@@ -4,14 +4,14 @@
  * systems read `phase` to know when play is live.
  */
 
-export type MatchPhase = 'playing' | 'roundOver' | 'matchOver';
+export type MatchPhase = 'countdown' | 'playing' | 'roundOver' | 'matchOver';
 
 export interface MatchState {
   phase: MatchPhase;
   round: number;
   myScore: number;
   oppScore: number;
-  roundTimer: number; // seconds left in the round
+  roundTimer: number; // seconds left in the round, or pre-fight countdown
   resultTimer: number; // countdown shown during roundOver / matchOver
   message: string; // headline status for the HUD
   /** Bumped every time a fresh round starts — systems reset on change. */

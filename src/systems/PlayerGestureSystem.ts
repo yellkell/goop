@@ -2,9 +2,8 @@
  * Social hand gestures in the arena.
  *
  * Clap is local physical feedback. Press B to pop a self-GG from that hand.
- * Opponent fist bump works during a match: true fist contact if the hands get
- * close, plus a strict same-lane/extended-forward test because the arena gap
- * makes literal mesh contact impractical.
+ * Opponent fist bump works during a match: both players must clench and bring
+ * their glove origins close enough that the visible fists genuinely touch.
  */
 
 import { createSystem, InputComponent, Vector3 } from '@iwsdk/core';
@@ -14,7 +13,6 @@ import { pulseHand } from '../input/haptics.js';
 import { app } from '../menu/appState.js';
 import { net } from '../net/client.js';
 import * as sfx from '../audio/sfx.js';
-import { ARENA_GAP } from '../config.js';
 
 const CLAP_DISTANCE = 0.13;
 const CLAP_CLOSING_SPEED = 1.45;
@@ -25,9 +23,7 @@ const CLAP_COOLDOWN = 0.2; // applause should be rapid, not gated
  *  be spammed at the opponent. */
 const SELF_GG_COOLDOWN = 10;
 
-const FIST_TOUCH_DISTANCE = 0.26;
-const FIST_LANE_RADIUS = 0.3;
-const FIST_FORWARD_REACH = 0.45;
+const FIST_TOUCH_DISTANCE = 0.18;
 const FIST_CLOSING_SPEED = 1.45;
 const FIST_LOCAL_HAND_SPEED = 1.25;
 const FIST_BUMP_COOLDOWN = 1.25;
@@ -123,15 +119,10 @@ export class PlayerGestureSystem extends createSystem({}) {
         if (!opponent.fisting[remote]) continue;
         const remotePos = opponent.handPos[remote];
         const contactDistance = localPos.distanceTo(remotePos);
-        const laneDistance = Math.hypot(localPos.x - remotePos.x, localPos.y - remotePos.y);
-        const bothReached =
-          localPos.z < -FIST_FORWARD_REACH &&
-          remotePos.z > -ARENA_GAP + FIST_FORWARD_REACH &&
-          laneDistance < FIST_LANE_RADIUS;
-        if (contactDistance > FIST_TOUCH_DISTANCE && !bothReached) continue;
+        if (contactDistance > FIST_TOUCH_DISTANCE) continue;
         const closingSpeed = (prevLocalPos.distanceTo(remotePos) - contactDistance) / delta;
         if (closingSpeed < FIST_CLOSING_SPEED && localSpeed < FIST_LOCAL_HAND_SPEED) continue;
-        const score = contactDistance + laneDistance;
+        const score = contactDistance;
         if (!best || score < best.score) {
           best = { local, remote, score, cue: _mid.copy(localPos).add(remotePos).multiplyScalar(0.5).clone() };
         }

@@ -244,6 +244,7 @@ export class NetworkSystem extends createSystem({
   /** Guest: adopt the host's match state (scores flipped to our view). */
   private applyHostState(msg: Extract<PeerMessage, { k: 'state' }>): void {
     const prevPhase = match.phase;
+    const prevReset = match.resetCount;
     match.phase = msg.phase;
     match.round = msg.round;
     match.myScore = msg.guestScore;
@@ -267,8 +268,11 @@ export class NetworkSystem extends createSystem({
     }
 
     // Fresh round on the guest: restore healths locally too, and clear any
-    // rematch handshake (a rematch restart arrives as matchOver → playing).
-    if (msg.phase === 'playing' && prevPhase !== 'playing') {
+    // rematch handshake (a rematch restart arrives as matchOver -> countdown).
+    if (
+      (msg.phase === 'countdown' && (prevPhase !== 'countdown' || msg.reset !== prevReset)) ||
+      (msg.phase === 'playing' && prevPhase !== 'playing')
+    ) {
       match.rematchMine = false;
       match.rematchTheirs = false;
       for (const e of this.queries.combatants.entities) {

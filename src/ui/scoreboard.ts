@@ -119,6 +119,7 @@ function fmtTime(seconds: number): string {
 
 function verdictAccent(message: string): string {
   if (message.includes('LOSE') || message === 'LOSS' || message === "KO'D") return UI.coolBright;
+  if (/^[123]$/.test(message)) return UI.amber;
   if (message === 'DRAW') return UI.amber;
   if (message === 'FIGHT' || message === 'TIME') return UI.danger;
   if (message === 'WIN') return UI.amber;
@@ -278,7 +279,8 @@ export function createScoreboard(scene: Scene): Scoreboard {
       // No backing plate: just the short chromed verdict floating over the gap.
       ctx.textAlign = 'center';
       const accent = verdictAccent(message);
-      const px = fitStencilText(ctx, message, W - 120, message.includes('YOU') ? 124 : 152, 44);
+      const isCountdown = /^[123]$/.test(message);
+      const px = fitStencilText(ctx, message, W - 120, isCountdown ? 210 : message.includes('YOU') ? 124 : 152, 44);
       const midY = sub ? 188 : 216;
       metalText(ctx, message, W / 2, midY, px, accent);
       if (sub) {
@@ -301,7 +303,10 @@ export function createScoreboard(scene: Scene): Scoreboard {
       drawTimer(fmtTime(state.roundTimer));
       drawSide(left, app.mode === 'net' ? displayName(myName(), 'YOU') : 'YOU', UI.emberBright, pHp / pMax, state.myScore);
       drawSide(right, app.mode === 'net' ? displayName(rival.name, 'RIVAL') : 'BOT', UI.cool, oHp / oMax, state.oppScore);
-      drawCentre(state.message, state.phase === 'matchOver' ? '' : state.message ? `R${state.round}` : '');
+      drawCentre(
+        state.message,
+        state.phase === 'matchOver' || state.phase === 'countdown' ? '' : state.message ? `R${state.round}` : '',
+      );
       animateVerdict(state.message);
     },
 

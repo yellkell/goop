@@ -96,7 +96,11 @@ export class GameStateSystem extends createSystem({
   // --- authoritative match logic (bot bouts + online host) ----------------
 
   private runAuthority(c: Boxers, pHp: number, oHp: number, delta: number): void {
-    if (match.phase === 'playing') {
+    if (match.phase === 'countdown') {
+      match.roundTimer = Math.max(0, match.roundTimer - delta);
+      match.message = match.roundTimer <= 3 && match.roundTimer > 0 ? String(Math.ceil(match.roundTimer)) : '';
+      if (match.roundTimer <= 0) this.beginRound(c);
+    } else if (match.phase === 'playing') {
       match.roundTimer = Math.max(0, match.roundTimer - delta);
       if (pHp <= 0 || oHp <= 0) {
         if (pHp <= 0 && oHp <= 0) this.endRound('draw', 'ko');
@@ -180,7 +184,28 @@ export class GameStateSystem extends createSystem({
     for (const e of [c.me, c.them]) {
       e.setValue(Health, 'current', e.getValue(Health, 'max') ?? 100);
     }
-    if (app.mode === 'bot' || app.side === 0) this.beginRound(c);
+    if (app.mode === 'bot') {
+      this.beginRound(c);
+    } else if (app.side === 0) {
+      this.beginCountdown(c);
+    } else {
+      match.phase = 'countdown';
+      match.roundTimer = MATCH.startDelay;
+      match.resultTimer = 0;
+      match.message = '';
+    }
+  }
+
+  private beginCountdown(c: Boxers): void {
+    for (const e of [c.me, c.them]) {
+      e.setValue(Health, 'current', e.getValue(Health, 'max') ?? 100);
+    }
+    match.phase = 'countdown';
+    match.roundTimer = MATCH.startDelay;
+    match.resultTimer = 0;
+    match.message = '';
+    match.resetCount += 1; // park balls at fists before the pre-fight hold
+    if (app.mode === 'net') this.echoState();
   }
 
   private beginRound(c: Boxers): void {
