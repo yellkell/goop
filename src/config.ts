@@ -150,6 +150,8 @@ export const BOT = {
   damage: 20, // every landed hit is 20, theirs included
   aimError: 0.16, // metres of aim slop at the target
   recallDelay: 1.4, // seconds after a throw before it recalls the ball
+  headPitchMax: 0.32, // radians the head tilts up/down to track you — no owl-necking
+  headTurnSpeed: 8, // how fast the head eases toward facing you
 };
 
 /** Match format: best-of rounds, Blaston-style pacing. */

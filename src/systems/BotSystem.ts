@@ -22,7 +22,10 @@ const _ballPos = new Vector3();
 const _aim = new Vector3();
 const _vel = new Vector3();
 const _look = new Quaternion();
+const _pitchQ = new Quaternion();
 const _tmp = new Vector3();
+const UP = new Vector3(0, 1, 0);
+const RIGHT = new Vector3(1, 0, 0);
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
 
@@ -116,10 +119,17 @@ export class BotSystem extends createSystem({
     const z = -ARENA_GAP + this.z;
 
     opponent.headPos.set(this.x, this.y, z);
-    // Face the player's head.
+    // Look toward the player as a STABLE yaw + clamped pitch (no roll). A
+    // direct look-at sat right in setFromUnitVectors' antiparallel blind spot
+    // — the bot faces +z, its default forward is −z — so the tiniest of your
+    // moves swung the rotation axis and the head spun/rolled. atan2 yaw never
+    // flips, and the pitch clamp stops it owl-necking up at you.
     _tmp.copy(_head).sub(opponent.headPos);
-    _look.setFromUnitVectors(new Vector3(0, 0, -1), _tmp.normalize());
-    opponent.headQuat.slerp(_look, Math.min(1, delta * 10));
+    const yaw = Math.atan2(-_tmp.x, -_tmp.z);
+    const horiz = Math.hypot(_tmp.x, _tmp.z) || 1e-4;
+    const pitch = clamp(Math.atan2(_tmp.y, horiz), -BOT.headPitchMax, BOT.headPitchMax);
+    _look.setFromAxisAngle(UP, yaw).multiply(_pitchQ.setFromAxisAngle(RIGHT, pitch));
+    opponent.headQuat.slerp(_look, Math.min(1, delta * BOT.headTurnSpeed));
 
     // Boxing guard: fists up in front of the chin, gently pumping; the
     // winding hand pulls back and high.
