@@ -47,7 +47,7 @@ function showLanding(): void {
 
 World.create(container, {
   // The landing button calls IWSDK's explicit WebXR launcher from the user's
-  // interacted with — FIRE FIGHT plays in your real room.
+  // tap. Quest Browser needs that direct requestSession gesture path.
   xr: {
     sessionMode: SessionMode.ImmersiveAR,
     offer: 'none',
