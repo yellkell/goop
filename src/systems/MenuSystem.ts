@@ -50,7 +50,7 @@ import { match } from '../combat/matchState.js';
 import { UI } from '../ui/industrial.js';
 import { net } from '../net/client.js';
 import { startQueueWatch, stopQueueWatch } from '../net/queueWatch.js';
-import { hasCustomName, leaderboard, myStats, refreshLeaderboard, setPlayerName } from '../net/leaderboard.js';
+import { hasCustomName, leaderboard, myStats, refreshLeaderboard, rival, setPlayerName } from '../net/leaderboard.js';
 import { pubUrl } from '../config.js';
 import * as sfx from '../audio/sfx.js';
 
@@ -323,7 +323,7 @@ export class MenuSystem extends createSystem({}) {
       return {
         title: 'FIGHT OVER',
         buttons,
-        status: match.rematchTheirs ? 'rival wants a rematch' : '',
+        status: match.rematchTheirs ? `${rival.name} wants a rematch` : '',
       };
     }
     return null;
