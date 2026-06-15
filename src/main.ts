@@ -10,7 +10,7 @@
  * (WASD + mouse). For online 1v1s also run `npm run server`.
  */
 
-import { SessionMode, World } from '@iwsdk/core';
+import { launchXR, SessionMode, World } from '@iwsdk/core';
 import { initLeaderboard } from './net/leaderboard.js';
 import { buildArena } from './arena/arena.js';
 import { setupEnvironment } from './arena/environment.js';
@@ -32,159 +32,25 @@ import { FXSystem } from './systems/FXSystem.js';
 import { DesertSystem } from './systems/DesertSystem.js';
 
 const container = document.getElementById('scene-container') as HTMLDivElement;
-const enterVrSlot = document.getElementById('enter-vr-slot') as HTMLDivElement | null;
-const xrOfferPattern = /\b(enter|start|launch)\b.*\b(ar|vr|xr)\b|\b(ar|vr|xr)\b.*\b(enter|start|launch)\b/i;
-const originalXrOfferStyles = new Map<HTMLElement | SVGElement, string | null>();
-const wiredXrOffers = new WeakSet<HTMLElement>();
+const enterVrButton = document.getElementById('enter-vr') as HTMLButtonElement | null;
 
-function collectXrOfferCandidates(): HTMLElement[] {
-  const roots: Array<Document | ShadowRoot> = [document];
+enterVrButton?.setAttribute('disabled', '');
 
-  document.querySelectorAll<HTMLElement>('*').forEach((element) => {
-    if (element.shadowRoot) roots.push(element.shadowRoot);
-  });
-
-  return roots.flatMap((root) => Array.from(root.querySelectorAll<HTMLElement>('button, a, [role="button"]')));
-}
-
-function getElementLabel(element: HTMLElement): string {
-  return `${element.textContent ?? ''} ${element.getAttribute('aria-label') ?? ''}`;
-}
-
-function isNativeXrOffer(element: HTMLElement): boolean {
-  return !element.closest('#landing') && xrOfferPattern.test(getElementLabel(element));
-}
-
-function findNativeXrOffer(): HTMLElement | null {
-  return collectXrOfferCandidates().find(isNativeXrOffer) ?? null;
-}
-
-function rememberStyle(element: HTMLElement | SVGElement): void {
-  if (!originalXrOfferStyles.has(element)) {
-    originalXrOfferStyles.set(element, element.getAttribute('style'));
-  }
-}
-
-function applyStyles(element: HTMLElement | SVGElement, styles: Partial<CSSStyleDeclaration>): void {
-  rememberStyle(element);
-  Object.assign(element.style, styles);
-}
-
-function restoreNativeXrOfferStyles(): void {
-  originalXrOfferStyles.forEach((style, element) => {
-    if (style === null) {
-      element.removeAttribute('style');
-    } else {
-      element.setAttribute('style', style);
-    }
-  });
-  originalXrOfferStyles.clear();
-}
-
-function handleNativeXrOfferClick(): void {
+function hideLanding(): void {
   document.body.classList.add('app-entered');
-  window.setTimeout(() => {
-    restoreNativeXrOfferStyles();
-    nativeXrOfferObserver.disconnect();
-    window.removeEventListener('resize', syncNativeXrOffer);
-  }, 250);
 }
 
-function wireNativeXrOffer(offer: HTMLElement): void {
-  if (wiredXrOffers.has(offer)) return;
-
-  wiredXrOffers.add(offer);
-  offer.addEventListener('click', handleNativeXrOfferClick, { capture: true });
+function showLanding(): void {
+  document.body.classList.remove('app-entered');
+  enterVrButton?.removeAttribute('disabled');
 }
-
-function syncNativeXrOffer(): void {
-  if (!enterVrSlot || document.body.classList.contains('app-entered')) return;
-
-  const offer = findNativeXrOffer();
-  if (!offer) return;
-
-  const root = offer.getRootNode();
-  const host = root instanceof ShadowRoot && root.host instanceof HTMLElement ? root.host : null;
-  const frame = offer.closest('div');
-  const rect = enterVrSlot.getBoundingClientRect();
-  if (rect.width === 0 || rect.height === 0) return;
-
-  if (host) {
-    applyStyles(host, {
-      visibility: 'visible',
-    });
-  }
-
-  if (frame) {
-    applyStyles(frame, {
-      position: 'fixed',
-      left: `${rect.left}px`,
-      top: `${rect.top}px`,
-      width: `${rect.width}px`,
-      height: `${rect.height}px`,
-      zIndex: '1001',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: '0',
-      padding: '0',
-      border: '0',
-      borderRadius: '8px',
-      background: 'transparent',
-      boxSizing: 'border-box',
-      pointerEvents: 'all',
-      transform: 'none',
-      transition: 'none',
-      visibility: 'visible',
-    });
-
-    Array.from(frame.children).forEach((child) => {
-      if (child instanceof SVGElement) {
-        applyStyles(child, { display: 'none' });
-      }
-    });
-  }
-
-  offer.textContent = 'ENTER VR';
-  offer.setAttribute('aria-label', 'Enter VR');
-  applyStyles(offer, {
-    width: '100%',
-    height: '100%',
-    minWidth: '0',
-    minHeight: '0',
-    padding: '0 34px',
-    border: '1px solid rgba(255, 255, 255, 0.2)',
-    borderRadius: '8px',
-    boxSizing: 'border-box',
-    color: '#120906',
-    background: 'linear-gradient(180deg, #ffb35c 0%, #f25b24 100%)',
-    boxShadow: '0 18px 48px rgba(242, 91, 36, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.5)',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    font: '900 1.08rem/1 system-ui, -apple-system, sans-serif',
-    letterSpacing: '0.12em',
-    pointerEvents: 'all',
-    textTransform: 'uppercase',
-  });
-
-  wireNativeXrOffer(offer);
-}
-
-const nativeXrOfferObserver = new MutationObserver(syncNativeXrOffer);
-nativeXrOfferObserver.observe(document.body, { childList: true, subtree: true });
-window.addEventListener('resize', syncNativeXrOffer);
-requestAnimationFrame(syncNativeXrOffer);
-window.setTimeout(syncNativeXrOffer, 500);
-window.setTimeout(syncNativeXrOffer, 1500);
 
 World.create(container, {
-  // Offer an immersive-AR (passthrough) session as soon as the page is
+  // The landing button calls IWSDK's explicit WebXR launcher from the user's
   // interacted with — FIRE FIGHT plays in your real room.
   xr: {
     sessionMode: SessionMode.ImmersiveAR,
-    offer: 'always',
+    offer: 'none',
   },
   // A stationary dodge game: no locomotion (you stay on your platform), no
   // grab system (the fireballs are bonded to your fists, not grabbed).
@@ -202,7 +68,7 @@ World.create(container, {
     far: 1600,
     camera: { position: [0, 1.6, 0] },
   },
-}).then((world) => {
+}).then(async (world) => {
   initLeaderboard(); // anonymous profile + first board fetch
   setupEnvironment(world);
   buildArena(world);
@@ -230,6 +96,35 @@ World.create(container, {
   world.registerSystem(FXSystem);
   // The optional papercraft desert backdrop (off = bare AR passthrough).
   world.registerSystem(DesertSystem);
+
+  const xrSupported = (await navigator.xr?.isSessionSupported(SessionMode.ImmersiveAR).catch(() => false)) === true;
+
+  if (enterVrButton && xrSupported) {
+    enterVrButton.removeAttribute('disabled');
+    enterVrButton.addEventListener('click', () => {
+      enterVrButton.setAttribute('disabled', '');
+      launchXR(world, { sessionMode: SessionMode.ImmersiveAR });
+
+      const watchForSession = () => {
+        if (world.session) {
+          hideLanding();
+          world.session.addEventListener('end', showLanding, { once: true });
+          return;
+        }
+
+        if (!document.body.classList.contains('app-entered')) {
+          requestAnimationFrame(watchForSession);
+        }
+      };
+
+      requestAnimationFrame(watchForSession);
+      window.setTimeout(() => {
+        if (!world.session) enterVrButton.removeAttribute('disabled');
+      }, 4000);
+    });
+  } else if (enterVrButton) {
+    enterVrButton.textContent = 'XR unavailable';
+  }
 
   // eslint-disable-next-line no-console
   console.info('[FIRE FIGHT] World ready — platforms set, fists hot.');
