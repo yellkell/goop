@@ -89,7 +89,7 @@ export const FIREBALL = {
   returnSpeed: 9.5, // homing speed back to the fist
   catchRadius: 0.16, // how close counts as "back in hand"
   nearHandRadius: 0.35, // trigger within this of the ball = orbit, not recall
-  recallLockout: 0.3, // seconds a spent ball must cool before it can be recalled
+  recallLockout: 0.5, // seconds a spent ball must cool before it can be recalled
 
   // Defence: an orbiting or returning ball of YOURS knocks an incoming
   // enemy ball out of the air on contact.
