@@ -77,6 +77,10 @@ for (let i = 0; i < PROP_COUNT; i++) {
 }
 const board = new Map(); // playerId → { name, accent, score, darts }
 let snakePlayer = null;
+// Jukebox station the whole room shares (−1 = off). Flipped at the cabinet by
+// any punter; reset when the pub empties. Mirrors JUKEBOX in src/pub/config.ts.
+let music = -1;
+const MUSIC_STATIONS = 2;
 let nextId = 1;
 let joinCount = 0;
 
@@ -426,6 +430,7 @@ wss.on('connection', (ws) => {
         snakeHi: data.snakeHi,
         snakePlayer,
         fight: fightNet(),
+        music,
       });
       broadcast({ t: 'join', player: playerNet(myId) }, myId);
       console.log(`[iron-balls-pub] ${myId} (${players.get(myId).name}) in — ${players.size}/${MAX_PLAYERS}`);
@@ -508,6 +513,13 @@ wss.on('connection', (ws) => {
       case 'leave-fight':
         leaveFight(myId);
         break;
+      case 'music': {
+        // Any punter may flip the room's station. Clamp to a real station or off.
+        const s = Number.isInteger(msg.station) ? msg.station : -1;
+        music = s >= 0 && s < MUSIC_STATIONS ? s : -1;
+        broadcast({ t: 'music', station: music });
+        break;
+      }
       case 'ev':
         handleEvent(myId, msg.ev);
         break;
@@ -533,6 +545,8 @@ wss.on('connection', (ws) => {
     if (players.size === 0) {
       board.clear();
       resetFight();
+      music = -1; // the jukebox falls quiet for the next punter in
+
       for (const prop of props.values()) {
         prop.holder = null;
         prop.mode = 'rest';

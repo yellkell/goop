@@ -51,6 +51,9 @@ export interface PubRefs {
   fightDisplay: Panel;
   /** Mirror scoreboard above the door — same health, other side of the pit. */
   fightDisplay2: Panel;
+  /** The jukebox cabinet root (its origin = world position) + its marquee. */
+  jukebox: Group;
+  jukeboxPanel: Panel;
 }
 
 interface Events {
@@ -74,6 +77,8 @@ interface Events {
   fight: FightNet;
   /** The barkeep is fetching glass `id` — it lands on the bar shortly. */
   glassOut: number;
+  /** The room's selected jukebox station (−1 = off), server-synced. */
+  music: number;
 }
 
 type Handler<T> = (payload: T) => void;
@@ -145,5 +150,7 @@ export const pub = {
   snakeHi: { name: '—', score: 0 } as SnakeHi,
   snakePlayer: null as string | null,
   fight: defaultFight(),
+  /** Selected jukebox station, −1 = off (server-synced; whole room shares it). */
+  music: -1,
   refs: null as PubRefs | null,
 };

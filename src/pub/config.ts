@@ -72,6 +72,36 @@ export const PUB = {
   glassDeliverDelay: 4,
 } as const;
 
+/** Booth x-centres along the south wall. The DOOR-END booth was pulled to make
+ *  room for the jukebox, so the banquette run now starts at the second booth. */
+export const BOOTH_CENTRES = [-0.3, 1.75, 3.8];
+
+/**
+ * The JUKEBOX — stands where the door-end booth used to be (south wall, west
+ * end), facing into the room. Walk up and pull the trigger to flip web-radio
+ * stations; the pub server holds the chosen station so the whole room hears the
+ * same thing. Routed through a plain <audio> element (not Web Audio) so any
+ * Icecast/SHOUTcast stream plays regardless of CORS; distance just rolls the
+ * element volume, ducking while someone's talking.
+ */
+export const JUKEBOX = {
+  /** Cabinet base centre (world); the cabinet faces north (−z) into the room. */
+  pos: [-2.3, 0, HALF_D - 0.5] as [number, number, number],
+  /** Pull the trigger with a hand within this (XZ) of the cabinet to flip stations. */
+  reach: 1.0,
+  /** Loudness is full within hearNear and fades to nothing past hearFar (XZ metres). */
+  hearNear: 1.3,
+  hearFar: 7.5,
+  volume: 0.6,
+  /** Music ducks to this fraction while anyone in the room is talking. */
+  duck: 0.34,
+  /** SomaFM web radio — swap these URLs for any Icecast/SHOUTcast MP3 stream. */
+  stations: [
+    { name: 'CHILL HOP', sub: 'instrumental hip-hop', url: 'https://ice1.somafm.com/fluid-128-mp3' },
+    { name: 'TECHNO', sub: 'deep electronic', url: 'https://ice1.somafm.com/beatblender-128-mp3' },
+  ],
+} as const;
+
 /**
  * The FIGHT HALL — a second room through the door in the pub's west wall,
  * with the full FIRE FIGHT duel on display: the two octagonal platforms from
@@ -215,10 +245,10 @@ export const SURFACES: Surface[] = [
     minZ: PUB.bar.z - PUB.bar.depth,
     maxZ: PUB.bar.z,
   },
-  // Banquette booth tables along the south wall (environment.ts
-  // buildBanquette: booths centred at x −2.3 / −0.3 / 1.75 / 3.8, each
-  // table 0.7 m square at z = HALF_D − 1.45).
-  ...[-2.3, -0.3, 1.75, 3.8].map((cx) => ({
+  // Banquette booth tables along the south wall (environment.ts buildBanquette,
+  // centres = BOOTH_CENTRES; the door-end booth is gone for the jukebox). Each
+  // table is 0.7 m square at z = HALF_D − 1.45.
+  ...BOOTH_CENTRES.map((cx) => ({
     y: 0.76,
     minX: cx - 0.35,
     maxX: cx + 0.35,

@@ -141,6 +141,8 @@ export type PubClientMsg =
   | { t: 'claim-fight'; side: 0 | 1 }
   /** Step down / forfeit. */
   | { t: 'leave-fight' }
+  /** Flip the jukebox to `station` (−1 = off) for the whole room. */
+  | { t: 'music'; station: number }
   | { t: 'ev'; ev: PubEvent };
 
 export type PubServerMsg =
@@ -154,6 +156,8 @@ export type PubServerMsg =
       snakeHi: SnakeHi;
       snakePlayer: string | null;
       fight: FightNet;
+      /** Jukebox station the room is currently on (−1 = off). */
+      music: number;
     }
   | { t: 'full' }
   | { t: 'join'; player: PubPlayerNet }
@@ -175,6 +179,8 @@ export type PubServerMsg =
   | { t: 'fight'; fight: FightNet }
   /** The barkeep is bringing glass `id` out — it lands on the bar shortly. */
   | { t: 'glass-out'; id: number }
+  /** The room's jukebox is now on `station` (−1 = off). */
+  | { t: 'music'; station: number }
   | { t: 'ev'; from: string; ev: PubEvent };
 
 export const PUB_MAX_PLAYERS = 12;

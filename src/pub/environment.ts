@@ -34,7 +34,7 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import { OCTAGON_VERTICES, PALETTE, teamColor } from '../config.js';
 import { diamondPlateTextures } from '../materials/diamondPlate.js';
 import { octagonSlab } from '../arena/octagon.js';
-import { FIGHT, PUB } from './config.js';
+import { BOOTH_CENTRES, FIGHT, JUKEBOX, PUB } from './config.js';
 import { Panel } from './panel.js';
 import { buildSign } from './signs.js';
 import type { PubRefs } from './state.js';
@@ -352,8 +352,13 @@ export function buildPub(world: World): PubRefs {
   // --- banquette seating along the south wall ---------------------------------
   // A continuous raised plinth with a channel-backed bench, divided into
   // booths, each with a square table and a freestanding bench opposite —
-  // the upmarket-bar look from the reference. Booth centres clear the exit.
-  root.add(buildBanquette([-2.3, -0.3, 1.75, 3.8]));
+  // the upmarket-bar look from the reference. The door-end booth is gone: the
+  // jukebox stands there instead (built below).
+  root.add(buildBanquette(BOOTH_CENTRES));
+
+  // --- the JUKEBOX where the door-end booth used to be ------------------------
+  const { group: jukebox, panel: jukeboxPanel } = buildJukebox();
+  root.add(jukebox);
 
   // --- the EXIT — the door you came in through (south wall, west end).
   // Teleport onto its hazard mat and you're back at the main menu.
@@ -566,7 +571,76 @@ export function buildPub(world: World): PubRefs {
     fightDisplay2,
     fightRims,
     fightSlabs,
+    jukebox,
+    jukeboxPanel,
   };
+}
+
+/**
+ * The JUKEBOX — a retro arched cabinet against the south wall where the
+ * door-end booth used to be. A wood body with a glowing amber crown, a speaker
+ * grille, and a marquee `Panel` that the MusicSystem updates with the current
+ * web-radio station. Origin at the floor centre (= JUKEBOX.pos), front facing
+ * −z into the room. Returns the group and its marquee panel.
+ */
+function buildJukebox(): { group: Group; panel: Panel } {
+  const g = new Group();
+  g.name = 'jukebox';
+  g.position.set(...JUKEBOX.pos); // faces −z (room) by default
+
+  const wood = new MeshStandardMaterial({ map: woodTexture('#5a2f17', [2, 2]), roughness: 0.6, metalness: 0.05 });
+  const trim = new MeshStandardMaterial({ map: woodTexture('#2c1810', [1, 2]), roughness: 0.7 });
+
+  const W = 0.74;
+  const D = 0.46;
+  const BODY_H = 1.18;
+
+  // Main body, set against the wall (front face toward −z).
+  const body = new Mesh(roundedBox(W, BODY_H, D, 0.06), wood);
+  body.position.set(0, BODY_H / 2, 0);
+  g.add(body);
+  // Dark plinth so it sits heavy on the floor.
+  const base = new Mesh(new BoxGeometry(W + 0.06, 0.12, D + 0.06), trim);
+  base.position.set(0, 0.06, 0);
+  g.add(base);
+
+  // Glowing crown header across the top, with the iconic amber arch on its
+  // front face (a half-torus standing up — a clean, orientation-safe dome).
+  const crown = new Mesh(roundedBox(W, 0.16, D, 0.06), amberGlow(0.6));
+  crown.position.set(0, BODY_H + 0.02, 0);
+  g.add(crown);
+  const arch = new Mesh(new TorusGeometry(W / 2 - 0.05, 0.022, 8, 24, Math.PI), amberGlow(1.4));
+  arch.position.set(0, BODY_H + 0.02, -D / 2 + 0.03);
+  g.add(arch);
+
+  // Speaker grille — a recessed dark panel low on the front, with bars.
+  const grille = new Mesh(new BoxGeometry(W - 0.16, 0.34, 0.03), trim);
+  grille.position.set(0, 0.42, -D / 2 - 0.005);
+  g.add(grille);
+  for (let i = 0; i < 5; i++) {
+    const bar = new Mesh(new BoxGeometry(W - 0.22, 0.018, 0.02), gunmetal(0.4));
+    bar.position.set(0, 0.30 + i * 0.06, -D / 2 - 0.02);
+    g.add(bar);
+  }
+  // Amber side pilasters for the period look.
+  for (const sx of [-1, 1]) {
+    const pil = new Mesh(new CylinderGeometry(0.026, 0.026, BODY_H - 0.2, 10), amberGlow(0.9));
+    pil.position.set(sx * (W / 2 - 0.03), BODY_H / 2 + 0.02, -D / 2 + 0.03);
+    g.add(pil);
+  }
+
+  // The marquee: a Panel up under the crown showing the current station. Faces
+  // −z (the room), proud of the body so it reads from the floor.
+  const panel = new Panel(0.5, 0.26, 384);
+  panel.mesh.position.set(0, 0.86, -D / 2 - 0.012);
+  panel.mesh.rotation.y = Math.PI; // plane faces +z by default; turn it to −z
+  panel.setLines([
+    { text: 'JUKEBOX', size: 58, colour: '#ffb000', bold: true },
+    { text: 'pull trigger to play', size: 30, colour: '#aeb6c2' },
+  ]);
+  g.add(panel.mesh);
+
+  return { group: g, panel };
 }
 
 /**

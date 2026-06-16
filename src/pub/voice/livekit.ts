@@ -35,6 +35,11 @@ export function isSpeaking(id: string): boolean {
   return speaking.has(id);
 }
 
+/** Is anyone in the room talking right now? (Jukebox ducks music under chat.) */
+export function anyPubVoiceSpeaking(): boolean {
+  return speaking.size > 0;
+}
+
 /** One-line status for the pub's voice readout panel. */
 export function pubVoiceStatus(): string {
   if (!room) return statusText;
