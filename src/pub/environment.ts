@@ -12,17 +12,20 @@
 
 import {
   BoxGeometry,
+  CanvasTexture,
   CircleGeometry,
   Color,
   CylinderGeometry,
   DoubleSide,
   Group,
   LatheGeometry,
+  LinearFilter,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
   PlaneGeometry,
   PointLight,
+  SRGBColorSpace,
   TorusGeometry,
   Vector2,
 } from 'three';
@@ -481,8 +484,38 @@ export function buildPub(world: World): PubRefs {
   const lip = new Mesh(new BoxGeometry(0.54, 0.015, 0.42), amberGlow(0.18));
   lip.position.set(boxX, 1.285, boxZ);
   root.add(lip);
-  // Dart home slots: two rows of three STANDING in the crate, flights up,
-  // poking above the lip so the box visibly holds darts.
+  // "GRAB DARTS" painted across the crate floor, lit amber so it reads in the
+  // gloom. The box no longer shows darts poking out — PropSystem keeps any dart
+  // resting here hidden, so the label IS the prompt: reach in to pull one.
+  const labelCanvas = document.createElement('canvas');
+  labelCanvas.width = 512;
+  labelCanvas.height = 256;
+  const lctx = labelCanvas.getContext('2d')!;
+  lctx.textAlign = 'center';
+  lctx.textBaseline = 'middle';
+  lctx.font = "900 100px 'Arial Black', 'Arial Narrow', system-ui, sans-serif";
+  lctx.lineWidth = 13;
+  lctx.strokeStyle = 'rgba(6,5,4,0.92)';
+  lctx.fillStyle = '#ffb000';
+  lctx.shadowColor = '#ff7a18';
+  lctx.shadowBlur = 24;
+  for (const [text, y] of [['GRAB', 74], ['DARTS', 182]] as const) {
+    lctx.strokeText(text, 256, y);
+    lctx.fillText(text, 256, y);
+  }
+  const labelTex = new CanvasTexture(labelCanvas);
+  labelTex.colorSpace = SRGBColorSpace;
+  labelTex.minFilter = LinearFilter;
+  const dartBoxLabel = new Mesh(
+    new PlaneGeometry(0.34, 0.26),
+    new MeshBasicMaterial({ map: labelTex, transparent: true, depthWrite: false }),
+  );
+  dartBoxLabel.name = 'dart-box-label';
+  dartBoxLabel.rotation.x = -Math.PI / 2; // lie flat in the crate, facing up
+  dartBoxLabel.position.set(boxX, 1.205, boxZ); // just proud of the crate floor
+  root.add(dartBoxLabel);
+  // Dart home slots: the six house darts rest here OUT OF SIGHT (PropSystem
+  // hides any dart resting in the box) until you reach in and pull one.
   for (let i = 0; i < darts.rackSlots; i++) {
     const col = i % 3;
     const row = Math.floor(i / 3);

@@ -152,6 +152,35 @@ export function buildDart(): Group {
   return g;
 }
 
+/**
+ * Light a prop up a touch when it's the ranged-grab target: lift the emissive
+ * to a warm near-white so the whole prop glows lighter, no floating ball. Pass
+ * `on=false` to put every material back exactly as it was. Idempotent — safe to
+ * clear a prop that was never highlighted.
+ */
+export function setPropHighlight(group: Group, on: boolean): void {
+  group.traverse((o) => {
+    const mesh = o as Mesh;
+    const m = mesh.material as
+      | (MeshStandardMaterial & { userData: { hlEmissive?: number; hlIntensity?: number } })
+      | undefined;
+    if (!m || !m.isMaterial || mesh.name === 'grab-proxy' || !(m as { emissive?: unknown }).emissive) return;
+    if (on) {
+      if (m.userData.hlEmissive === undefined) {
+        m.userData.hlEmissive = m.emissive.getHex();
+        m.userData.hlIntensity = m.emissiveIntensity;
+      }
+      m.emissive.setHex(0xfff2dc); // warm light tint
+      m.emissiveIntensity = 0.6;
+    } else if (m.userData.hlEmissive !== undefined) {
+      m.emissive.setHex(m.userData.hlEmissive);
+      m.emissiveIntensity = m.userData.hlIntensity ?? 1;
+      m.userData.hlEmissive = undefined;
+      m.userData.hlIntensity = undefined;
+    }
+  });
+}
+
 /** Restore full opacity after a stuck-dart fade-out. */
 export function restoreOpacity(group: Group): void {
   group.traverse((o) => {

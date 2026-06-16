@@ -20,12 +20,12 @@
  */
 
 import { createSystem, Grabbed, InputComponent, OneHandGrabbable, type Entity, type World } from '@iwsdk/core';
-import { Group, Mesh, MeshBasicMaterial, Object3D, Quaternion, Raycaster, SphereGeometry, Vector3 } from 'three';
+import { Group, Object3D, Quaternion, Raycaster, Vector3 } from 'three';
 import { dartFloor, dartStick, glassClink, glassTap, throwWhoosh } from '../../audio/sfx.js';
 import { GLASS, PROP_PHYS, PUB, SURFACES } from '../config.js';
 import { pubSendRaw } from '../net.js';
 import type { PropKind, QuatT, Vec3T } from '../protocol.js';
-import { buildDart, buildPintGlass, fadeOpacity, restoreOpacity, setGlassFill } from '../props.js';
+import { buildDart, buildPintGlass, fadeOpacity, restoreOpacity, setGlassFill, setPropHighlight } from '../props.js';
 import { bus, pub } from '../state.js';
 import { scoreFromUV } from '../textures.js';
 
@@ -62,6 +62,9 @@ const HANDS = ['left', 'right'] as const;
 type Hand = (typeof HANDS)[number];
 
 const RANGE_GRAB_MAX = 1.0;
+// A forgiving aim CONE instead of a hairline ray: a prop counts as aimed-at
+// when it sits within this half-angle of where the hand points. cos(30°).
+const RANGE_GRAB_CONE_COS = Math.cos((30 * Math.PI) / 180);
 
 const UP = new Vector3(0, 1, 0);
 const INTO_BOARD = new Vector3(1, 0, 0); // east wall: darts embed pointing +x
@@ -71,7 +74,7 @@ const _a = new Vector3();
 const _b = new Vector3();
 const _rayOrigin = new Vector3();
 const _rayDir = new Vector3();
-const _highlightPos = new Vector3();
+const _toProp = new Vector3();
 const _q = new Quaternion();
 
 const recs: PropRec[] = [];
@@ -99,8 +102,9 @@ export function buildProps(world: World): void {
     const lean = dartIdx++;
     addProp(world, id++, 'dart', buildDart(), slot, true, (mesh) => {
       mesh.position.set(...slot);
-      // Standing tip-down in the box, flights up, each leaning a touch its
-      // own way so the bundle reads as loose darts rather than soldiers.
+      // Standing tip-down in the box — kept HIDDEN at rest (the crate reads
+      // "GRAB DARTS" instead), so this pose only shows for the split second a
+      // dart respawns before the next throw plucks it out.
       mesh.rotation.set(Math.PI - 0.12 + (lean % 2) * 0.1, 0, ((lean % 3) - 1) * 0.14);
     });
   }
@@ -116,9 +120,11 @@ function addProp(
   place: (mesh: Group) => void,
 ): void {
   place(mesh);
-  // Inactive glasses stay VISIBLE — empties stocked under the counter —
-  // just ungrabbable until the barkeep brings them out.
-  mesh.visible = active || kind === 'glass';
+  // Darts begin tucked in the box, so they start HIDDEN (the crate reads
+  // "GRAB DARTS"); the update loop reveals one the moment it leaves the box.
+  // Inactive glasses stay VISIBLE — empties stocked under the counter — just
+  // ungrabbable until the barkeep brings them out.
+  mesh.visible = kind === 'dart' ? false : active || kind === 'glass';
   world.scene.add(mesh);
   const entity = world.createTransformEntity(mesh);
   // Inactive glasses get their grab handle only when they come out — the
@@ -160,24 +166,10 @@ export class PropSystem extends createSystem({
   /** Fresh pours mid-rise (fill 0 → 1 over a few seconds). */
   private fills: { rec: PropRec; f: number }[] = [];
   private offlineRestock = 0;
-  private rangeHighlight!: Mesh;
+  /** The prop the empty hand is currently aimed at — it glows until grabbed. */
+  private highlighted: PropRec | null = null;
 
   init(): void {
-    this.rangeHighlight = new Mesh(
-      new SphereGeometry(1, 18, 10),
-      new MeshBasicMaterial({
-        color: 0xffffff,
-        transparent: true,
-        opacity: 0.48,
-        wireframe: true,
-        depthTest: false,
-        depthWrite: false,
-      }),
-    );
-    this.rangeHighlight.name = 'pub-range-grab-highlight';
-    this.rangeHighlight.visible = false;
-    this.scene.add(this.rangeHighlight);
-
     this.queries.grabbedProps.subscribers.qualify.add((e: Entity) => this.onGrab(e));
     this.queries.grabbedProps.subscribers.disqualify.add((e: Entity) => this.onRelease(e));
 
@@ -299,6 +291,15 @@ export class PropSystem extends createSystem({
           break;
       }
     }
+
+    // Darts resting in the box are HIDDEN — the crate just reads "GRAB DARTS";
+    // a dart only appears once it's pulled out (held/flight/stuck) or is lying
+    // out in the room. Driven off state so it stays right for remote darts too.
+    for (const rec of recs) {
+      if (rec.kind !== 'dart') continue;
+      const show = !(rec.mode === 'rest' && this.inDartBox(rec.mesh.position));
+      if (rec.mesh.visible !== show) rec.mesh.visible = show;
+    }
   }
 
   // --- grab / release ---------------------------------------------------------
@@ -313,6 +314,7 @@ export class PropSystem extends createSystem({
     // Can't pluck a dart out of the board mid-fade or wrestle a held prop —
     // but a REMOTE prop in flight (or at rest) is fair game: that's a catch.
     if (rec.mode === 'stuck') return;
+    this.clearHighlight(rec);
     restoreOpacity(rec.mesh);
     rec.mode = 'held';
     rec.manualHand = null;
@@ -338,7 +340,7 @@ export class PropSystem extends createSystem({
 
   private updateRangeGrab(): boolean {
     const target = this.findRangeTarget();
-    this.updateRangeHighlight(target?.rec ?? null);
+    this.highlight(target?.rec ?? null);
     if (!target) return false;
 
     const gp = this.input.xr.gamepads[target.hand];
@@ -346,42 +348,49 @@ export class PropSystem extends createSystem({
     if (!gp || !grip || !gp.getButtonDown(InputComponent.Squeeze)) return false;
 
     this.grabPropFromRange(target.rec, target.hand, grip);
-    this.updateRangeHighlight(null);
+    this.highlight(null);
     return true;
   }
 
-  private findRangeTarget(): { rec: PropRec; hand: Hand; distance: number } | null {
-    let best: { rec: PropRec; hand: Hand; distance: number } | null = null;
-    const candidates = recs.filter((rec) => this.canRangeGrab(rec)).map((rec) => rec.mesh);
-    if (!candidates.length || !this.player) return null;
+  /**
+   * The prop an empty hand is aimed at, chosen by a forgiving CONE rather than
+   * a hairline ray: any in-range prop within RANGE_GRAB_CONE_COS of the hand's
+   * forward axis qualifies, and we pick the one nearest the aim (ties broken
+   * toward the closer prop). No silhouette-precise pointing required.
+   */
+  private findRangeTarget(): { rec: PropRec; hand: Hand } | null {
+    if (!this.player) return null;
+    const candidates = recs.filter((rec) => this.canRangeGrab(rec));
+    if (!candidates.length) return null;
 
+    let best: { rec: PropRec; hand: Hand; score: number } | null = null;
     for (const hand of HANDS) {
       if (this.handBusy(hand)) continue;
       const ray = this.player.raySpaces[hand];
       if (!ray) continue;
       ray.getWorldPosition(_rayOrigin);
       ray.getWorldQuaternion(_q);
-      _rayDir.set(0, 0, -1).applyQuaternion(_q);
-      raycaster.set(_rayOrigin, _rayDir);
-      raycaster.far = RANGE_GRAB_MAX;
+      _rayDir.set(0, 0, -1).applyQuaternion(_q).normalize();
 
-      const hits = raycaster.intersectObjects(candidates, true);
-      for (const hit of hits) {
-        const rec = this.recFromObject(hit.object);
-        if (!rec || !this.canRangeGrab(rec)) continue;
-        if (!best || hit.distance < best.distance) best = { rec, hand, distance: hit.distance };
-        break;
+      for (const rec of candidates) {
+        this.propCenter(rec, _toProp).sub(_rayOrigin);
+        const dist = _toProp.length();
+        if (dist < 1e-3 || dist > RANGE_GRAB_MAX) continue;
+        const aim = _toProp.divideScalar(dist).dot(_rayDir);
+        if (aim < RANGE_GRAB_CONE_COS) continue; // outside the aim cone
+        // Most on-axis wins; a small distance nudge favours the nearer prop.
+        const score = aim - dist * 0.1;
+        if (!best || score > best.score) best = { rec, hand, score };
       }
     }
-    return best;
+    return best ? { rec: best.rec, hand: best.hand } : null;
   }
 
-  private recFromObject(obj: Object3D): PropRec | null {
-    for (let o: Object3D | null = obj; o; o = o.parent) {
-      const rec = recs.find((r) => r.mesh === o);
-      if (rec) return rec;
-    }
-    return null;
+  /** Grab point of a prop: glass centre rides above its base. */
+  private propCenter(rec: PropRec, out: Vector3): Vector3 {
+    rec.mesh.getWorldPosition(out);
+    if (rec.kind === 'glass') out.y += (GLASS.height * GLASS.scale) / 2;
+    return out;
   }
 
   private canRangeGrab(rec: PropRec): boolean {
@@ -396,23 +405,18 @@ export class PropSystem extends createSystem({
     return recs.some((rec) => rec.mode === 'held' && rec.manualHand === hand);
   }
 
-  private updateRangeHighlight(rec: PropRec | null): void {
-    if (!this.rangeHighlight) return;
-    if (!rec) {
-      this.rangeHighlight.visible = false;
-      return;
-    }
+  /** Make `rec` the lit grab target (or none), gently glowing the prop itself. */
+  private highlight(rec: PropRec | null): void {
+    if (this.highlighted === rec) return;
+    if (this.highlighted) setPropHighlight(this.highlighted.mesh, false);
+    this.highlighted = rec;
+    if (rec) setPropHighlight(rec.mesh, true);
+  }
 
-    rec.mesh.getWorldPosition(_highlightPos);
-    if (rec.kind === 'glass') _highlightPos.y += (GLASS.height * GLASS.scale) / 2;
-    this.rangeHighlight.position.copy(_highlightPos);
-
-    const radius = rec.kind === 'glass' ? 0.15 : 0.09;
-    const pulse = 1 + Math.sin(performance.now() * 0.009) * 0.06;
-    this.rangeHighlight.scale.setScalar(radius * pulse);
-    const mat = this.rangeHighlight.material as MeshBasicMaterial;
-    mat.opacity = 0.42 + Math.sin(performance.now() * 0.012) * 0.08;
-    this.rangeHighlight.visible = true;
+  /** Drop the glow off a specific prop the instant it's grabbed by any path. */
+  private clearHighlight(rec: PropRec): void {
+    setPropHighlight(rec.mesh, false);
+    if (this.highlighted === rec) this.highlighted = null;
   }
 
   private grabPropFromRange(rec: PropRec, hand: Hand, grip: Object3D): void {
@@ -458,7 +462,9 @@ export class PropSystem extends createSystem({
   }
 
   private beginManualGrab(rec: PropRec, hand: Hand, grip: Object3D): void {
+    this.clearHighlight(rec);
     restoreOpacity(rec.mesh);
+    rec.mesh.visible = true; // a dart pulled from the box appears in-hand now
     rec.mode = 'held';
     rec.manualHand = hand;
     rec.hasNetTarget = false;
