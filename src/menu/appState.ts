@@ -47,6 +47,9 @@ export const app: {
   /** How many boxers are in the quick-match queue right now (−1 = unknown,
    *  e.g. before the matchmaker is reachable). Drives the 1V1 panel. */
   searching: number;
+  /** How many punters are in the pub right now (−1 = unknown / unreachable).
+   *  Drives the pub door's `X/12` headcount badge. */
+  pubCount: number;
   /** Which backdrop the arena renders — held across every mode. */
   environment: AppEnvironment;
   stats: LifetimeStats;
@@ -58,6 +61,7 @@ export const app: {
   // Off unless the player has explicitly switched it on.
   shootBack: localStorage.getItem('ff-shootback') === '1',
   searching: -1,
+  pubCount: -1,
   environment: localStorage.getItem('ff-env') === 'desert' ? 'desert' : 'ar',
   stats: loadStats(),
 };

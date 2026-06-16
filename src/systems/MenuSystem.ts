@@ -50,6 +50,7 @@ import { match } from '../combat/matchState.js';
 import { UI } from '../ui/industrial.js';
 import { net } from '../net/client.js';
 import { startQueueWatch, stopQueueWatch } from '../net/queueWatch.js';
+import { startPubWatch, stopPubWatch } from '../net/pubWatch.js';
 import {
   hasCustomName,
   myStats,
@@ -516,14 +517,20 @@ export class MenuSystem extends createSystem({}) {
     // Fresh board standings whenever you land back in the lobby (throttled).
     if (inLobby) void refreshLeaderboard();
 
-    // Live "N searching" count on the 1V1 panel — only watched in the lobby.
+    // Live "N searching" (1V1 panel) and "X/12 in the pub" (pub door) counts —
+    // only watched in the lobby.
     if (inLobby) {
       startQueueWatch((n) => {
         app.searching = n;
       });
+      startPubWatch((n) => {
+        app.pubCount = n;
+      });
     } else {
       stopQueueWatch();
       app.searching = -1;
+      stopPubWatch();
+      app.pubCount = -1;
     }
 
     // The action panel only lives inside training runs and bouts; the

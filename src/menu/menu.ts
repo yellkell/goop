@@ -23,6 +23,7 @@ import { customization } from './customization.js';
 import { AVATAR_SKINS, PLATFORM_SKINS } from '../avatar/skins.js';
 import { GAME_TITLE } from '../config.js';
 import { LEADERBOARD_VISIBLE_ROWS, leaderboard, leaderboardRows, myStats } from '../net/leaderboard.js';
+import { PUB_MAX_PLAYERS } from '../pub/protocol.js';
 import { UI, buttonPlate, hazardStrip, plate, stencilFont } from '../ui/industrial.js';
 
 export type PanelId = 'train' | 'duel' | 'info' | 'board' | 'custom';
@@ -249,6 +250,32 @@ function drawInfo(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null)
   panelBg(ctx, false, UI.text, GAME_TITLE);
 
   buttonPlate(ctx, 70, 104, PW - 140, 96, 'IRON BALLS PUB', UI.cool, hoverAction === 'open-pub');
+
+  // Live headcount riding the top-right of the PUB plate — the mirror of the
+  // 1V1 panel's searcher badge, but the room's `X/12` occupancy.
+  if (app.pubCount > 0) {
+    const label = `${app.pubCount}/${PUB_MAX_PLAYERS}`;
+    ctx.font = '800 18px system-ui, sans-serif';
+    const pillW = ctx.measureText(label).width + 38;
+    const pillH = 28;
+    const px = PW - 70 - pillW;
+    const py = 92;
+    plate(ctx, px, py, pillW, pillH, {
+      cut: 8,
+      fill: 'rgba(79,183,255,0.22)',
+      stroke: UI.cool,
+      rivets: false,
+    });
+    ctx.fillStyle = UI.coolBright; // a "live" dot
+    ctx.beginPath();
+    ctx.arc(px + 16, py + pillH / 2, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.textAlign = 'left';
+    ctx.fillStyle = UI.coolBright;
+    ctx.fillText(label, px + 28, py + pillH / 2 + 1);
+    ctx.textAlign = 'center';
+  }
+
   buttonPlate(ctx, 70, 226, PW - 140, 96, 'CUSTOMISE', UI.ember, hoverAction === 'open-custom');
 
   ctx.font = '600 24px system-ui, sans-serif';
