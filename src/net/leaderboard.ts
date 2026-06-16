@@ -27,7 +27,7 @@ export interface LbRow {
 export type LeaderboardTab = 'duel' | 'training';
 
 const LEADERBOARD_FETCH_LIMIT = 50;
-const LEADERBOARD_VISIBLE_ROWS = 6;
+const LEADERBOARD_VISIBLE_ROWS = 7;
 
 /** Live leaderboard state the lobby panel reads each redraw. */
 export const leaderboard = {
@@ -64,9 +64,11 @@ export function setLeaderboardTab(tab: LeaderboardTab): void {
   clampLeaderboardScroll(tab);
 }
 
-export function scrollLeaderboard(delta: number): void {
+export function scrollLeaderboard(delta: number): boolean {
+  const before = leaderboard.scroll[leaderboard.tab];
   leaderboard.scroll[leaderboard.tab] += delta;
   clampLeaderboardScroll(leaderboard.tab);
+  return leaderboard.scroll[leaderboard.tab] !== before;
 }
 
 export function myName(): string {

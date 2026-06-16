@@ -67,6 +67,9 @@ const _dir = new Vector3();
 const _end = new Vector3();
 const _head = new Vector3();
 const _fwd = new Vector3();
+const BOARD_SCROLL_DEADZONE = 0.55;
+const BOARD_SCROLL_INITIAL_REPEAT = 0.28;
+const BOARD_SCROLL_REPEAT = 0.12;
 
 interface Pointer {
   line: Line;
@@ -88,6 +91,8 @@ export class MenuSystem extends createSystem({}) {
   private kbPending: MenuAction | null = null;
   private mirror?: { group: Group; rig: BoxerRig };
   private skinVersion = 0;
+  private boardScrollCooldown = 0;
+  private boardScrollDir = 0;
 
   init(): void {
     this.menu = createMenu(this.scene);
@@ -122,6 +127,8 @@ export class MenuSystem extends createSystem({}) {
 
     // Lobby / queueing: hover + click the panels.
     let hover: PanelId | null = null;
+    let boardPointed = false;
+    let boardScrollAxis = 0;
     const meshes = this.menu.panels.filter((p) => p.mesh.visible).map((p) => p.mesh);
     for (const hand of ['left', 'right'] as const) {
       const hit = this.updatePointer(hand, meshes);
@@ -129,12 +136,18 @@ export class MenuSystem extends createSystem({}) {
       const panel = this.menu.panels.find((p) => p.mesh === hit.object);
       if (!panel) continue;
       hover = panel.id;
+      if (panel.id === 'board') {
+        boardPointed = true;
+        const axis = this.input.xr.gamepads[hand]?.getAxesValues(InputComponent.Thumbstick)?.y ?? 0;
+        if (Math.abs(axis) > Math.abs(boardScrollAxis)) boardScrollAxis = axis;
+      }
       if (hit.uv && this.input.xr.gamepads[hand]?.getButtonDown(InputComponent.Trigger)) {
         const action = panel.hitTest(hit.uv.x, hit.uv.y);
         if (action) this.run(action);
       }
     }
-    if (hover !== this.hovered) {
+    const boardScrolled = this.updateBoardScroll(boardPointed, boardScrollAxis, delta);
+    if (hover !== this.hovered || boardScrolled) {
       this.hovered = hover;
       this.menu.redrawAll(hover);
     }
@@ -145,6 +158,23 @@ export class MenuSystem extends createSystem({}) {
       this.redrawTimer = 0.5;
       this.menu.redrawAll(this.hovered);
     }
+  }
+
+  private updateBoardScroll(pointing: boolean, axisY: number, delta: number): boolean {
+    this.boardScrollCooldown = Math.max(0, this.boardScrollCooldown - delta);
+    if (!pointing || Math.abs(axisY) < BOARD_SCROLL_DEADZONE) {
+      this.boardScrollCooldown = 0;
+      this.boardScrollDir = 0;
+      return false;
+    }
+
+    const dir = axisY > 0 ? 1 : -1;
+    const changedDir = dir !== this.boardScrollDir;
+    if (!changedDir && this.boardScrollCooldown > 0) return false;
+
+    this.boardScrollDir = dir;
+    this.boardScrollCooldown = changedDir ? BOARD_SCROLL_INITIAL_REPEAT : BOARD_SCROLL_REPEAT;
+    return scrollLeaderboard(dir);
   }
 
   private run(action: MenuAction): void {
@@ -194,12 +224,6 @@ export class MenuSystem extends createSystem({}) {
         break;
       case 'lb-training':
         setLeaderboardTab('training');
-        break;
-      case 'lb-up':
-        scrollLeaderboard(-1);
-        break;
-      case 'lb-down':
-        scrollLeaderboard(1);
         break;
       case 'rename':
         this.kbPending = null;

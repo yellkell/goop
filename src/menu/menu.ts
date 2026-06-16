@@ -36,8 +36,6 @@ export type MenuAction =
   | 'toggle-environment'
   | 'lb-duel'
   | 'lb-training'
-  | 'lb-up'
-  | 'lb-down'
   | 'rename'
   | 'open-pub'
   | 'open-custom'
@@ -47,7 +45,7 @@ export type MenuAction =
 
 const PW = 512;
 const PH = 400;
-const BOARD_VISIBLE_ROWS = 6;
+const BOARD_VISIBLE_ROWS = 7;
 
 export interface MenuPanel {
   id: PanelId;
@@ -347,28 +345,24 @@ function drawBoard(ctx: CanvasRenderingContext2D, hover: boolean): void {
   // Ranked rows; your own entry burns ember.
   const rows = leaderboardRows();
   const offset = leaderboard.scroll[leaderboard.tab];
-  const canUp = offset > 0;
-  const canDown = offset + BOARD_VISIBLE_ROWS < rows.length;
-  ctx.font = '600 22px system-ui, sans-serif';
+  ctx.font = '600 21px system-ui, sans-serif';
   rows.slice(offset, offset + BOARD_VISIBLE_ROWS).forEach((r, i) => {
-    const y = 154 + i * 28;
+    const y = 150 + i * 25;
     ctx.fillStyle = r.me ? UI.emberBright : UI.textDim;
     ctx.textAlign = 'left';
     ctx.fillText(`${offset + i + 1}.  ${r.name}`, 56, y);
     ctx.textAlign = 'right';
-    ctx.fillText(String(r.value), PW - 94, y);
+    ctx.fillText(String(r.value), PW - 56, y);
   });
   if (!rows.length) {
     ctx.textAlign = 'center';
     ctx.fillStyle = UI.textDim;
     ctx.fillText(leaderboard.status || 'no entries yet', PW / 2, 230);
   } else if (rows.length > BOARD_VISIBLE_ROWS) {
-    buttonPlate(ctx, PW - 62, 144, 38, 38, 'UP', canUp ? UI.amber : UI.steelDim, hover && canUp);
-    buttonPlate(ctx, PW - 62, 260, 38, 38, 'DN', canDown ? UI.amber : UI.steelDim, hover && canDown);
     ctx.textAlign = 'center';
-    ctx.font = '700 13px system-ui, sans-serif';
+    ctx.font = '700 14px system-ui, sans-serif';
     ctx.fillStyle = UI.textDim;
-    ctx.fillText(`${offset + 1}-${Math.min(offset + BOARD_VISIBLE_ROWS, rows.length)}/${rows.length}`, PW - 43, 232);
+    ctx.fillText(`${offset + 1}-${Math.min(offset + BOARD_VISIBLE_ROWS, rows.length)} / ${rows.length}`, PW - 72, 306);
   }
 
   const mine = myStats();
@@ -383,12 +377,6 @@ function hitBoard(u: number, v: number): MenuAction | null {
   const x = u * PW;
   const y = (1 - v) * PH;
   if (y >= 82 && y <= 138) return u < 0.5 ? 'lb-duel' : 'lb-training';
-  const rows = leaderboardRows();
-  const offset = leaderboard.scroll[leaderboard.tab];
-  if (rows.length > BOARD_VISIBLE_ROWS && x >= PW - 70 && x <= PW - 16) {
-    if (y >= 136 && y <= 190 && offset > 0) return 'lb-up';
-    if (y >= 252 && y <= 306 && offset + BOARD_VISIBLE_ROWS < rows.length) return 'lb-down';
-  }
   if (y >= 336 && y <= 394 && x >= 148 && x <= 364) return 'rename';
   return null;
 }
@@ -498,7 +486,7 @@ export function createMenu(scene: Scene): Menu {
   const train = makePanel('train', 0.86, 0.68, drawTrain, hitTrain);
   const duel = makePanel('duel', 0.78, 0.62, drawDuel, hitDuel);
   const info = makePanel('info', 0.78, 0.62, drawInfo, hitInfo);
-  const board = makePanel('board', 1.0, 0.78, drawBoard, hitBoard);
+  const board = makePanel('board', 1.18, 0.92, drawBoard, hitBoard);
   const custom = makePanel('custom', 0.9, 0.7, drawCustom, hitCustom);
 
   // Shallow arc in front of the player, tilted inward toward the centre.
