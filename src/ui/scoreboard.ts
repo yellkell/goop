@@ -303,10 +303,7 @@ export function createScoreboard(scene: Scene): Scoreboard {
       drawTimer(fmtTime(state.roundTimer));
       drawSide(left, app.mode === 'net' ? displayName(myName(), 'YOU') : 'YOU', UI.emberBright, pHp / pMax, state.myScore);
       drawSide(right, app.mode === 'net' ? displayName(rival.name, 'RIVAL') : 'BOT', UI.cool, oHp / oMax, state.oppScore);
-      drawCentre(
-        state.message,
-        state.phase === 'matchOver' || state.phase === 'countdown' ? '' : state.message ? `R${state.round}` : '',
-      );
+      drawCentre(state.message, '');
       animateVerdict(state.message);
     },
 

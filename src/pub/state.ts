@@ -32,6 +32,8 @@ export interface PubRefs {
   /** Extra dart-stick targets (walls/cabinet) so strays embed somewhere. */
   dartCatchers: Object3D[];
   dartRackSlots: [number, number, number][];
+  /** World-space dispenser volume: grip inside this box to pull a house dart. */
+  dartBox: { center: [number, number, number]; half: [number, number, number] };
   glassSlots: [number, number, number][];
   dartsBoardPanel: Panel;
   arcadeScreen: Mesh;

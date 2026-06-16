@@ -442,27 +442,43 @@ export function buildPub(world: World): PubRefs {
   const rackSlots: [number, number, number][] = [];
   const boxX = darts.boardX - 0.85; // toward the bar side, clear of the wall
   const boxZ = darts.ocheZ;
+  const dartBox = {
+    center: [boxX, 1.3, boxZ] as [number, number, number],
+    half: [0.3, 0.22, 0.24] as [number, number, number],
+  };
+  const crateWood = new MeshStandardMaterial({ map: woodTexture('#7a4a24', [2, 1]), roughness: 0.86, metalness: 0.03 });
+  const crateDarkWood = new MeshStandardMaterial({ map: woodTexture('#3b2414', [1.5, 1]), roughness: 0.9, metalness: 0.02 });
   const tallLeg = new Mesh(new CylinderGeometry(0.04, 0.11, 1.13, 8), gunmetal(0.3));
   tallLeg.position.set(boxX, 0.565, boxZ);
   root.add(tallLeg);
-  const tallTop = new Mesh(new BoxGeometry(0.52, 0.04, 0.42), gunmetal(0.25));
+  const tallTop = new Mesh(new BoxGeometry(0.56, 0.05, 0.46), crateDarkWood);
   tallTop.position.set(boxX, 1.15, boxZ);
   root.add(tallTop);
-  // Open crate walls with a hazard lip.
-  const crateBase = new Mesh(new BoxGeometry(0.44, 0.025, 0.34), darkSteel());
+  // Open wooden crate walls with a small amber rim.
+  const crateBase = new Mesh(new BoxGeometry(0.48, 0.035, 0.38), crateDarkWood);
   crateBase.position.set(boxX, 1.185, boxZ);
   root.add(crateBase);
   for (const [bw, bd, ox, oz] of [
-    [0.44, 0.02, 0, -0.16],
-    [0.44, 0.02, 0, 0.16],
-    [0.02, 0.34, -0.21, 0],
-    [0.02, 0.34, 0.21, 0],
+    [0.5, 0.035, 0, -0.185],
+    [0.5, 0.035, 0, 0.185],
+    [0.035, 0.38, -0.245, 0],
+    [0.035, 0.38, 0.245, 0],
   ] as const) {
-    const wall = new Mesh(new BoxGeometry(bw, 0.1, bd), gunmetal(0.4));
-    wall.position.set(boxX + ox, 1.23, boxZ + oz);
+    const wall = new Mesh(new BoxGeometry(bw, 0.13, bd), crateWood);
+    wall.position.set(boxX + ox, 1.24, boxZ + oz);
     root.add(wall);
   }
-  const lip = new Mesh(new BoxGeometry(0.46, 0.015, 0.36), amberGlow(0.3));
+  for (const [ox, oz] of [
+    [-0.245, -0.185],
+    [0.245, -0.185],
+    [-0.245, 0.185],
+    [0.245, 0.185],
+  ] as const) {
+    const post = new Mesh(new BoxGeometry(0.045, 0.17, 0.045), crateDarkWood);
+    post.position.set(boxX + ox, 1.255, boxZ + oz);
+    root.add(post);
+  }
+  const lip = new Mesh(new BoxGeometry(0.54, 0.015, 0.42), amberGlow(0.18));
   lip.position.set(boxX, 1.285, boxZ);
   root.add(lip);
   // Dart home slots: two rows of three STANDING in the crate, flights up,
@@ -505,6 +521,7 @@ export function buildPub(world: World): PubRefs {
     corkSurround,
     dartCatchers: [northWall],
     dartRackSlots: rackSlots,
+    dartBox,
     glassSlots,
     dartsBoardPanel,
     arcadeScreen: screen,

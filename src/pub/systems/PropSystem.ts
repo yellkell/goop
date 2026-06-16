@@ -19,8 +19,8 @@
  * meshes carry fat invisible grab proxies, so you can actually pick them up.
  */
 
-import { createSystem, Grabbed, OneHandGrabbable, type Entity, type World } from '@iwsdk/core';
-import { Group, Quaternion, Raycaster, Vector3 } from 'three';
+import { createSystem, Grabbed, InputComponent, OneHandGrabbable, type Entity, type World } from '@iwsdk/core';
+import { Group, Mesh, MeshBasicMaterial, Object3D, Quaternion, Raycaster, SphereGeometry, Vector3 } from 'three';
 import { dartFloor, dartStick, glassClink, glassTap, throwWhoosh } from '../../audio/sfx.js';
 import { GLASS, PROP_PHYS, PUB, SURFACES } from '../config.js';
 import { pubSendRaw } from '../net.js';
@@ -54,7 +54,14 @@ interface PropRec {
   hasNetTarget: boolean;
   streamTimer: number;
   home: [number, number, number];
+  /** Manually dispensed from the dart box, outside IWSDK's grabbable handoff. */
+  manualHand: Hand | null;
 }
+
+const HANDS = ['left', 'right'] as const;
+type Hand = (typeof HANDS)[number];
+
+const RANGE_GRAB_MAX = 1.0;
 
 const UP = new Vector3(0, 1, 0);
 const INTO_BOARD = new Vector3(1, 0, 0); // east wall: darts embed pointing +x
@@ -62,6 +69,9 @@ const INTO_BOARD = new Vector3(1, 0, 0); // east wall: darts embed pointing +x
 const raycaster = new Raycaster();
 const _a = new Vector3();
 const _b = new Vector3();
+const _rayOrigin = new Vector3();
+const _rayDir = new Vector3();
+const _highlightPos = new Vector3();
 const _q = new Quaternion();
 
 const recs: PropRec[] = [];
@@ -130,6 +140,7 @@ function addProp(
     hasNetTarget: false,
     streamTimer: 0,
     home,
+    manualHand: null,
   };
   recs.push(rec);
   byId.set(id, rec);
@@ -149,8 +160,24 @@ export class PropSystem extends createSystem({
   /** Fresh pours mid-rise (fill 0 → 1 over a few seconds). */
   private fills: { rec: PropRec; f: number }[] = [];
   private offlineRestock = 0;
+  private rangeHighlight!: Mesh;
 
   init(): void {
+    this.rangeHighlight = new Mesh(
+      new SphereGeometry(1, 18, 10),
+      new MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.48,
+        wireframe: true,
+        depthTest: false,
+        depthWrite: false,
+      }),
+    );
+    this.rangeHighlight.name = 'pub-range-grab-highlight';
+    this.rangeHighlight.visible = false;
+    this.scene.add(this.rangeHighlight);
+
     this.queries.grabbedProps.subscribers.qualify.add((e: Entity) => this.onGrab(e));
     this.queries.grabbedProps.subscribers.disqualify.add((e: Entity) => this.onRelease(e));
 
@@ -170,6 +197,8 @@ export class PropSystem extends createSystem({
         if (holder === pub.myId) return; // our own grant echoing back
         // Someone else has it — including the case where we optimistically
         // grabbed and lost the race: yield and let the network drive it.
+        if (rec.mesh.parent !== this.scene) this.scene.attach(rec.mesh);
+        rec.manualHand = null;
         rec.mode = 'remote';
         restoreOpacity(rec.mesh);
       }),
@@ -191,6 +220,8 @@ export class PropSystem extends createSystem({
         if (rec.mode === 'held' || rec.mode === 'flight' || rec.mode === 'stuck') {
           // Our optimistic local sim was overruled (rare) — server wins.
         }
+        if (rec.mesh.parent !== this.scene) this.scene.attach(rec.mesh);
+        rec.manualHand = null;
         rec.mode = 'rest';
         rec.hasNetTarget = false;
         rec.mesh.position.set(pos[0], pos[1], pos[2]);
@@ -229,11 +260,15 @@ export class PropSystem extends createSystem({
       }
     }
 
+    const didRangeGrab = this.updateRangeGrab();
+    if (!didRangeGrab) this.tryDartBoxDispense();
+
     for (const rec of recs) {
       switch (rec.mode) {
         case 'held':
           this.sampleRing(rec);
           this.stream(rec, delta);
+          if (rec.manualHand && !this.gripHeld(rec.manualHand)) this.releaseHeld(rec);
           break;
         case 'flight':
           this.stepFlight(rec, delta);
@@ -280,6 +315,7 @@ export class PropSystem extends createSystem({
     if (rec.mode === 'stuck') return;
     restoreOpacity(rec.mesh);
     rec.mode = 'held';
+    rec.manualHand = null;
     rec.hasNetTarget = false;
     rec.ring = [];
     rec.stuckTimer = 0;
@@ -296,7 +332,159 @@ export class PropSystem extends createSystem({
   private onRelease(e: Entity): void {
     const rec = this.findRec(e);
     if (!rec || rec.mode !== 'held') return;
+    rec.manualHand = null;
+    this.releaseHeld(rec);
+  }
 
+  private updateRangeGrab(): boolean {
+    const target = this.findRangeTarget();
+    this.updateRangeHighlight(target?.rec ?? null);
+    if (!target) return false;
+
+    const gp = this.input.xr.gamepads[target.hand];
+    const grip = this.player?.gripSpaces[target.hand];
+    if (!gp || !grip || !gp.getButtonDown(InputComponent.Squeeze)) return false;
+
+    this.grabPropFromRange(target.rec, target.hand, grip);
+    this.updateRangeHighlight(null);
+    return true;
+  }
+
+  private findRangeTarget(): { rec: PropRec; hand: Hand; distance: number } | null {
+    let best: { rec: PropRec; hand: Hand; distance: number } | null = null;
+    const candidates = recs.filter((rec) => this.canRangeGrab(rec)).map((rec) => rec.mesh);
+    if (!candidates.length || !this.player) return null;
+
+    for (const hand of HANDS) {
+      if (this.handBusy(hand)) continue;
+      const ray = this.player.raySpaces[hand];
+      if (!ray) continue;
+      ray.getWorldPosition(_rayOrigin);
+      ray.getWorldQuaternion(_q);
+      _rayDir.set(0, 0, -1).applyQuaternion(_q);
+      raycaster.set(_rayOrigin, _rayDir);
+      raycaster.far = RANGE_GRAB_MAX;
+
+      const hits = raycaster.intersectObjects(candidates, true);
+      for (const hit of hits) {
+        const rec = this.recFromObject(hit.object);
+        if (!rec || !this.canRangeGrab(rec)) continue;
+        if (!best || hit.distance < best.distance) best = { rec, hand, distance: hit.distance };
+        break;
+      }
+    }
+    return best;
+  }
+
+  private recFromObject(obj: Object3D): PropRec | null {
+    for (let o: Object3D | null = obj; o; o = o.parent) {
+      const rec = recs.find((r) => r.mesh === o);
+      if (rec) return rec;
+    }
+    return null;
+  }
+
+  private canRangeGrab(rec: PropRec): boolean {
+    if (!rec.active || !rec.mesh.visible || rec.mode !== 'rest') return false;
+    const net = pub.props.get(rec.id);
+    if (net?.holder && net.holder !== pub.myId) return false;
+    if (net && net.mode !== 'rest' && net.holder !== pub.myId) return false;
+    return true;
+  }
+
+  private handBusy(hand: Hand): boolean {
+    return recs.some((rec) => rec.mode === 'held' && rec.manualHand === hand);
+  }
+
+  private updateRangeHighlight(rec: PropRec | null): void {
+    if (!this.rangeHighlight) return;
+    if (!rec) {
+      this.rangeHighlight.visible = false;
+      return;
+    }
+
+    rec.mesh.getWorldPosition(_highlightPos);
+    if (rec.kind === 'glass') _highlightPos.y += (GLASS.height * GLASS.scale) / 2;
+    this.rangeHighlight.position.copy(_highlightPos);
+
+    const radius = rec.kind === 'glass' ? 0.15 : 0.09;
+    const pulse = 1 + Math.sin(performance.now() * 0.009) * 0.06;
+    this.rangeHighlight.scale.setScalar(radius * pulse);
+    const mat = this.rangeHighlight.material as MeshBasicMaterial;
+    mat.opacity = 0.42 + Math.sin(performance.now() * 0.012) * 0.08;
+    this.rangeHighlight.visible = true;
+  }
+
+  private grabPropFromRange(rec: PropRec, hand: Hand, grip: Object3D): void {
+    this.beginManualGrab(rec, hand, grip);
+  }
+
+  private tryDartBoxDispense(): void {
+    const refs = pub.refs;
+    const player = this.player;
+    if (!refs || !player) return;
+    for (const hand of HANDS) {
+      const gp = this.input.xr.gamepads[hand];
+      const grip = player.gripSpaces[hand];
+      if (!gp || !grip || !gp.getButtonDown(InputComponent.Squeeze)) continue;
+      grip.getWorldPosition(_a);
+      if (!this.inDartBox(_a)) continue;
+      const rec = this.nextBoxDart();
+      if (!rec) continue;
+      this.grabDartFromBox(rec, hand, grip);
+    }
+  }
+
+  private inDartBox(pos: Vector3): boolean {
+    const box = pub.refs?.dartBox;
+    if (!box) return false;
+    const [cx, cy, cz] = box.center;
+    const [hx, hy, hz] = box.half;
+    return (
+      Math.abs(pos.x - cx) <= hx &&
+      Math.abs(pos.y - cy) <= hy &&
+      Math.abs(pos.z - cz) <= hz
+    );
+  }
+
+  private nextBoxDart(): PropRec | null {
+    const resting = recs.filter((r) => r.kind === 'dart' && r.active && r.mode === 'rest');
+    if (!resting.length) return null;
+    return resting.find((r) => r.mesh.position.distanceToSquared(_a.set(r.home[0], r.home[1], r.home[2])) < 0.16) ?? resting[0];
+  }
+
+  private grabDartFromBox(rec: PropRec, hand: Hand, grip: Object3D): void {
+    this.beginManualGrab(rec, hand, grip);
+  }
+
+  private beginManualGrab(rec: PropRec, hand: Hand, grip: Object3D): void {
+    restoreOpacity(rec.mesh);
+    rec.mode = 'held';
+    rec.manualHand = hand;
+    rec.hasNetTarget = false;
+    rec.ring = [];
+    rec.stuckTimer = 0;
+    rec.fadeTimer = 0;
+    rec.vel.set(0, 0, 0);
+    grip.attach(rec.mesh);
+    if (rec.kind === 'dart') {
+      // Tip points along controller forward, sitting just proud of the palm.
+      rec.mesh.position.set(0, -0.015, -0.085);
+      rec.mesh.quaternion.setFromUnitVectors(UP, _a.set(0, 0, -1));
+    } else {
+      // Pint origin is the base; tuck it slightly below and forward of grip.
+      rec.mesh.position.set(0, -0.09, -0.065);
+      rec.mesh.quaternion.identity();
+    }
+    this.sampleRing(rec);
+    pubSendRaw({ t: 'grab', id: rec.id });
+  }
+
+  private gripHeld(hand: Hand): boolean {
+    return (this.input.xr.gamepads[hand]?.getButtonPressed(InputComponent.Squeeze) ?? false);
+  }
+
+  private releaseHeld(rec: PropRec): void {
     // If the grab system reparented the mesh to a hand, put it back in the
     // scene without moving it.
     if (rec.mesh.parent !== this.scene) this.scene.attach(rec.mesh);
@@ -315,6 +503,7 @@ export class PropSystem extends createSystem({
     }
 
     rec.mode = 'flight';
+    rec.manualHand = null;
     if (rec.vel.lengthSq() > 4) throwWhoosh();
     pubSendRaw({ t: 'release', id: rec.id });
   }

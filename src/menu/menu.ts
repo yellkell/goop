@@ -50,7 +50,7 @@ const BOARD_VISIBLE_ROWS = 7;
 export interface MenuPanel {
   id: PanelId;
   mesh: Mesh;
-  redraw: (hover: boolean) => void;
+  redraw: (hoverAction: MenuAction | null) => void;
   /** Map a hit UV (u right, v up) to an action, or null. */
   hitTest: (u: number, v: number) => MenuAction | null;
 }
@@ -59,7 +59,7 @@ export interface Menu {
   group: Group;
   panels: MenuPanel[];
   setVisible: (v: boolean) => void;
-  redrawAll: (hoverId: PanelId | null) => void;
+  redrawAll: (hoverId: PanelId | null, hoverAction: MenuAction | null) => void;
 }
 
 /** The shared panel skeleton: smoked plate, hazard chip, stencil title. */
@@ -88,7 +88,7 @@ function makePanel(
   id: PanelId,
   wMeters: number,
   hMeters: number,
-  draw: (ctx: CanvasRenderingContext2D, hover: boolean) => void,
+  draw: (ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null) => void,
   hitTest: MenuPanel['hitTest'],
 ): MenuPanel {
   const canvas = document.createElement('canvas');
@@ -104,30 +104,31 @@ function makePanel(
     new MeshBasicMaterial({ map: texture, transparent: true }),
   );
   mesh.name = `menu-panel:${id}`;
-  const redraw = (hover: boolean): void => {
-    draw(ctx, hover);
+  const redraw = (hoverAction: MenuAction | null): void => {
+    draw(ctx, hoverAction);
     texture.needsUpdate = true;
   };
   return { id, mesh, redraw, hitTest };
 }
 
 /** Centre — AIM TRAINING: the big start plate + the shoot-back toggle. */
-function drawTrain(ctx: CanvasRenderingContext2D, hover: boolean): void {
-  panelBg(ctx, hover, UI.emberBright, 'AIM TRAINING');
+function drawTrain(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
+  panelBg(ctx, false, UI.emberBright, 'AIM TRAINING');
 
-  buttonPlate(ctx, 70, 120, PW - 140, 110, 'START', UI.ember, hover);
+  buttonPlate(ctx, 70, 120, PW - 140, 110, 'START', UI.ember, hoverAction === 'start-training');
 
   // Shoot-back toggle row: an industrial breaker switch.
   const on = app.shootBack;
+  const toggleHot = hoverAction === 'toggle-shootback';
   ctx.font = '700 28px system-ui, sans-serif';
   ctx.textAlign = 'left';
-  ctx.fillStyle = UI.textDim;
+  ctx.fillStyle = toggleHot ? UI.emberBright : UI.textDim;
   ctx.fillText('targets shoot back', 64, 300);
   const pw = 120, ph = 56, px = PW - 64 - pw, py = 272;
   plate(ctx, px, py, pw, ph, {
     cut: 10,
-    fill: on ? 'rgba(79,183,255,0.25)' : 'rgba(150,150,170,0.12)',
-    stroke: on ? UI.cool : UI.steelDim,
+    fill: on ? 'rgba(79,183,255,0.25)' : toggleHot ? 'rgba(255,176,0,0.16)' : 'rgba(150,150,170,0.12)',
+    stroke: toggleHot ? UI.emberBright : on ? UI.cool : UI.steelDim,
     rivets: false,
   });
   ctx.fillStyle = on ? UI.cool : UI.steelDim;
@@ -149,15 +150,16 @@ function hitTrain(_u: number, v: number): MenuAction | null {
 }
 
 /** Left — 1V1: quick match (or cancel) + vs bot. */
-function drawDuel(ctx: CanvasRenderingContext2D, hover: boolean): void {
-  panelBg(ctx, hover, UI.cool, '1 V 1');
+function drawDuel(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
+  panelBg(ctx, false, UI.cool, '1 V 1');
 
   const queueing = app.state === 'queueing';
+  const queueAction = queueing ? 'cancel-queue' : 'quick-match';
   buttonPlate(
     ctx, 70, 108, PW - 140, 84,
     queueing ? 'CANCEL' : 'QUICK MATCH',
     queueing ? UI.amber : UI.cool,
-    hover,
+    hoverAction === queueAction,
   );
 
   // Live "N searching" badge riding the top-right of the QUICK MATCH plate, so
@@ -186,20 +188,21 @@ function drawDuel(ctx: CanvasRenderingContext2D, hover: boolean): void {
     ctx.textAlign = 'center';
   }
 
-  buttonPlate(ctx, 70, 200, PW - 140, 84, 'VS BOT', UI.ember, hover);
+  buttonPlate(ctx, 70, 200, PW - 140, 84, 'VS BOT', UI.ember, hoverAction === 'vs-bot');
 
   // Desert-arena breaker switch, right under VS BOT: flips the whole arena
   // between the papercraft desert and bare AR passthrough, held across modes.
   const on = app.environment === 'desert';
+  const environmentHot = hoverAction === 'toggle-environment';
   ctx.font = '700 26px system-ui, sans-serif';
   ctx.textAlign = 'left';
-  ctx.fillStyle = UI.textDim;
+  ctx.fillStyle = environmentHot ? UI.amber : UI.textDim;
   ctx.fillText('desert arena', 64, 322);
   const sw = 120, sh = 48, sx = PW - 64 - sw, sy = 298;
   plate(ctx, sx, sy, sw, sh, {
     cut: 10,
-    fill: on ? 'rgba(255,176,0,0.22)' : 'rgba(150,150,170,0.12)',
-    stroke: on ? UI.amber : UI.steelDim,
+    fill: on ? 'rgba(255,176,0,0.22)' : environmentHot ? 'rgba(255,176,0,0.16)' : 'rgba(150,150,170,0.12)',
+    stroke: environmentHot || on ? UI.amber : UI.steelDim,
     rivets: false,
   });
   ctx.fillStyle = on ? UI.amber : UI.steelDim;
@@ -228,11 +231,11 @@ function hitDuel(_u: number, v: number): MenuAction | null {
 }
 
 /** Right — doors out of the lobby: the PUB social area + customisation. */
-function drawInfo(ctx: CanvasRenderingContext2D, hover: boolean): void {
-  panelBg(ctx, hover, UI.text, GAME_TITLE);
+function drawInfo(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
+  panelBg(ctx, false, UI.text, GAME_TITLE);
 
-  buttonPlate(ctx, 70, 104, PW - 140, 96, 'IRON BALLS PUB', UI.cool, hover);
-  buttonPlate(ctx, 70, 226, PW - 140, 96, 'CUSTOMISE', UI.ember, hover);
+  buttonPlate(ctx, 70, 104, PW - 140, 96, 'IRON BALLS PUB', UI.cool, hoverAction === 'open-pub');
+  buttonPlate(ctx, 70, 226, PW - 140, 96, 'CUSTOMISE', UI.ember, hoverAction === 'open-custom');
 
   ctx.font = '600 24px system-ui, sans-serif';
   ctx.fillStyle = UI.textDim;
@@ -251,14 +254,15 @@ function hitInfo(_u: number, v: number): MenuAction | null {
  * avatar mirror standing beside it. One chip row per slot: three live
  * skins + a greyed-out COMING SOON.
  */
-function drawCustom(ctx: CanvasRenderingContext2D, hover: boolean): void {
-  panelBg(ctx, hover, UI.emberBright, 'CUSTOMISE');
+function drawCustom(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
+  panelBg(ctx, false, UI.emberBright, 'CUSTOMISE');
 
   const chipRow = (
     label: string,
     skins: Array<{ name: string; locked?: boolean; accent?: number; neon?: number }>,
     selectedIdx: number,
     y: number,
+    actionPrefix: 'av' | 'pf',
   ): void => {
     ctx.textAlign = 'left';
     ctx.font = '700 22px system-ui, sans-serif';
@@ -271,15 +275,23 @@ function drawCustom(ctx: CanvasRenderingContext2D, hover: boolean): void {
       const hex = s.locked ? undefined : ((s.accent ?? s.neon ?? 0xffffff) as number);
       const css = hex !== undefined ? `#${hex.toString(16).padStart(6, '0')}` : UI.steelDim;
       const selected = i === selectedIdx;
+      const action = `${actionPrefix}-${i}` as MenuAction;
+      const hot = !s.locked && hoverAction === action;
       plate(ctx, x, cy, w, 54, {
         cut: 8,
-        fill: s.locked ? 'rgba(60,62,70,0.25)' : selected ? 'rgba(20,22,30,0.92)' : 'rgba(10,11,15,0.7)',
-        stroke: s.locked ? UI.steelDim : selected ? css : UI.steel,
+        fill: s.locked
+          ? 'rgba(60,62,70,0.25)'
+          : selected
+            ? 'rgba(20,22,30,0.92)'
+            : hot
+              ? 'rgba(20,22,30,0.9)'
+              : 'rgba(10,11,15,0.7)',
+        stroke: s.locked ? UI.steelDim : selected || hot ? css : UI.steel,
         rivets: false,
       });
       ctx.textAlign = 'center';
       ctx.font = `700 ${s.name.length > 7 ? 18 : 21}px system-ui, sans-serif`;
-      ctx.fillStyle = s.locked ? UI.steelDim : selected ? css : UI.text;
+      ctx.fillStyle = s.locked ? UI.steelDim : selected || hot ? css : UI.text;
       ctx.fillText(s.name, x + w / 2, cy + 23);
       ctx.font = '600 13px system-ui, sans-serif';
       ctx.fillStyle = s.locked ? UI.steelDim : 'rgba(232,236,242,0.45)';
@@ -288,10 +300,10 @@ function drawCustom(ctx: CanvasRenderingContext2D, hover: boolean): void {
     ctx.textAlign = 'center';
   };
 
-  chipRow('AVATAR', AVATAR_SKINS, AVATAR_SKINS.findIndex((s) => s.id === customization.avatar), 102);
-  chipRow('PLATFORM', PLATFORM_SKINS, PLATFORM_SKINS.findIndex((s) => s.id === customization.platform), 204);
+  chipRow('AVATAR', AVATAR_SKINS, AVATAR_SKINS.findIndex((s) => s.id === customization.avatar), 102, 'av');
+  chipRow('PLATFORM', PLATFORM_SKINS, PLATFORM_SKINS.findIndex((s) => s.id === customization.platform), 204, 'pf');
 
-  buttonPlate(ctx, 156, 296, 200, 56, 'CLOSE', UI.amber, hover);
+  buttonPlate(ctx, 156, 296, 200, 56, 'CLOSE', UI.amber, hoverAction === 'custom-close');
   ctx.font = '600 20px system-ui, sans-serif';
   ctx.fillStyle = UI.textDim;
   ctx.fillText('looks only — your hitbox never changes', PW / 2, 376);
@@ -317,8 +329,8 @@ function hitCustom(u: number, v: number): MenuAction | null {
 }
 
 /** Behind — the Firebase leaderboard: 1V1 score / aim training tabs. */
-function drawBoard(ctx: CanvasRenderingContext2D, hover: boolean): void {
-  panelBg(ctx, hover, UI.amber, 'LEADERBOARD');
+function drawBoard(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
+  panelBg(ctx, false, UI.amber, 'LEADERBOARD');
 
   // Tab plates: 1V1 (score) | AIM TRAINING (best runs).
   const tabs: Array<['duel' | 'training', string]> = [
@@ -329,15 +341,21 @@ function drawBoard(ctx: CanvasRenderingContext2D, hover: boolean): void {
   let x = 48;
   for (const [id, label] of tabs) {
     const active = leaderboard.tab === id;
+    const action: MenuAction = id === 'duel' ? 'lb-duel' : 'lb-training';
+    const hot = hoverAction === action;
     plate(ctx, x, 88, tw, 44, {
       cut: 10,
-      fill: active ? 'rgba(255,176,0,0.18)' : 'rgba(150,150,170,0.10)',
-      stroke: active ? UI.amber : UI.steelDim,
+      fill: active
+        ? 'rgba(255,176,0,0.18)'
+        : hot
+          ? 'rgba(255,176,0,0.14)'
+          : 'rgba(150,150,170,0.10)',
+      stroke: active || hot ? UI.amber : UI.steelDim,
       rivets: false,
     });
     ctx.font = '700 24px system-ui, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillStyle = active ? UI.amber : UI.textDim;
+    ctx.fillStyle = active || hot ? UI.amber : UI.textDim;
     ctx.fillText(label, x + tw / 2, 110);
     x += tw + 16;
   }
@@ -365,7 +383,7 @@ function drawBoard(ctx: CanvasRenderingContext2D, hover: boolean): void {
   ctx.font = '700 20px system-ui, sans-serif';
   ctx.fillStyle = UI.amberSoft;
   ctx.fillText(`${mine.name}  ·  score ${mine.score}  ·  aim best ${mine.training}`, PW / 2, 326);
-  buttonPlate(ctx, 156, 344, 200, 44, 'RENAME', UI.amber, hover);
+  buttonPlate(ctx, 156, 344, 200, 44, 'RENAME', UI.amber, hoverAction === 'rename');
 }
 
 function hitBoard(u: number, v: number): MenuAction | null {
@@ -502,7 +520,7 @@ export function createMenu(scene: Scene): Menu {
 
   const panels = [train, duel, info, board, custom];
   for (const p of panels) {
-    p.redraw(false);
+    p.redraw(null);
     group.add(p.mesh);
   }
   scene.add(group);
@@ -513,8 +531,8 @@ export function createMenu(scene: Scene): Menu {
     setVisible: (v) => {
       group.visible = v;
     },
-    redrawAll: (hoverId) => {
-      for (const p of panels) p.redraw(p.id === hoverId);
+    redrawAll: (hoverId, hoverAction) => {
+      for (const p of panels) p.redraw(p.id === hoverId ? hoverAction : null);
     },
   };
 }

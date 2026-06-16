@@ -80,6 +80,7 @@ export class MenuSystem extends createSystem({}) {
   private menu!: Menu;
   private ray = new Raycaster();
   private hovered: PanelId | null = null;
+  private hoveredAction: MenuAction | null = null;
   private lastState: AppState | null = null;
   private pointers: Record<'left' | 'right', Pointer> = {} as Record<'left' | 'right', Pointer>;
   private redrawTimer = 0;
@@ -127,6 +128,7 @@ export class MenuSystem extends createSystem({}) {
 
     // Lobby / queueing: hover + click the panels.
     let hover: PanelId | null = null;
+    let hoverAction: MenuAction | null = null;
     let boardPointed = false;
     let boardScrollAxis = 0;
     const meshes = this.menu.panels.filter((p) => p.mesh.visible).map((p) => p.mesh);
@@ -135,28 +137,32 @@ export class MenuSystem extends createSystem({}) {
       if (!hit) continue;
       const panel = this.menu.panels.find((p) => p.mesh === hit.object);
       if (!panel) continue;
-      hover = panel.id;
       if (panel.id === 'board') {
         boardPointed = true;
         const axis = this.input.xr.gamepads[hand]?.getAxesValues(InputComponent.Thumbstick)?.y ?? 0;
         if (Math.abs(axis) > Math.abs(boardScrollAxis)) boardScrollAxis = axis;
       }
+      const action = hit.uv ? panel.hitTest(hit.uv.x, hit.uv.y) : null;
+      if (action || !hoverAction) {
+        hover = panel.id;
+        hoverAction = action;
+      }
       if (hit.uv && this.input.xr.gamepads[hand]?.getButtonDown(InputComponent.Trigger)) {
-        const action = panel.hitTest(hit.uv.x, hit.uv.y);
         if (action) this.run(action);
       }
     }
     const boardScrolled = this.updateBoardScroll(boardPointed, boardScrollAxis, delta);
-    if (hover !== this.hovered || boardScrolled) {
+    if (hover !== this.hovered || hoverAction !== this.hoveredAction || boardScrolled) {
       this.hovered = hover;
-      this.menu.redrawAll(hover);
+      this.hoveredAction = hoverAction;
+      this.menu.redrawAll(hover, hoverAction);
     }
 
     // Periodic redraw so live text (queue status) stays fresh.
     this.redrawTimer -= delta;
     if (this.redrawTimer <= 0) {
       this.redrawTimer = 0.5;
-      this.menu.redrawAll(this.hovered);
+      this.menu.redrawAll(this.hovered, this.hoveredAction);
     }
   }
 
@@ -326,7 +332,7 @@ export class MenuSystem extends createSystem({}) {
           const pending = this.kbPending;
           this.kbPending = null;
           if (pending) this.run(pending);
-          else this.menu.redrawAll(this.hovered);
+          else this.menu.redrawAll(this.hovered, this.hoveredAction);
           return;
         }
       }
@@ -544,7 +550,7 @@ export class MenuSystem extends createSystem({}) {
     const oppPlatform = this.scene.getObjectByName('opponent-platform');
     if (oppPlatform) oppPlatform.visible = app.state !== 'training';
 
-    if (inLobby) this.menu.redrawAll(this.hovered);
+    if (inLobby) this.menu.redrawAll(this.hovered, this.hoveredAction);
     this.lastState = app.state;
   }
 }
