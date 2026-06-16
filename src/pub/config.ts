@@ -89,9 +89,11 @@ export const JUKEBOX = {
   pos: [-2.3, 0, HALF_D - 0.5] as [number, number, number],
   /** Pull the trigger with a hand within this (XZ) of the cabinet to flip stations. */
   reach: 1.0,
-  /** Loudness is full within hearNear and fades to nothing past hearFar (XZ metres). */
-  hearNear: 1.3,
-  hearFar: 7.5,
+  /** Loudness is full within hearNear and fades to nothing past hearFar (XZ
+   *  metres). hearFar clears the pub's far corners (~10 m diagonal from the
+   *  cabinet) so the music carries across the whole room, fading toward the hall. */
+  hearNear: 2.5,
+  hearFar: 15,
   volume: 0.6,
   /** Music ducks to this fraction while anyone in the room is talking. */
   duck: 0.34,
