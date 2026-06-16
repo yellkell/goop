@@ -295,10 +295,17 @@ export class PropSystem extends createSystem({
     // Darts resting in the box are HIDDEN — the crate just reads "GRAB DARTS";
     // a dart only appears once it's pulled out (held/flight/stuck) or is lying
     // out in the room. Driven off state so it stays right for remote darts too.
+    // A boxed dart is ALSO taken off IWSDK's near-grab (pointerEvents 'none'):
+    // the reach-in dispense is the only way to draw one, so the grab pointer
+    // can't pluck a SECOND dart on the same squeeze. (The pointer system ignores
+    // `visible`, so hiding the dart alone wouldn't stop it.)
     for (const rec of recs) {
       if (rec.kind !== 'dart') continue;
-      const show = !(rec.mode === 'rest' && this.inDartBox(rec.mesh.position));
+      const inBox = rec.mode === 'rest' && this.inDartBox(rec.mesh.position);
+      const show = !inBox;
       if (rec.mesh.visible !== show) rec.mesh.visible = show;
+      const pe = inBox ? 'none' : undefined;
+      if (rec.mesh.pointerEvents !== pe) rec.mesh.pointerEvents = pe;
     }
   }
 
@@ -428,6 +435,7 @@ export class PropSystem extends createSystem({
     const player = this.player;
     if (!refs || !player) return;
     for (const hand of HANDS) {
+      if (this.handBusy(hand)) continue; // a full hand can't draw a second dart
       const gp = this.input.xr.gamepads[hand];
       const grip = player.gripSpaces[hand];
       if (!gp || !grip || !gp.getButtonDown(InputComponent.Squeeze)) continue;
