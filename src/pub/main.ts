@@ -19,7 +19,7 @@
  * `?name=YourCallsign` sets your name; `?server=wss://host:8788` picks a relay.
  */
 
-import { SessionMode, World } from '@iwsdk/core';
+import { launchXR, SessionMode, World } from '@iwsdk/core';
 import { initFirePools } from '../fx/fire.js';
 import * as sfx from '../audio/sfx.js';
 import { customization } from '../menu/customization.js';
@@ -39,6 +39,18 @@ import { ClimbSystem } from './systems/ClimbSystem.js';
 import { FXSystem } from '../systems/FXSystem.js';
 
 const container = document.getElementById('scene-container') as HTMLDivElement;
+const enterVrButton = document.getElementById('enter-vr') as HTMLButtonElement | null;
+
+enterVrButton?.setAttribute('disabled', '');
+
+function hideLanding(): void {
+  document.body.classList.add('app-entered');
+}
+
+function showLanding(): void {
+  document.body.classList.remove('app-entered');
+  enterVrButton?.removeAttribute('disabled');
+}
 
 function resolveName(): string {
   const param = new URLSearchParams(location.search).get('name');
@@ -78,7 +90,7 @@ World.create(container, {
   // A fully virtual interior — no passthrough; the pub IS the room.
   xr: {
     sessionMode: SessionMode.ImmersiveVR,
-    offer: 'always',
+    offer: 'none',
   },
   features: {
     // Movement is TELEPORT ONLY (our own arc-and-octagon system on the
@@ -91,7 +103,7 @@ World.create(container, {
     defaultLighting: false,
     camera: { position: [PUB.spawn.x, 1.6, PUB.spawn.z] },
   },
-}).then((world) => {
+}).then(async (world) => {
   pub.myName = resolveName();
   pub.refs = buildPub(world);
   initFirePools(world.scene); // ember/trail pools for the fight hall
@@ -118,12 +130,38 @@ World.create(container, {
   // Your arena cosmetics walk in with you.
   pubConnect(pubServerUrl(), pub.myName, customization.avatar, customization.platform);
 
-  // Swinging-doors entrance for yourself, once the session's gesture has
-  // unlocked audio.
-  setTimeout(() => {
-    sfx.ensureAudio();
-    sfx.saloonEntry();
-  }, 700);
+  const xrSupported = (await navigator.xr?.isSessionSupported(SessionMode.ImmersiveVR).catch(() => false)) === true;
+
+  if (enterVrButton && xrSupported) {
+    enterVrButton.removeAttribute('disabled');
+    enterVrButton.addEventListener('click', () => {
+      enterVrButton.setAttribute('disabled', '');
+      launchXR(world, { sessionMode: SessionMode.ImmersiveVR });
+
+      const watchForSession = () => {
+        if (world.session) {
+          hideLanding();
+          world.session.addEventListener('end', showLanding, { once: true });
+          setTimeout(() => {
+            sfx.ensureAudio();
+            sfx.saloonEntry();
+          }, 700);
+          return;
+        }
+
+        if (!document.body.classList.contains('app-entered')) {
+          requestAnimationFrame(watchForSession);
+        }
+      };
+
+      requestAnimationFrame(watchForSession);
+      window.setTimeout(() => {
+        if (!world.session) enterVrButton.removeAttribute('disabled');
+      }, 4000);
+    });
+  } else if (enterVrButton) {
+    enterVrButton.textContent = 'XR unavailable';
+  }
 
   // eslint-disable-next-line no-console
   console.info('[IRON BALLS PUB] Doors open. Mind the low beams.');

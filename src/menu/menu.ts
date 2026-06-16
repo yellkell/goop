@@ -358,11 +358,6 @@ function drawBoard(ctx: CanvasRenderingContext2D, hover: boolean): void {
     ctx.textAlign = 'center';
     ctx.fillStyle = UI.textDim;
     ctx.fillText(leaderboard.status || 'no entries yet', PW / 2, 230);
-  } else if (rows.length > BOARD_VISIBLE_ROWS) {
-    ctx.textAlign = 'center';
-    ctx.font = '700 14px system-ui, sans-serif';
-    ctx.fillStyle = UI.textDim;
-    ctx.fillText(`${offset + 1}-${Math.min(offset + BOARD_VISIBLE_ROWS, rows.length)} / ${rows.length}`, PW - 72, 306);
   }
 
   const mine = myStats();

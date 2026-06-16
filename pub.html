@@ -23,11 +23,122 @@
         inset: 0;
         width: 100vw;
         height: 100vh;
+        background:
+          radial-gradient(circle at 70% 22%, rgba(255, 176, 0, 0.2), transparent 28rem),
+          linear-gradient(135deg, #08090c 0%, #111317 48%, #1c1009 100%);
+      }
+      .landing {
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+        display: grid;
+        align-items: center;
+        padding: clamp(24px, 7vw, 96px);
+        box-sizing: border-box;
+        color: #f4efe8;
+        background:
+          linear-gradient(90deg, rgba(5, 6, 9, 0.95) 0%, rgba(5, 6, 9, 0.74) 50%, rgba(5, 6, 9, 0.22) 100%),
+          linear-gradient(180deg, rgba(255, 176, 0, 0.18) 0%, rgba(255, 176, 0, 0) 42%);
+        transition:
+          opacity 220ms ease,
+          visibility 220ms ease;
+      }
+      .landing::after {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        background:
+          linear-gradient(90deg, rgba(255, 255, 255, 0.055) 1px, transparent 1px),
+          linear-gradient(180deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+        background-size: 72px 72px;
+        mask-image: linear-gradient(90deg, rgba(0, 0, 0, 0.72), transparent 68%);
+      }
+      .landing__content {
+        position: relative;
+        z-index: 1;
+        max-width: 660px;
+      }
+      .landing__eyebrow {
+        margin: 0 0 18px;
+        color: #ffb000;
+        font-size: clamp(3.1rem, 8.4vw, 7.6rem);
+        font-weight: 900;
+        line-height: 0.9;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+      .landing__subtitle {
+        margin: 0 0 34px;
+        color: rgba(244, 239, 232, 0.82);
+        font-size: clamp(1.05rem, 2.4vw, 1.8rem);
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+      .enter-vr {
+        width: min(100%, 280px);
+        min-height: 68px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 8px;
+        box-sizing: border-box;
+        padding: 0 34px;
+        color: #120906;
+        background: linear-gradient(180deg, #ffd278 0%, #ff8a24 100%);
+        box-shadow:
+          0 18px 48px rgba(255, 138, 36, 0.24),
+          inset 0 1px 0 rgba(255, 255, 255, 0.5);
+        cursor: pointer;
+        font: 900 1.08rem/1 system-ui, -apple-system, sans-serif;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+      .enter-vr:hover,
+      .enter-vr:focus-visible {
+        transform: translateY(-1px);
+        box-shadow:
+          0 24px 58px rgba(255, 138, 36, 0.32),
+          inset 0 1px 0 rgba(255, 255, 255, 0.56);
+      }
+      .enter-vr:focus-visible {
+        outline: 3px solid rgba(255, 255, 255, 0.78);
+        outline-offset: 4px;
+      }
+      .enter-vr:disabled {
+        cursor: wait;
+        opacity: 0.72;
+        transform: none;
+      }
+      body.app-entered .landing {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+      }
+      @media (max-width: 700px) {
+        .landing {
+          align-items: end;
+        }
+        .landing__eyebrow {
+          font-size: clamp(2.5rem, 16vw, 4.5rem);
+        }
+        .landing__subtitle {
+          font-size: clamp(0.95rem, 4.8vw, 1.2rem);
+        }
+        .enter-vr {
+          width: 100%;
+        }
       }
     </style>
   </head>
   <body>
     <div id="scene-container"></div>
+    <section class="landing" id="landing" aria-labelledby="landing-title">
+      <main class="landing__content">
+        <h1 class="landing__eyebrow" id="landing-title">Iron Balls Pub</h1>
+        <p class="landing__subtitle">Fire Fight Social</p>
+        <button class="enter-vr" id="enter-vr" type="button">Enter VR</button>
+      </main>
+    </section>
     <script type="module" src="/src/pub/main.ts"></script>
   </body>
 </html>
