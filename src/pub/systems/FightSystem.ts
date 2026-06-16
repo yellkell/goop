@@ -301,7 +301,9 @@ export class FightSystem extends createSystem({}) {
       this.lastServerTimer = f.roundTimer;
       if (f.roundTimer > 0) this.roundClock = f.roundTimer;
     }
-    if (fighting) this.roundClock = Math.max(0, this.roundClock - delta);
+    // Tick locally through both the live round AND the pre-round 3-2-1 so the
+    // clock/countdown always moves between the server's whole-second snaps.
+    if (fighting || f.phase === 'starting') this.roundClock = Math.max(0, this.roundClock - delta);
 
     this.updateMatchBoard();
     this.tryFistBump(delta);
@@ -404,7 +406,10 @@ export class FightSystem extends createSystem({}) {
     if (f.phase !== this.lastPhase) {
       switch (f.phase) {
         case 'starting':
+          // Open the 3-2-1: first tick now, then count down locally to the bell.
           sfx.uiClick();
+          this.roundClock = FIGHT.startCountdown;
+          this.lastServerTimer = f.roundTimer;
           break;
         case 'fighting':
           // Every round opens with the bell + full health + balls back at fists.
@@ -433,6 +438,8 @@ export class FightSystem extends createSystem({}) {
           break;
       }
       this.lastPhase = f.phase;
+    } else if (f.phase === 'starting') {
+      sfx.uiClick(); // each second of the countdown ticks over (3 → 2 → 1)
     }
     this.renderConsoles();
     this.renderDisplay();
@@ -1069,22 +1076,27 @@ export class FightSystem extends createSystem({}) {
     const oppName = this.nameOf(f.sides[opp]);
     const myHp = Math.max(0, f.hp[side]) / FIGHT.hpMax;
     const oppHp = Math.max(0, f.hp[opp]) / FIGHT.hpMax;
+    const counting = f.phase === 'starting';
     const secs = Math.max(0, Math.ceil(this.roundClock));
-    const clk = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
-    const headline =
-      f.phase === 'starting'
-        ? `R${f.round}`
-        : f.phase === 'fighting'
-          ? 'FIGHT'
-          : f.phase === 'roundOver'
-            ? !f.winner
-              ? 'DRAW'
-              : f.winner === pub.myId
-              ? 'WIN'
-              : 'LOSS'
+    // During the 3-2-1 the headline IS the count and the clock shows the round.
+    const clk = counting
+      ? `R${f.round}`
+      : `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+    const headline = counting
+      ? secs > 0
+        ? `${secs}`
+        : 'FIGHT'
+      : f.phase === 'fighting'
+        ? 'FIGHT'
+        : f.phase === 'roundOver'
+          ? !f.winner
+            ? 'DRAW'
             : f.winner === pub.myId
-              ? 'YOU WIN'
-              : 'YOU LOSE';
+            ? 'WIN'
+            : 'LOSS'
+          : f.winner === pub.myId
+            ? 'YOU WIN'
+            : 'YOU LOSE';
 
     // Skip the canvas redraw + GPU upload when nothing visible changed.
     const key = `${myName}|${oppName}|${f.hp[side]}|${f.hp[opp]}|${f.score[side]}|${f.score[opp]}|${clk}|${headline}`;
@@ -1214,11 +1226,14 @@ export class FightSystem extends createSystem({}) {
       ctx.textAlign = 'center';
       const winnerSide = f.sides[1] === f.winner ? 1 : 0;
       const winnerName = this.nameOf(f.winner).toUpperCase().slice(0, 10);
+      const count = Math.max(0, Math.ceil(f.roundTimer)); // the pre-round 3-2-1
       const status =
         f.phase === 'idle'
           ? 'OPEN'
           : f.phase === 'starting'
-            ? 'READY'
+            ? count > 0
+              ? `${count}`
+              : 'FIGHT'
             : f.phase === 'fighting'
               ? 'FIGHT'
               : f.phase === 'roundOver'

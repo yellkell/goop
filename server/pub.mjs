@@ -86,16 +86,17 @@ let joinCount = 0;
 
 // --- fight hall lifecycle -------------------------------------------------------
 // Best of 5 (first to WIN_TARGET round wins), mirroring the arena's MATCH:
-//   idle → (both corners claimed) starting → (3s) fighting
+//   idle → (both corners claimed) starting (3-2-1) → fighting
 //   round ends on a KO (hp 0) or when ROUND_TIME runs out (higher hp wins)
-//   → roundOver (3s) → next round's fighting … until someone reaches 3 →
-//   over (6s) → idle. Fighters report their own hp (victim-authoritative,
-//   like the arena); the server rules on the round/match lifecycle.
+//   → roundOver (a breather) → starting (3-2-1) → next round's fighting …
+//   until someone reaches 3 → over → idle. Fighters report their own hp
+//   (victim-authoritative, like the arena); the server rules on the lifecycle.
 // Keep these in sync with FIGHT in src/pub/config.ts.
 const HP_MAX = 100;
 const WIN_TARGET = 3; // round wins to take the match (best of 5)
 const ROUND_TIME = 60; // seconds per round
-const ROUND_OVER_DELAY = 5; // seconds of round-result pause
+const START_COUNTDOWN = 3; // pre-round 3-2-1 countdown, before EVERY round
+const ROUND_OVER_DELAY = 7; // seconds of round-result breather between rounds
 const MATCH_OVER_DELAY = 6; // seconds of match-result pause
 const fight = {
   phase: 'idle',
@@ -138,19 +139,25 @@ function resetFight() {
   fight.winner = null;
 }
 
-/** Both corners claimed → fresh match: zero the card, then the pre-fight 3s. */
+/** Both corners claimed → fresh match: zero the card, then round 1's countdown. */
 function startMatch() {
   fight.score = [0, 0];
-  fight.round = 1;
   fight.winner = null;
+  startRound(1);
+}
+
+/** Open a round on a 3-2-1 countdown ('starting'). The round-clock tick rolls
+ *  it into the bell (beginRound) when it reaches zero — so EVERY round, not
+ *  just the first, gets the countdown. */
+function startRound(roundNum) {
+  clearTimeout(fightTimer);
+  fightTimer = null;
+  fight.round = roundNum;
   fight.phase = 'starting';
   fight.hp = [HP_MAX, HP_MAX];
-  fight.roundTimer = ROUND_TIME;
+  fight.roundTimer = START_COUNTDOWN;
+  fight.winner = null;
   broadcastFight();
-  clearTimeout(fightTimer);
-  fightTimer = setTimeout(() => {
-    if (fight.phase === 'starting' && fight.sides[0] && fight.sides[1]) beginRound();
-  }, 3000);
 }
 
 /** Bell: full health, clock reset, live. */
@@ -177,10 +184,7 @@ function endRound(winnerSide) {
   broadcastFight();
   clearTimeout(fightTimer);
   fightTimer = setTimeout(() => {
-    if (fight.sides[0] && fight.sides[1]) {
-      fight.round += 1;
-      beginRound();
-    }
+    if (fight.sides[0] && fight.sides[1]) startRound(fight.round + 1);
   }, ROUND_OVER_DELAY * 1000);
 }
 
@@ -207,14 +211,23 @@ function leaveFight(id) {
   }
 }
 
-// Round clock: tick only while a round is live; higher hp wins on time-out.
+// Round clock + pre-round countdown: tick while a round is live (higher hp wins
+// on time-out) AND while the 3-2-1 counts down (ring the bell at zero).
 setInterval(() => {
-  if (fight.phase !== 'fighting') return;
-  fight.roundTimer = Math.max(0, fight.roundTimer - 0.25);
-  if (fight.roundTimer <= 0) {
-    endRound(fight.hp[0] === fight.hp[1] ? null : fight.hp[0] > fight.hp[1] ? 0 : 1);
-  } else if (Math.ceil(fight.roundTimer) !== lastTimerSent) {
-    broadcastFight(); // push the clock only when the displayed second changes
+  if (fight.phase === 'fighting') {
+    fight.roundTimer = Math.max(0, fight.roundTimer - 0.25);
+    if (fight.roundTimer <= 0) {
+      endRound(fight.hp[0] === fight.hp[1] ? null : fight.hp[0] > fight.hp[1] ? 0 : 1);
+    } else if (Math.ceil(fight.roundTimer) !== lastTimerSent) {
+      broadcastFight(); // push the clock only when the displayed second changes
+    }
+  } else if (fight.phase === 'starting') {
+    fight.roundTimer = Math.max(0, fight.roundTimer - 0.25);
+    if (fight.roundTimer <= 0) {
+      if (fight.sides[0] && fight.sides[1]) beginRound();
+    } else if (Math.ceil(fight.roundTimer) !== lastTimerSent) {
+      broadcastFight(); // push the countdown second so clients show 3 → 2 → 1
+    }
   }
 }, 250);
 

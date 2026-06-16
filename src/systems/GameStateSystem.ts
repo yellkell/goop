@@ -124,7 +124,8 @@ export class GameStateSystem extends createSystem({
             this.toMatchOver();
           } else {
             match.round += 1;
-            this.beginRound(c);
+            // Open the next round on a 3-2-1 countdown, not straight into play.
+            this.beginCountdown(c, MATCH.roundCountdown);
           }
         } else {
           // matchOver (bot bouts) → back to the lobby; drop the background
@@ -196,12 +197,15 @@ export class GameStateSystem extends createSystem({
     }
   }
 
-  private beginCountdown(c: Boxers): void {
+  /** Pre-round hold + 3-2-1: `duration` is the full lead-in (the count shows
+   *  for its last 3 s). The first round squares up over MATCH.startDelay; later
+   *  rounds open on a snappier MATCH.roundCountdown. */
+  private beginCountdown(c: Boxers, duration = MATCH.startDelay): void {
     for (const e of [c.me, c.them]) {
       e.setValue(Health, 'current', e.getValue(Health, 'max') ?? 100);
     }
     match.phase = 'countdown';
-    match.roundTimer = MATCH.startDelay;
+    match.roundTimer = duration;
     match.resultTimer = 0;
     match.message = '';
     match.resetCount += 1; // park balls at fists before the pre-fight hold
