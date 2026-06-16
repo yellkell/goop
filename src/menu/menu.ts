@@ -22,7 +22,7 @@ import { app } from './appState.js';
 import { customization } from './customization.js';
 import { AVATAR_SKINS, PLATFORM_SKINS } from '../avatar/skins.js';
 import { GAME_TITLE } from '../config.js';
-import { leaderboard, leaderboardRows, myStats } from '../net/leaderboard.js';
+import { LEADERBOARD_VISIBLE_ROWS, leaderboard, leaderboardRows, myStats } from '../net/leaderboard.js';
 import { UI, buttonPlate, hazardStrip, plate, stencilFont } from '../ui/industrial.js';
 
 export type PanelId = 'train' | 'duel' | 'info' | 'board' | 'custom';
@@ -45,7 +45,11 @@ export type MenuAction =
 
 const PW = 512;
 const PH = 400;
-const BOARD_VISIBLE_ROWS = 7;
+// The leaderboard plate is taller than the lobby panels so the whole top 10
+// fits at once — its own canvas (same width, more height) and a physical size
+// scaled to match, so the text keeps the lobby's pixel density (no stretch).
+const BW = 512;
+const BH = 548;
 
 export interface MenuPanel {
   id: PanelId;
@@ -62,10 +66,18 @@ export interface Menu {
   redrawAll: (hoverId: PanelId | null, hoverAction: MenuAction | null) => void;
 }
 
-/** The shared panel skeleton: smoked plate, hazard chip, stencil title. */
-function panelBg(ctx: CanvasRenderingContext2D, hover: boolean, accent: string, title: string): void {
-  ctx.clearRect(0, 0, PW, PH);
-  plate(ctx, 8, 8, PW - 16, PH - 16, {
+/** The shared panel skeleton: smoked plate, hazard chip, stencil title. The
+ *  taller leaderboard plate passes its own width/height. */
+function panelBg(
+  ctx: CanvasRenderingContext2D,
+  hover: boolean,
+  accent: string,
+  title: string,
+  w = PW,
+  h = PH,
+): void {
+  ctx.clearRect(0, 0, w, h);
+  plate(ctx, 8, 8, w - 16, h - 16, {
     cut: 26,
     fill: hover ? 'rgba(14,15,20,0.6)' : UI.ink,
     stroke: hover ? accent : UI.steel,
@@ -79,7 +91,7 @@ function panelBg(ctx: CanvasRenderingContext2D, hover: boolean, accent: string, 
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(36, 72);
-  ctx.lineTo(PW - 36, 72);
+  ctx.lineTo(w - 36, 72);
   ctx.stroke();
   ctx.textAlign = 'center';
 }
@@ -90,10 +102,12 @@ function makePanel(
   hMeters: number,
   draw: (ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null) => void,
   hitTest: MenuPanel['hitTest'],
+  cw = PW,
+  ch = PH,
 ): MenuPanel {
   const canvas = document.createElement('canvas');
-  canvas.width = PW;
-  canvas.height = PH;
+  canvas.width = cw;
+  canvas.height = ch;
   const ctx = canvas.getContext('2d')!;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -328,16 +342,20 @@ function hitCustom(u: number, v: number): MenuAction | null {
   return null;
 }
 
+// Leaderboard row band: the full top 10 laid out at once, then the footer.
+const BOARD_ROW_Y0 = 152;
+const BOARD_ROW_STEP = 30;
+
 /** Behind — the Firebase leaderboard: 1V1 score / aim training tabs. */
 function drawBoard(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
-  panelBg(ctx, false, UI.amber, 'LEADERBOARD');
+  panelBg(ctx, false, UI.amber, 'LEADERBOARD', BW, BH);
 
   // Tab plates: 1V1 (score) | AIM TRAINING (best runs).
   const tabs: Array<['duel' | 'training', string]> = [
     ['duel', '1V1'],
     ['training', 'AIM TRAINING'],
   ];
-  const tw = (PW - 96 - 16) / 2;
+  const tw = (BW - 96 - 16) / 2;
   let x = 48;
   for (const [id, label] of tabs) {
     const active = leaderboard.tab === id;
@@ -360,37 +378,37 @@ function drawBoard(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null
     x += tw + 16;
   }
 
-  // Ranked rows; your own entry burns ember.
+  // Ranked rows — the whole top 10 at a glance; your own entry burns ember.
   const rows = leaderboardRows();
   const offset = leaderboard.scroll[leaderboard.tab];
-  ctx.font = '600 21px system-ui, sans-serif';
-  rows.slice(offset, offset + BOARD_VISIBLE_ROWS).forEach((r, i) => {
-    const y = 150 + i * 25;
+  ctx.font = '600 22px system-ui, sans-serif';
+  rows.slice(offset, offset + LEADERBOARD_VISIBLE_ROWS).forEach((r, i) => {
+    const y = BOARD_ROW_Y0 + i * BOARD_ROW_STEP;
     ctx.fillStyle = r.me ? UI.emberBright : UI.textDim;
     ctx.textAlign = 'left';
     ctx.fillText(`${offset + i + 1}.  ${r.name}`, 56, y);
     ctx.textAlign = 'right';
-    ctx.fillText(String(r.value), PW - 56, y);
+    ctx.fillText(String(r.value), BW - 56, y);
   });
   if (!rows.length) {
     ctx.textAlign = 'center';
     ctx.fillStyle = UI.textDim;
-    ctx.fillText(leaderboard.status || 'no entries yet', PW / 2, 230);
+    ctx.fillText(leaderboard.status || 'no entries yet', BW / 2, BOARD_ROW_Y0 + 4 * BOARD_ROW_STEP);
   }
 
   const mine = myStats();
   ctx.textAlign = 'center';
   ctx.font = '700 20px system-ui, sans-serif';
   ctx.fillStyle = UI.amberSoft;
-  ctx.fillText(`${mine.name}  ·  score ${mine.score}  ·  aim best ${mine.training}`, PW / 2, 326);
-  buttonPlate(ctx, 156, 344, 200, 44, 'RENAME', UI.amber, hoverAction === 'rename');
+  ctx.fillText(`${mine.name}  ·  score ${mine.score}  ·  aim best ${mine.training}`, BW / 2, 466);
+  buttonPlate(ctx, 156, 486, 200, 44, 'RENAME', UI.amber, hoverAction === 'rename');
 }
 
 function hitBoard(u: number, v: number): MenuAction | null {
-  const x = u * PW;
-  const y = (1 - v) * PH;
+  const x = u * BW;
+  const y = (1 - v) * BH;
   if (y >= 82 && y <= 138) return u < 0.5 ? 'lb-duel' : 'lb-training';
-  if (y >= 336 && y <= 394 && x >= 148 && x <= 364) return 'rename';
+  if (y >= 478 && y <= 534 && x >= 148 && x <= 364) return 'rename';
   return null;
 }
 
@@ -499,7 +517,9 @@ export function createMenu(scene: Scene): Menu {
   const train = makePanel('train', 0.86, 0.68, drawTrain, hitTrain);
   const duel = makePanel('duel', 0.78, 0.62, drawDuel, hitDuel);
   const info = makePanel('info', 0.78, 0.62, drawInfo, hitInfo);
-  const board = makePanel('board', 1.36, 1.06, drawBoard, hitBoard);
+  // Taller than the lobby panels (1.36 × 1.456 ≈ BW:BH) so the full top 10
+  // reads at a glance; its own BW×BH canvas keeps the text at lobby density.
+  const board = makePanel('board', 1.36, 1.456, drawBoard, hitBoard, BW, BH);
   const custom = makePanel('custom', 0.9, 0.7, drawCustom, hitCustom);
 
   // Shallow arc in front of the player, tilted inward toward the centre.

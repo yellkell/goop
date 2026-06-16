@@ -27,7 +27,10 @@ export interface LbRow {
 export type LeaderboardTab = 'duel' | 'training';
 
 const LEADERBOARD_FETCH_LIMIT = 50;
-const LEADERBOARD_VISIBLE_ROWS = 7;
+/** Rows the lobby board shows at once — the full top 10, no scrolling needed
+ *  to take in the ladder; ranks 11+ (up to the fetch limit) reveal on scroll.
+ *  The menu panel imports this so what's drawn and what scroll clamps to agree. */
+export const LEADERBOARD_VISIBLE_ROWS = 10;
 
 /** Live leaderboard state the lobby panel reads each redraw. */
 export const leaderboard = {
