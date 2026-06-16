@@ -566,6 +566,11 @@ export class PropSystem extends createSystem({
         }
       }
       if (landY === null && p.y <= 0) landY = 0;
+      // Land on TOP of a resting glass we're dropping onto — that's how a pint
+      // stacks. Nest on the highest one in the column so a glass piles onto the
+      // top of a stack rather than passing through it to the table.
+      const stackTop = this.glassStackTopUnder(rec, prevY);
+      if (stackTop !== null) landY = Math.max(landY ?? -1, stackTop);
       if (landY !== null) {
         p.y = landY;
         const speed = rec.vel.length();
@@ -592,8 +597,49 @@ export class PropSystem extends createSystem({
     const p = rec.mesh.position;
     rec.mesh.quaternion.identity();
 
-    // Stack: snap onto the topmost resting glass under us within reach.
-    let bestTop: number | null = null;
+    // Stack: if we settled within reach of a glass column, sit on TOP of its
+    // HIGHEST glass — crown the stack, never wedge into a mid-level slot. Only
+    // when we came to rest at or above the column's base, so a glass on the
+    // floor beneath a shelved one doesn't leap up to it.
+    let topBase: number | null = null;
+    let topX = 0;
+    let topZ = 0;
+    let lowBase = Infinity;
+    for (const other of recs) {
+      if (other === rec || other.kind !== 'glass') continue;
+      if (other.mode !== 'rest' && other.mode !== 'remote') continue;
+      const op = other.mesh.position;
+      const dx = op.x - p.x;
+      const dz = op.z - p.z;
+      if (dx * dx + dz * dz > GLASS.stackSnap * GLASS.stackSnap) continue;
+      if (op.y < lowBase) lowBase = op.y;
+      if (topBase === null || op.y > topBase) {
+        topBase = op.y;
+        topX = op.x;
+        topZ = op.z;
+      }
+    }
+    const stacked = topBase !== null && p.y >= lowBase - GLASS.stackRise;
+    if (stacked) {
+      p.x = topX;
+      p.z = topZ;
+      p.y = topBase! + GLASS.stackRise;
+    }
+    // Glass-on-glass clinks; glass-on-surface gives a soft tap.
+    if (stacked) glassClink();
+    else glassTap(false);
+
+    rec.mode = 'rest';
+    rec.vel.set(0, 0, 0);
+    this.sendSettle(rec);
+  }
+
+  /** Base height a falling glass should nest at if a resting glass sits in its
+   *  column (within stackSnap XZ) and it's descending onto it — the highest
+   *  such support, so it tops a tall stack. Null if there's nothing to stack on. */
+  private glassStackTopUnder(rec: PropRec, prevY: number): number | null {
+    const p = rec.mesh.position;
+    let best: number | null = null;
     for (const other of recs) {
       if (other === rec || other.kind !== 'glass') continue;
       if (other.mode !== 'rest' && other.mode !== 'remote') continue;
@@ -602,20 +648,9 @@ export class PropSystem extends createSystem({
       const dz = op.z - p.z;
       if (dx * dx + dz * dz > GLASS.stackSnap * GLASS.stackSnap) continue;
       const top = op.y + GLASS.stackRise;
-      if (Math.abs(p.y - top) < 0.16 && (bestTop === null || top > bestTop)) {
-        bestTop = top;
-        p.x = op.x;
-        p.z = op.z;
-      }
+      if (prevY >= top - 0.02 && p.y <= top && (best === null || top > best)) best = top;
     }
-    if (bestTop !== null) p.y = bestTop;
-    // Glass-on-glass clinks; glass-on-surface gives a soft tap.
-    if (bestTop !== null) glassClink();
-    else glassTap(false);
-
-    rec.mode = 'rest';
-    rec.vel.set(0, 0, 0);
-    this.sendSettle(rec);
+    return best;
   }
 
   private stepDart(rec: PropRec, step: Vector3): void {

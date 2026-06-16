@@ -157,6 +157,12 @@ export const TELEPORT = {
   gravity: 9.8,
   arcPoints: 48,
   arcStep: 0.035, // seconds of simulated flight per arc sample
+  // Snap turn: an ISOLATED left/right flick (when NOT aiming a teleport) yaws
+  // the rig a fixed step. Forward/back still starts a teleport, and rolling the
+  // stick sideways WHILE aiming keeps steering the landing facing as before.
+  snapAngle: (35 * Math.PI) / 180, // radians turned per flick
+  snapEngage: 0.7, // sideways magnitude that fires a snap
+  snapReset: 0.3, // re-arm once the stick springs back below this
 };
 
 /** Overall pint-glass size multiplier — proper big-hander pub pints. */

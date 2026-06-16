@@ -68,6 +68,24 @@ export function teleportPlayer(player: XROrigin, x: number, z: number, yaw: numb
   player.position.z = z - (-offX * sin + offZ * cos);
 }
 
+/**
+ * Snap-turn the rig by `deltaYaw` radians about the player's HEAD, so your
+ * physical spot stays put and the world spins around you (rotating about the
+ * rig origin would swing your head through an arc). Positive yaw turns left.
+ */
+export function snapTurn(player: XROrigin, deltaYaw: number): void {
+  player.head.getWorldPosition(_head);
+  const hx = _head.x;
+  const hz = _head.z;
+  player.rotation.y += deltaYaw;
+  const offX = hx - player.position.x;
+  const offZ = hz - player.position.z;
+  const cos = Math.cos(deltaYaw);
+  const sin = Math.sin(deltaYaw);
+  player.position.x = hx - (offX * cos + offZ * sin);
+  player.position.z = hz - (-offX * sin + offZ * cos);
+}
+
 function inTeleportArea(x: number, z: number): boolean {
   return TELEPORT_AREAS.some((a) => x >= a.minX && x <= a.maxX && z >= a.minZ && z <= a.maxZ);
 }
@@ -94,6 +112,8 @@ export class TeleportSystem extends createSystem({}) {
   private landingYaw = 0;
   private valid = false;
   private spawned = false;
+  /** Snap turn fires once per flick: armed again only after the stick recentres. */
+  private snapArmed = true;
 
   init(): void {
     // Arc line — a fat world-unit ribbon (LineBasicMaterial ignores width).
@@ -162,7 +182,13 @@ export class TeleportSystem extends createSystem({}) {
       return;
     }
 
-    // Pick / keep the aiming hand.
+    // Not mid-aim? An isolated sideways flick is a snap turn (forward/back is
+    // left for teleport; sideways WHILE aiming steers facing, handled below).
+    if (!this.aimingHand && this.trySnapTurn()) return;
+
+    // Pick / keep the aiming hand. A teleport only STARTS on a forward/back
+    // push (vertical-dominant) so a sideways flick stays free for snap turn;
+    // once aiming, the stick angle still steers the landing facing.
     let axes: { x: number; y: number } | null = null;
     if (this.aimingHand) {
       const a = this.input.xr.gamepads[this.aimingHand]?.getAxesValues(InputComponent.Thumbstick);
@@ -170,7 +196,7 @@ export class TeleportSystem extends createSystem({}) {
     } else {
       for (const hand of ['left', 'right'] as const) {
         const a = this.input.xr.gamepads[hand]?.getAxesValues(InputComponent.Thumbstick);
-        if (a && Math.hypot(a.x, a.y) >= TELEPORT.engage) {
+        if (a && Math.hypot(a.x, a.y) >= TELEPORT.engage && Math.abs(a.y) >= Math.abs(a.x)) {
           this.aimingHand = hand;
           axes = a;
           break;
@@ -265,6 +291,40 @@ export class TeleportSystem extends createSystem({}) {
     this.marker.rotation.y = this.landingYaw;
     this.marker.visible = true;
     this.arc.visible = true;
+  }
+
+  /**
+   * An isolated left/right flick of either stick yaws the rig by snapAngle.
+   * One turn per flick: the stick must spring back below snapReset to re-arm,
+   * so holding it sideways doesn't spin you. Returns true if it turned.
+   */
+  private trySnapTurn(): boolean {
+    let sx = 0;
+    let sy = 0;
+    let mag = 0;
+    for (const hand of ['left', 'right'] as const) {
+      const a = this.input.xr.gamepads[hand]?.getAxesValues(InputComponent.Thumbstick);
+      if (!a) continue;
+      const m = Math.hypot(a.x, a.y);
+      if (m > mag) {
+        mag = m;
+        sx = a.x;
+        sy = a.y;
+      }
+    }
+    if (mag < TELEPORT.snapReset) {
+      this.snapArmed = true;
+      return false;
+    }
+    // A clear sideways flick past the threshold — turn the way it's pushed
+    // (stick right yaws you right, which is a NEGATIVE rotation about +y).
+    if (this.snapArmed && Math.abs(sx) >= TELEPORT.snapEngage && Math.abs(sx) > Math.abs(sy)) {
+      this.snapArmed = false;
+      snapTurn(this.player, sx > 0 ? -TELEPORT.snapAngle : TELEPORT.snapAngle);
+      uiClick();
+      return true;
+    }
+    return false;
   }
 
   private hide(): void {
