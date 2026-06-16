@@ -150,18 +150,18 @@ export function corkTexture(): CanvasTexture {
 // --- Dartboard ---------------------------------------------------------------
 
 /**
- * The house board: a big, readable bullseye TARGET — concentric rings worth
- * 50 / 25 / 20 / 10 / 5 from the centre out. No regulation segments, no
- * triple-twenty arithmetic: what you see is what you score. Shared ring
- * fractions keep `scoreFromUV` exact.
+ * The house board: a big, readable bullseye target with traditional pub-board
+ * colours, but still simple radius scoring: 50 / 20 / 10 / 5 / 1 from the
+ * centre out. No 25 circle, no regulation segment arithmetic.
  */
-const RINGS: Array<{ r: number; score: number; fill: string }> = [
-  { r: 0.06, score: 50, fill: '#cf2030' }, // bullseye
-  { r: 0.18, score: 25, fill: '#e8e0d0' },
-  { r: 0.42, score: 20, fill: '#cf2030' },
-  { r: 0.7, score: 10, fill: '#e8e0d0' },
-  { r: 1.0, score: 5, fill: '#cf2030' },
+const RINGS: Array<{ r: number; score: number; fills: [string, string] }> = [
+  { r: 0.07, score: 50, fills: ['#b91526', '#b91526'] }, // bullseye
+  { r: 0.33, score: 20, fills: ['#181713', '#eadfc8'] },
+  { r: 0.58, score: 10, fills: ['#eadfc8', '#181713'] },
+  { r: 0.78, score: 5, fills: ['#b91526', '#147a3d'] },
+  { r: 1.0, score: 1, fills: ['#147a3d', '#b91526'] },
 ];
+const SEGMENTS = 20;
 const RIM_PX = 6; // dead rim pixels on the 512 canvas
 
 export function dartboardTexture(): CanvasTexture {
@@ -170,30 +170,61 @@ export function dartboardTexture(): CanvasTexture {
     const R = s / 2 - RIM_PX;
     ctx.fillStyle = '#0a0a0a';
     ctx.fillRect(0, 0, s, s);
-    // Paint outside-in so each smaller ring sits on top.
+    // Paint outside-in bands. Wedges are visual only; scoring stays radius-
+    // based so the board remains readable in VR.
     for (let i = RINGS.length - 1; i >= 0; i--) {
-      ctx.beginPath();
-      ctx.arc(c, c, R * RINGS[i].r, 0, Math.PI * 2);
-      ctx.fillStyle = RINGS[i].fill;
-      ctx.fill();
+      const inner = i === 0 ? 0 : RINGS[i - 1].r;
+      const outer = RINGS[i].r;
+      for (let seg = 0; seg < SEGMENTS; seg++) {
+        const a0 = -Math.PI / 2 + (seg / SEGMENTS) * Math.PI * 2;
+        const a1 = -Math.PI / 2 + ((seg + 1) / SEGMENTS) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.arc(c, c, R * outer, a0, a1);
+        if (inner > 0) ctx.arc(c, c, R * inner, a1, a0, true);
+        else ctx.lineTo(c, c);
+        ctx.closePath();
+        ctx.fillStyle = RINGS[i].fills[seg % 2];
+        ctx.fill();
+      }
     }
-    ctx.strokeStyle = 'rgba(20,20,20,0.7)';
+
+    ctx.strokeStyle = 'rgba(235,226,205,0.32)';
+    ctx.lineWidth = 1.2;
+    for (let seg = 0; seg < SEGMENTS; seg++) {
+      const a = -Math.PI / 2 + (seg / SEGMENTS) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.moveTo(c, c);
+      ctx.lineTo(c + Math.cos(a) * R, c + Math.sin(a) * R);
+      ctx.stroke();
+    }
+
+    ctx.strokeStyle = 'rgba(16,16,16,0.85)';
     ctx.lineWidth = 3;
     for (const ring of RINGS) {
       ctx.beginPath();
       ctx.arc(c, c, R * ring.r, 0, Math.PI * 2);
       ctx.stroke();
     }
+
+    ctx.beginPath();
+    ctx.arc(c, c, R, 0, Math.PI * 2);
+    ctx.strokeStyle = '#24201a';
+    ctx.lineWidth = 8;
+    ctx.stroke();
     // Ring values printed straight onto the bands (skip the tiny bullseye).
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     for (let i = 1; i < RINGS.length; i++) {
       const mid = (RINGS[i - 1].r + RINGS[i].r) / 2;
-      const dark = RINGS[i].fill !== '#e8e0d0';
-      ctx.fillStyle = dark ? '#e8e0d0' : '#1a1a1a';
       ctx.font = `bold ${i === 1 ? 22 : 30}px sans-serif`;
+      ctx.lineWidth = 5;
+      ctx.strokeStyle = '#0b0b0b';
+      ctx.fillStyle = '#f4ead3';
       for (const ang of [-Math.PI / 2, Math.PI / 2, 0, Math.PI]) {
-        ctx.fillText(String(RINGS[i].score), c + Math.cos(ang) * R * mid, c + Math.sin(ang) * R * mid);
+        const x = c + Math.cos(ang) * R * mid;
+        const y = c + Math.sin(ang) * R * mid;
+        ctx.strokeText(String(RINGS[i].score), x, y);
+        ctx.fillText(String(RINGS[i].score), x, y);
       }
     }
   });
