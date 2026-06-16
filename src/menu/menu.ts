@@ -481,7 +481,7 @@ export function createMenu(scene: Scene): Menu {
   const train = makePanel('train', 0.86, 0.68, drawTrain, hitTrain);
   const duel = makePanel('duel', 0.78, 0.62, drawDuel, hitDuel);
   const info = makePanel('info', 0.78, 0.62, drawInfo, hitInfo);
-  const board = makePanel('board', 1.18, 0.92, drawBoard, hitBoard);
+  const board = makePanel('board', 1.36, 1.06, drawBoard, hitBoard);
   const custom = makePanel('custom', 0.9, 0.7, drawCustom, hitCustom);
 
   // Shallow arc in front of the player, tilted inward toward the centre.
