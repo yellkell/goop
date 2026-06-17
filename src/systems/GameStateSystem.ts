@@ -102,6 +102,11 @@ export class GameStateSystem extends createSystem({
       if (match.roundTimer <= 0) this.beginRound(c);
     } else if (match.phase === 'playing') {
       match.roundTimer = Math.max(0, match.roundTimer - delta);
+      // The "FIGHT" bell cue flashes in, then clears so the HUD reads clean.
+      if (match.message === 'FIGHT' && match.roundTimer <= MATCH.roundTime - 1.2) {
+        match.message = '';
+        if (app.mode === 'net') this.echoState();
+      }
       if (pHp <= 0 || oHp <= 0) {
         if (pHp <= 0 && oHp <= 0) this.endRound('draw', 'ko');
         else this.endRound(oHp <= 0 ? 'win' : 'loss', 'ko');
@@ -224,7 +229,7 @@ export class GameStateSystem extends createSystem({
     }
     match.roundTimer = MATCH.roundTime;
     match.resultTimer = 0;
-    match.message = '';
+    match.message = 'FIGHT'; // slams up at the bell; cleared ~1.2 s into the round
     match.phase = 'playing';
     match.resetCount += 1; // FireballSystem parks all balls back at fists
     sfx.roundBell();
