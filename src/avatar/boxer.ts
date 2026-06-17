@@ -670,7 +670,10 @@ function buildEaglePelvis(accent: number): Group {
         new BoxGeometry(0.05, 0.12 - i * 0.02, 0.11),
         i === 0 ? chassisMat(accent, 0.04) : glowMat(accent, 0.4),
       );
-      t.position.set(side * (0.09 + i * 0.03), -0.04 - i * 0.04, 0);
+      // Stagger the layers in DEPTH (z), not just XY — otherwise the glow plate
+      // and the chassis plate share a front plane where they overlap and the
+      // neon z-fights/flickers. The glow edge now sits proud in front.
+      t.position.set(side * (0.09 + i * 0.03), -0.04 - i * 0.04, -i * 0.022);
       t.rotation.z = side * (0.28 + i * 0.1);
       g.add(t);
     }
