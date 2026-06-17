@@ -48,9 +48,9 @@ export function fitStencilText(
 
 /**
  * Forged-steel headline lettering — the countdown, FIGHT, the verdicts. A dark
- * gunmetal face with a lit accent "power seam", wrapped in accent neon tubing
- * (a wide halo + a crisp rim), set in a heavy near-black casing so it reads as a
- * plate cut-out lit from within.
+ * gunmetal face graded top-to-bottom (steel sheen → deep shadow), wrapped in
+ * accent neon tubing (a wide halo + a crisp rim), set in a heavy near-black
+ * casing so it reads as a plate cut-out lit from within.
  */
 export function metalText(
   ctx: CanvasRenderingContext2D,
@@ -82,15 +82,14 @@ export function metalText(
   ctx.strokeText(text, x, y);
   ctx.shadowBlur = 0;
 
-  // 3) Dark gunmetal face: a steel top sheen falling to near-black, with a thin
-  //    lit accent SEAM raked across the middle.
+  // 3) Dark gunmetal face: a single steel top sheen falling smoothly to
+  //    near-black. No mid-glyph accent seam — it read as a line slicing the
+  //    text in half; the neon now lives only on the rim from step 2.
   const metal = ctx.createLinearGradient(0, y - px * 0.58, 0, y + px * 0.56);
   metal.addColorStop(0.0, '#c2ccda'); // top sheen (a softer steel, not white)
-  metal.addColorStop(0.13, '#6f7a88');
-  metal.addColorStop(0.4, '#272d37');
-  metal.addColorStop(0.49, accent); // the lit power seam
-  metal.addColorStop(0.55, '#151a21');
-  metal.addColorStop(0.8, '#0a0d12');
+  metal.addColorStop(0.16, '#6f7a88');
+  metal.addColorStop(0.5, '#2a313c');
+  metal.addColorStop(0.8, '#0d121a');
   metal.addColorStop(1.0, '#04060a'); // deep shadow base
   ctx.fillStyle = metal;
   ctx.fillText(text, x, y);
