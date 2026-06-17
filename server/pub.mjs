@@ -80,7 +80,7 @@ let snakePlayer = null;
 // Jukebox station the whole room shares (−1 = off). Flipped at the cabinet by
 // any punter; reset when the pub empties. Mirrors JUKEBOX in src/pub/config.ts.
 let music = -1;
-const MUSIC_STATIONS = 2;
+const MUSIC_STATIONS = 12; // = JUKEBOX.stations.length in src/pub/config.ts
 let nextId = 1;
 let joinCount = 0;
 

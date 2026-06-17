@@ -133,6 +133,15 @@ export function isSpeaking(id: string): boolean {
   return !!speaker && performance.now() - speaker.lastFrame < SPEAKING_MS;
 }
 
+/** Is anyone in the room talking right now? (The jukebox ducks music under chat.) */
+export function anyPubVoiceSpeaking(): boolean {
+  const now = performance.now();
+  for (const s of speakers.values()) {
+    if (now - s.lastFrame < SPEAKING_MS) return true;
+  }
+  return false;
+}
+
 /** Tear down a speaker when their punter leaves. */
 export function removeVoiceSpeaker(id: string): void {
   const speaker = speakers.get(id);

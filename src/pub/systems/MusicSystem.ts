@@ -21,7 +21,7 @@ import { uiClick } from '../../audio/sfx.js';
 import { JUKEBOX } from '../config.js';
 import { pubSendRaw } from '../net.js';
 import { bus, pub } from '../state.js';
-import { anyPubVoiceSpeaking } from '../voice/livekit.js';
+import { anyPubVoiceSpeaking } from '../voice/playback.js';
 
 const HANDS = ['left', 'right'] as const;
 
