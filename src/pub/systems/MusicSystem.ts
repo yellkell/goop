@@ -36,6 +36,8 @@ export class MusicSystem extends createSystem({}) {
   private station = -1;
   /** A play() the browser blocked (autoplay policy) — retry on the next trigger. */
   private pendingPlay = false;
+  /** Connection state of the active station, for the marquee readout. */
+  private signal: 'connecting' | 'live' | 'nosignal' = 'connecting';
 
   init(): void {
     // The room (or another punter) chose a station: switch to match.
@@ -93,10 +95,11 @@ export class MusicSystem extends createSystem({}) {
     old?.pause();
     this.station = s;
     this.pendingPlay = false;
+    this.signal = 'connecting';
     if (s >= 0 && s < JUKEBOX.stations.length) {
       const audio = this.ensureAudio(s);
       audio.volume = 0; // the update loop sets the real level from distance
-      audio.play().catch(() => (this.pendingPlay = true));
+      audio.play().catch((e: unknown) => this.onPlayReject(e));
     }
     this.drawMarquee();
   }
@@ -105,7 +108,19 @@ export class MusicSystem extends createSystem({}) {
   private resume(): void {
     this.pendingPlay = false;
     const audio = this.station >= 0 ? this.audios[this.station] : null;
-    audio?.play().catch(() => (this.pendingPlay = true));
+    audio?.play().catch((e: unknown) => this.onPlayReject(e));
+  }
+
+  /** Tell an autoplay block (retry on a gesture) from a dead stream (show it). */
+  private onPlayReject(e: unknown): void {
+    if ((e as { name?: string })?.name === 'NotAllowedError') this.pendingPlay = true;
+    else this.setSignal('nosignal');
+  }
+
+  private setSignal(s: 'connecting' | 'live' | 'nosignal'): void {
+    if (this.signal === s) return;
+    this.signal = s;
+    this.drawMarquee();
   }
 
   private ensureAudio(s: number): HTMLAudioElement {
@@ -115,6 +130,14 @@ export class MusicSystem extends createSystem({}) {
       audio.preload = 'none';
       audio.crossOrigin = null; // plain element playback — never tainted, no CORS need
       audio.volume = 0;
+      // A dead/blocked SomaFM mount shows "no signal" (skippable) instead of
+      // silent dead air; a real connect flips the marquee to live.
+      audio.addEventListener('playing', () => {
+        if (s === this.station) this.setSignal('live');
+      });
+      audio.addEventListener('error', () => {
+        if (s === this.station) this.setSignal('nosignal');
+      });
       this.audios[s] = audio;
     }
     return audio;
@@ -128,13 +151,17 @@ export class MusicSystem extends createSystem({}) {
         { text: 'JUKEBOX', size: 58, colour: '#ffb000', bold: true },
         { text: 'pull trigger to play', size: 30, colour: '#aeb6c2' },
       ]);
-    } else {
-      const st = JUKEBOX.stations[this.station];
-      panel.setLines([
-        { text: `♪ ${st.name}`, size: 54, colour: '#ffb000', bold: true },
-        { text: st.sub, size: 30, colour: '#aeb6c2' },
-      ]);
+      return;
     }
+    const st = JUKEBOX.stations[this.station];
+    const sub =
+      this.signal === 'nosignal' ? 'no signal — trigger to skip'
+      : this.signal === 'connecting' ? 'connecting…'
+      : st.sub;
+    panel.setLines([
+      { text: `♪ ${st.name}`, size: 54, colour: '#ffb000', bold: true },
+      { text: sub, size: 30, colour: this.signal === 'nosignal' ? '#e8352a' : '#aeb6c2' },
+    ]);
   }
 }
 
