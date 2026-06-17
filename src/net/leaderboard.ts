@@ -42,7 +42,7 @@ export const leaderboard = {
 };
 
 /** The current rival's claim about themselves (peer `iam` message). */
-export const rival = { name: 'RIVAL', elo: 1000, avatarSkin: '', platformSkin: '' };
+export const rival = { name: 'RIVAL', elo: 1000, avatarSkin: '', platformSkin: '', avColor: -1 };
 
 const ELO_K = 32;
 

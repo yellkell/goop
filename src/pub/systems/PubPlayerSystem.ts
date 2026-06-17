@@ -10,8 +10,8 @@ import { createSystem, InputComponent } from '@iwsdk/core';
 import { Color, Group, MeshStandardMaterial, Quaternion, Vector3 } from 'three';
 import { buildBoxer } from '../../avatar/boxer.js';
 import { buildHand, HAND_ADDUCTION, setHandCurl } from '../../avatar/hands.js';
-import { applyAvatarSkin, avatarSkin } from '../../avatar/skins.js';
-import { customization } from '../../menu/customization.js';
+import { applyAvatarSkin, resolveAvatarSkin } from '../../avatar/skins.js';
+import { myAvatarSkin } from '../../menu/customization.js';
 import { solveTorso } from '../../avatar/boxer.js';
 import { PALETTE, teamColor } from '../../config.js';
 import { spawnGestureCue } from '../../fx/effects.js';
@@ -220,7 +220,7 @@ export class PubPlayerSystem extends createSystem({}) {
     // Build ONLY the skin this punter wears (resolves blank/locked → default) —
     // not all three with two hidden. Always apply it so an unskinned punter
     // shows the default body, never an invisible one.
-    const skin = avatarSkin(p.av ?? '');
+    const skin = resolveAvatarSkin(p.av ?? '', typeof p.avc === 'number' ? p.avc : -1);
     const rig = buildBoxer(1, skin.id);
     retintRig(rig.all, p.accent);
     // Their arena skin rides over the accent tint (LEDs keep the accent).
@@ -289,7 +289,7 @@ export class PubPlayerSystem extends createSystem({}) {
       const glove = buildHand(hand === 'left' ? 1 : -1);
       glove.quaternion.copy(HAND_ADDUCTION[hand === 'left' ? 0 : 1]);
       retintLocal(glove, pub.myAccent);
-      applyAvatarSkin(glove, avatarSkin(customization.avatar)); // your skin walks in too
+      applyAvatarSkin(glove, myAvatarSkin()); // your shape + custom colour walk in too
       grips[hand].add(glove);
       this.localGloves.push(glove);
     }

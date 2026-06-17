@@ -15,8 +15,8 @@ import {
   OPPONENT_DEFAULT_PLATFORM,
   applyAvatarSkin,
   applyPlatformSkin,
-  avatarSkin,
   platformSkin,
+  resolveAvatarSkin,
 } from '../avatar/skins.js';
 import { Combatant } from '../components/Combatant.js';
 import { BallState, Fireball } from '../components/Fireball.js';
@@ -45,7 +45,7 @@ export class OpponentSystem extends createSystem({
    */
   private applySkins(rig: BoxerRig): void {
     const net = app.mode === 'net';
-    const av = net && rival.avatarSkin ? avatarSkin(rival.avatarSkin) : OPPONENT_DEFAULT_AVATAR;
+    const av = net && rival.avatarSkin ? resolveAvatarSkin(rival.avatarSkin, rival.avColor) : OPPONENT_DEFAULT_AVATAR;
     const pf = net && rival.platformSkin ? platformSkin(rival.platformSkin) : OPPONENT_DEFAULT_PLATFORM;
     const key = `${av.id}|${pf.id}`;
     if (key === this.appliedSkins) return;

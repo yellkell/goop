@@ -85,6 +85,7 @@ export class NetworkSystem extends createSystem({
         elo: myElo(),
         av: customization.avatar,
         pf: customization.platform,
+        avc: customization.colorHue,
       });
     }
 
@@ -238,6 +239,7 @@ export class NetworkSystem extends createSystem({
         rival.elo = msg.elo;
         rival.avatarSkin = msg.av ?? '';
         rival.platformSkin = msg.pf ?? '';
+        rival.avColor = typeof msg.avc === 'number' ? msg.avc : -1;
         break;
       case 'state':
         if (app.side === 1) this.applyHostState(msg);

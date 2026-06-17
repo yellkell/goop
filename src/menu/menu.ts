@@ -41,7 +41,11 @@ export type MenuAction =
   | 'open-pub'
   | 'open-custom'
   | 'custom-close'
-  | 'av-0' | 'av-1' | 'av-2'
+  | 'av-0' | 'av-1' | 'av-2' | 'av-3'
+  /** Dragging the armour-colour hue bar (continuous — MenuSystem reads the UV). */
+  | 'av-color'
+  /** Reset the armour colour to the skin's default palette. */
+  | 'av-uncolor'
   | 'pf-0' | 'pf-1' | 'pf-2';
 
 const PW = 512;
@@ -51,6 +55,17 @@ const PH = 400;
 // scaled to match, so the text keeps the lobby's pixel density (no stretch).
 const BW = 512;
 const BH = 548;
+// The customisation plate is taller than the lobby panels too — room for the
+// avatar/platform chips AND the armour-colour picker beneath them.
+const CW = 512;
+const CH = 524;
+/** The hue-picker bar on the customisation panel (canvas coords). */
+const COLOR_BAR = { x: 40, y: 322, w: CW - 80, h: 44 };
+
+/** Map a customisation-panel hit u (0..1) to a hue (0..1), clamped to the bar. */
+export function colorBarHue(u: number): number {
+  return Math.max(0, Math.min(1, (u * CW - COLOR_BAR.x) / COLOR_BAR.w));
+}
 
 export interface MenuPanel {
   id: PanelId;
@@ -296,7 +311,7 @@ function hitInfo(_u: number, v: number): MenuAction | null {
  * skins + a greyed-out COMING SOON.
  */
 function drawCustom(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
-  panelBg(ctx, false, UI.emberBright, 'CUSTOMISE');
+  panelBg(ctx, false, UI.emberBright, 'CUSTOMISE', CW, CH);
 
   const chipRow = (
     label: string,
@@ -309,7 +324,7 @@ function drawCustom(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | nul
     ctx.font = '700 22px system-ui, sans-serif';
     ctx.fillStyle = UI.textDim;
     ctx.fillText(label, 40, y);
-    const w = (PW - 80 - 3 * 10) / 4;
+    const w = (CW - 80 - 3 * 10) / 4;
     skins.forEach((s, i) => {
       const x = 40 + i * (w + 10);
       const cy = y + 16;
@@ -344,28 +359,77 @@ function drawCustom(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | nul
   chipRow('AVATAR', AVATAR_SKINS, AVATAR_SKINS.findIndex((s) => s.id === customization.avatar), 102, 'av');
   chipRow('PLATFORM', PLATFORM_SKINS, PLATFORM_SKINS.findIndex((s) => s.id === customization.platform), 204, 'pf');
 
-  buttonPlate(ctx, 156, 296, 200, 56, 'CLOSE', UI.amber, hoverAction === 'custom-close');
+  // --- ARMOUR COLOUR picker: a hue bar repainting the whole suit -------------
+  const hue = customization.colorHue;
+  ctx.textAlign = 'left';
+  ctx.font = '700 22px system-ui, sans-serif';
+  ctx.fillStyle = UI.textDim;
+  ctx.fillText('ARMOUR COLOUR', 40, 304);
+  // Live swatch of the current colour beside the label.
+  ctx.fillStyle = hue >= 0 ? `hsl(${hue * 360}, 85%, 56%)` : UI.steelDim;
+  ctx.fillRect(228, 289, 26, 18);
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = UI.steel;
+  ctx.strokeRect(228, 289, 26, 18);
+  // DEFAULT — revert to the skin's own palette.
+  const resetHot = hoverAction === 'av-uncolor';
+  plate(ctx, CW - 132, 286, 92, 30, {
+    cut: 8,
+    fill: resetHot ? 'rgba(255,176,0,0.16)' : 'rgba(10,11,15,0.7)',
+    stroke: hue < 0 || resetHot ? UI.amber : UI.steelDim,
+    rivets: false,
+  });
+  ctx.textAlign = 'center';
+  ctx.font = '700 15px system-ui, sans-serif';
+  ctx.fillStyle = hue < 0 ? UI.amber : UI.textDim;
+  ctx.fillText('DEFAULT', CW - 86, 305);
+  // The hue spectrum bar + a cursor at the picked hue.
+  const grad = ctx.createLinearGradient(COLOR_BAR.x, 0, COLOR_BAR.x + COLOR_BAR.w, 0);
+  for (let s = 0; s <= 12; s++) grad.addColorStop(s / 12, `hsl(${(s / 12) * 360}, 85%, 55%)`);
+  ctx.fillStyle = grad;
+  ctx.fillRect(COLOR_BAR.x, COLOR_BAR.y, COLOR_BAR.w, COLOR_BAR.h);
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = UI.steel;
+  ctx.strokeRect(COLOR_BAR.x, COLOR_BAR.y, COLOR_BAR.w, COLOR_BAR.h);
+  if (hue >= 0) {
+    const cx = COLOR_BAR.x + hue * COLOR_BAR.w;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(cx - 2.5, COLOR_BAR.y - 5, 5, COLOR_BAR.h + 10);
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(0,0,0,0.75)';
+    ctx.strokeRect(cx - 2.5, COLOR_BAR.y - 5, 5, COLOR_BAR.h + 10);
+  }
+
+  ctx.textAlign = 'center';
+  buttonPlate(ctx, (CW - 200) / 2, 398, 200, 56, 'CLOSE', UI.amber, hoverAction === 'custom-close');
   ctx.font = '600 20px system-ui, sans-serif';
   ctx.fillStyle = UI.textDim;
-  ctx.fillText('looks only — your hitbox never changes', PW / 2, 376);
+  ctx.fillText('looks only — your hitbox never changes', CW / 2, 486);
 }
 
 function hitCustom(u: number, v: number): MenuAction | null {
-  const x = u * PW;
-  const y = (1 - v) * PH;
-  const w = (PW - 80 - 3 * 10) / 4;
+  const x = u * CW;
+  const y = (1 - v) * CH;
+  const w = (CW - 80 - 3 * 10) / 4;
   const chipIdx = (px: number): number => Math.floor((px - 40) / (w + 10));
-  if (y >= 112 && y <= 178 && x >= 40 && x <= PW - 40) {
+  if (y >= 112 && y <= 178 && x >= 40 && x <= CW - 40) {
     const i = chipIdx(x);
-    if (i >= 0 && i <= 2 && !AVATAR_SKINS[i].locked) return `av-${i}` as MenuAction;
+    if (i >= 0 && i <= 3 && !AVATAR_SKINS[i].locked) return `av-${i}` as MenuAction;
     return null;
   }
-  if (y >= 214 && y <= 280 && x >= 40 && x <= PW - 40) {
+  if (y >= 214 && y <= 280 && x >= 40 && x <= CW - 40) {
     const i = chipIdx(x);
-    if (i >= 0 && i <= 2 && !PLATFORM_SKINS[i].locked) return `pf-${i}` as MenuAction;
+    if (i >= 0 && i <= 3 && !PLATFORM_SKINS[i].locked) return `pf-${i}` as MenuAction;
     return null;
   }
-  if (y >= 288 && y <= 360 && x >= 148 && x <= 364) return 'custom-close';
+  if (y >= 282 && y <= 320 && x >= CW - 136 && x <= CW - 36) return 'av-uncolor';
+  if (
+    y >= COLOR_BAR.y - 6 && y <= COLOR_BAR.y + COLOR_BAR.h + 6 &&
+    x >= COLOR_BAR.x - 6 && x <= COLOR_BAR.x + COLOR_BAR.w + 6
+  ) {
+    return 'av-color';
+  }
+  if (y >= 392 && y <= 458 && x >= 148 && x <= 364) return 'custom-close';
   return null;
 }
 
@@ -547,7 +611,8 @@ export function createMenu(scene: Scene): Menu {
   // Taller than the lobby panels (1.36 × 1.456 ≈ BW:BH) so the full top 10
   // reads at a glance; its own BW×BH canvas keeps the text at lobby density.
   const board = makePanel('board', 1.36, 1.456, drawBoard, hitBoard, BW, BH);
-  const custom = makePanel('custom', 0.9, 0.7, drawCustom, hitCustom);
+  // Taller than the lobby panels (own CW×CH canvas) for the colour picker row.
+  const custom = makePanel('custom', 0.9, 0.915, drawCustom, hitCustom, CW, CH);
 
   // Shallow arc in front of the player, tilted inward toward the centre.
   const y = 1.45;

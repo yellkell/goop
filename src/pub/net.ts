@@ -29,7 +29,7 @@ export function onVoice(fn: (id: string, frame: ArrayBuffer) => void): void {
   voiceHook = fn;
 }
 
-export function pubConnect(url: string, name: string, av = '', pf = ''): void {
+export function pubConnect(url: string, name: string, av = '', pf = '', avc = -1): void {
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
   try {
     ws = new WebSocket(url);
@@ -39,7 +39,7 @@ export function pubConnect(url: string, name: string, av = '', pf = ''): void {
   }
   ws.binaryType = 'arraybuffer'; // voice frames ride as binary alongside the JSON
 
-  ws.onopen = () => pubSendRaw({ t: 'hello', name, av, pf });
+  ws.onopen = () => pubSendRaw({ t: 'hello', name, av, pf, avc });
 
   ws.onmessage = (e) => {
     // Binary payloads are voice frames; everything else is JSON game traffic.

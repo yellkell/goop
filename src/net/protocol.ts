@@ -48,7 +48,7 @@ export type PeerMessage =
   /** Who I am, once per bout: leaderboard callsign + hidden ELO (so the
    *  winner can weight their score gain by rival quality) + my skin picks
    *  so you see me dressed the way I chose. */
-  | { k: 'iam'; name: string; elo: number; av?: string; pf?: string }
+  | { k: 'iam'; name: string; elo: number; av?: string; pf?: string; avc?: number }
   /** Host → guest match-state echo. Scores are in the HOST's perspective. */
   | {
       k: 'state';

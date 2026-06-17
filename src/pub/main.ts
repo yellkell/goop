@@ -130,7 +130,7 @@ World.create(container, {
   bus.on('full', () => showFullNotice(world));
 
   // Your arena cosmetics walk in with you.
-  pubConnect(pubServerUrl(), pub.myName, customization.avatar, customization.platform);
+  pubConnect(pubServerUrl(), pub.myName, customization.avatar, customization.platform, customization.colorHue);
 
   const xrSupported = (await navigator.xr?.isSessionSupported(SessionMode.ImmersiveVR).catch(() => false)) === true;
 

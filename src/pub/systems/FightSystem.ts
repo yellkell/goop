@@ -35,8 +35,8 @@ import { MeshStandardMaterial, Quaternion, Vector3 } from 'three';
 import type { XROrigin } from '@iwsdk/xr-input';
 import { BODY_IK, FIREBALL, teamColor } from '../../config.js';
 import { buildBoxer, solveTorso, type BoxerRig } from '../../avatar/boxer.js';
-import { applyAvatarSkin, avatarSkin, platformSkin } from '../../avatar/skins.js';
-import { customization } from '../../menu/customization.js';
+import { applyAvatarSkin, platformSkin } from '../../avatar/skins.js';
+import { customization, myAvatarSkin } from '../../menu/customization.js';
 import {
   createFireVisual,
   emberBurst,
@@ -178,7 +178,7 @@ export class FightSystem extends createSystem({}) {
     // The local fighter's body: an ember (team 0) torso wearing my avatar
     // skin, exactly like the arena's PlayerBodySystem. Only the torso joins
     // the scene (my gloves are the controllers; my own head stays unseen).
-    const mySkin = avatarSkin(customization.avatar);
+    const mySkin = myAvatarSkin(); // chosen shape + custom colour
     this.bodyRig = buildBoxer(0, mySkin.id); // only my skin — never switches mid-pub
     this.bodyRig.torso.name = 'pub-fighter-torso';
     this.bodyRig.torso.visible = false;

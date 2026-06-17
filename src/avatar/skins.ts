@@ -42,7 +42,8 @@ export const AVATAR_SKINS: AvatarSkin[] = [
   // No slimmer silhouette: the visual body must match the shared hitbox so no
   // skin is harder to hit than another.
   { id: 'valkyrie', name: 'EAGLE', chassis: 0x261b33, trim: 0x120d1a, accent: 0xff9ad5 },
-  { id: 'soon-av', name: 'SOON', locked: true, chassis: 0, trim: 0, accent: 0 },
+  // Polished steel knight in heraldic gold.
+  { id: 'knight', name: 'KNIGHT', chassis: 0x2d333d, trim: 0x14181f, accent: 0xffcf6e },
 ];
 
 export const PLATFORM_SKINS: PlatformSkin[] = [
@@ -70,6 +71,33 @@ export function avatarSkin(id: string): AvatarSkin {
 export function platformSkin(id: string): PlatformSkin {
   const s = PLATFORM_SKINS.find((x) => x.id === id);
   return s && !s.locked ? s : PLATFORM_SKINS[2]; // ember default
+}
+
+/**
+ * A cohesive "tinted steel" palette from a single hue (0..1): a dark armour
+ * body, a darker trim, and a vivid accent — so one colour repaints the WHOLE
+ * suit yet still reads as forged metal lit from within, not a flat fill.
+ */
+export function colorPalette(hue: number): { chassis: number; trim: number; accent: number } {
+  const h = ((hue % 1) + 1) % 1;
+  return {
+    chassis: new Color().setHSL(h, 0.5, 0.16).getHex(),
+    trim: new Color().setHSL(h, 0.45, 0.08).getHex(),
+    accent: new Color().setHSL(h, 0.9, 0.56).getHex(),
+  };
+}
+
+/** A skin recoloured to a custom hue — keeps the SHAPE (id/name/slim), repaints
+ *  the whole armour. */
+export function tintSkin(base: AvatarSkin, hue: number): AvatarSkin {
+  return { ...base, ...colorPalette(hue) };
+}
+
+/** The skin to actually wear: the chosen shape, recoloured to `hue` when one is
+ *  set (hue < 0 keeps the shape's own default palette). */
+export function resolveAvatarSkin(id: string, hue: number): AvatarSkin {
+  const base = avatarSkin(id);
+  return hue >= 0 && !base.locked ? tintSkin(base, hue) : base;
 }
 
 const _white = new Color(0xffffff);

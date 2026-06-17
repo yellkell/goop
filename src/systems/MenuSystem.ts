@@ -27,6 +27,7 @@ import {
 } from 'three';
 import { app, saveEnvironment, saveShootBack, type AppState } from '../menu/appState.js';
 import {
+  colorBarHue,
   createActionPanel,
   createMenu,
   type ActionButton,
@@ -36,14 +37,13 @@ import {
   type PanelId,
 } from '../menu/menu.js';
 import { createNameKeyboard, type NameKeyboard } from '../menu/keyboard.js';
-import { customization, setAvatarSkin, setPlatformSkin } from '../menu/customization.js';
+import { customization, myAvatarSkin, setAvatarColor, setAvatarSkin, setPlatformSkin } from '../menu/customization.js';
 import { buildBoxer, solveTorso, type BoxerRig } from '../avatar/boxer.js';
 import {
   AVATAR_SKINS,
   PLATFORM_SKINS,
   applyAvatarSkin,
   applyPlatformSkin,
-  avatarSkin,
   platformSkin,
 } from '../avatar/skins.js';
 import { match } from '../combat/matchState.js';
@@ -85,6 +85,9 @@ export class MenuSystem extends createSystem({}) {
   private lastState: AppState | null = null;
   private pointers: Record<'left' | 'right', Pointer> = {} as Record<'left' | 'right', Pointer>;
   private redrawTimer = 0;
+  /** Last customisation version the panels were drawn at — a chip pick or a
+   *  colour-bar drag repaints them at once rather than on the 0.5 s tick. */
+  private lastSkinDraw = 0;
   private panel!: ActionPanel;
   private panelKey = '';
   private wasMatchOver = false;
@@ -148,12 +151,18 @@ export class MenuSystem extends createSystem({}) {
         hover = panel.id;
         hoverAction = action;
       }
-      if (hit.uv && this.input.xr.gamepads[hand]?.getButtonDown(InputComponent.Trigger)) {
+      const gp = this.input.xr.gamepads[hand];
+      if (hit.uv && action === 'av-color' && gp?.getButtonPressed(InputComponent.Trigger)) {
+        // The hue bar is continuous: scrub the armour colour live while held.
+        setAvatarColor(colorBarHue(hit.uv.x));
+      } else if (hit.uv && gp?.getButtonDown(InputComponent.Trigger)) {
         if (action) this.run(action);
       }
     }
     const boardScrolled = this.updateBoardScroll(boardPointed, boardScrollAxis, delta);
-    if (hover !== this.hovered || hoverAction !== this.hoveredAction || boardScrolled) {
+    const skinChanged = customization.version !== this.lastSkinDraw;
+    if (skinChanged) this.lastSkinDraw = customization.version;
+    if (hover !== this.hovered || hoverAction !== this.hoveredAction || boardScrolled || skinChanged) {
       this.hovered = hover;
       this.hoveredAction = hoverAction;
       this.menu.redrawAll(hover, hoverAction);
@@ -258,7 +267,11 @@ export class MenuSystem extends createSystem({}) {
       case 'av-0':
       case 'av-1':
       case 'av-2':
+      case 'av-3':
         setAvatarSkin(AVATAR_SKINS[Number(action.slice(3))].id);
+        break;
+      case 'av-uncolor':
+        setAvatarColor(-1); // back to the skin's own palette
         break;
       case 'pf-0':
       case 'pf-1':
@@ -306,7 +319,7 @@ export class MenuSystem extends createSystem({}) {
   private applyOwnSkins(): void {
     if (customization.version === this.skinVersion) return;
     this.skinVersion = customization.version;
-    const av = avatarSkin(customization.avatar);
+    const av = myAvatarSkin(); // chosen shape + custom colour
     const pf = platformSkin(customization.platform);
     for (const name of ['player-torso', 'player-glove-left', 'player-glove-right', 'mirror-avatar']) {
       const obj = this.scene.getObjectByName(name);

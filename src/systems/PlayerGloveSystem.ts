@@ -11,10 +11,10 @@ import { createSystem, InputComponent } from '@iwsdk/core';
 import { Quaternion, type Group } from 'three';
 import { setGloveLit } from '../avatar/boxer.js';
 import { buildHand, HAND_ADDUCTION, setHandCurl } from '../avatar/hands.js';
-import { applyAvatarSkin, avatarSkin } from '../avatar/skins.js';
+import { applyAvatarSkin } from '../avatar/skins.js';
 import { BallState, Fireball } from '../components/Fireball.js';
 import { app } from '../menu/appState.js';
-import { customization } from '../menu/customization.js';
+import { myAvatarSkin } from '../menu/customization.js';
 
 const HANDS = ['left', 'right'] as const;
 
@@ -50,7 +50,7 @@ export class PlayerGloveSystem extends createSystem({
       if (!glove) {
         glove = buildHand(hand === 'left' ? 1 : -1);
         glove.name = `player-glove-${hand}`;
-        applyAvatarSkin(glove, avatarSkin(customization.avatar));
+        applyAvatarSkin(glove, myAvatarSkin());
         grip.add(glove);
         this.gloves[hand] = glove;
       }
