@@ -681,114 +681,138 @@ function buildEaglePelvis(accent: number): Group {
   return g;
 }
 
-/** KNIGHT → a big medieval GREAT HELM: a tall enclosing barrel with a domed
- *  crown, a raised comb, a glowing sight slit, a face cross-bar, breathing
- *  holes and a crest plume. Imposing and armoured. */
+/** KNIGHT → a CRUSADER great helm: a flat-topped steel barrel with a raised
+ *  gold Templar cross, a dark sight slit, breathing-hole dots and a riveted
+ *  rim. (The cross/eyes are the accent, so the colour picker recolours them.) */
 function buildKnightHead(accent: number): Group {
   const r = BODY_IK.headRadius;
   const g = taggedHead('knight');
 
-  // The barrel helm — a tall cylinder fully enclosing the head, capped by a dome.
-  const barrel = new Mesh(new CylinderGeometry(r * 0.94, r * 1.02, r * 1.6, 16), chassisMat(accent, 0.05));
-  barrel.position.y = r * 0.22;
+  // Flat-topped barrel helm fully enclosing the head, capped flat with a seam.
+  const barrel = new Mesh(new CylinderGeometry(r * 0.98, r * 1.06, r * 1.7, 20), chassisMat(accent, 0.04));
+  barrel.position.y = r * 0.3;
   g.add(barrel);
-  const crown = new Mesh(new SphereGeometry(r * 0.94, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), chassisMat(accent, 0.05));
-  crown.position.y = r * 1.0;
-  g.add(crown);
-  // Raised comb ridge running front-to-back over the crown.
-  const comb = new Mesh(new BoxGeometry(r * 0.16, r * 0.42, r * 1.95), chassisMat(accent, 0.06));
-  comb.position.set(0, r * 1.12, 0);
-  g.add(comb);
-  const combGlow = new Mesh(new BoxGeometry(r * 0.05, r * 0.46, r * 1.7), glowMat(accent, 0.6));
-  combGlow.position.set(0, r * 1.18, 0);
-  g.add(combGlow);
-  // Reinforced brow band.
-  const brow = new Mesh(new CylinderGeometry(r * 0.99, r * 0.99, r * 0.2, 16), darkMat());
-  brow.position.y = r * 0.5;
-  g.add(brow);
-  // The sight: a dark recessed slit with a hot glowing line behind it.
-  const slit = new Mesh(new BoxGeometry(r * 1.55, r * 0.18, r * 0.12), darkMat());
-  slit.position.set(0, r * 0.36, -r * 0.84);
-  g.add(slit);
-  const eyes = new Mesh(new BoxGeometry(r * 1.28, r * 0.08, r * 0.06), glowMat(accent, 2.6));
-  eyes.position.set(0, r * 0.36, -r * 0.9);
-  g.add(eyes);
-  // Vertical face cross-bar (the great-helm reinforce).
-  const faceBar = new Mesh(new BoxGeometry(r * 0.14, r * 1.05, r * 0.12), darkMat());
-  faceBar.position.set(0, r * 0.05, -r * 0.88);
-  g.add(faceBar);
-  // Breathing holes — two columns of dark studs on the lower face.
+  const cap = new Mesh(new CylinderGeometry(r * 0.99, r * 0.98, r * 0.16, 20), chassisMat(accent, 0.04));
+  cap.position.y = r * 1.2;
+  g.add(cap);
+  const ridge = new Mesh(new BoxGeometry(r * 0.12, r * 0.1, r * 2.05), chassisMat(accent, 0.05));
+  ridge.position.set(0, r * 1.27, 0);
+  g.add(ridge);
+
+  // The raised TEMPLAR CROSS: a long vertical bar + a crossbar at the sight line.
+  const vbar = new Mesh(new BoxGeometry(r * 0.3, r * 1.78, r * 0.08), glowMat(accent, 0.85));
+  vbar.position.set(0, r * 0.32, -r * 1.06);
+  g.add(vbar);
+  const hbar = new Mesh(new BoxGeometry(r * 1.85, r * 0.28, r * 0.08), glowMat(accent, 0.85));
+  hbar.position.set(0, r * 0.5, -r * 1.085);
+  g.add(hbar);
+
+  // The sight: a dark slit either side of the cross, with a faint eye glow so
+  // it still reads alive across the gap.
   for (const side of [-1, 1]) {
-    for (let i = 0; i < 4; i++) {
-      const hole = new Mesh(new CylinderGeometry(r * 0.045, r * 0.045, r * 0.08, 6), darkMat());
+    const slit = new Mesh(new BoxGeometry(r * 0.6, r * 0.13, r * 0.08), darkMat());
+    slit.position.set(side * r * 0.52, r * 0.34, -r * 1.04);
+    g.add(slit);
+    const eye = new Mesh(new BoxGeometry(r * 0.48, r * 0.05, r * 0.05), glowMat(accent, 1.4));
+    eye.position.set(side * r * 0.52, r * 0.34, -r * 1.075);
+    g.add(eye);
+  }
+
+  // Breathing holes — clustered dark studs across the lower face, both sides.
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 7; i++) {
+      const col = i % 3;
+      const row = Math.floor(i / 3);
+      const hole = new Mesh(new CylinderGeometry(r * 0.05, r * 0.05, r * 0.05, 7), darkMat());
       hole.rotation.x = Math.PI / 2;
-      hole.position.set(side * r * 0.34, -r * 0.12 - i * r * 0.16, -r * 0.84);
+      hole.position.set(side * (r * 0.24 + col * r * 0.14), -r * 0.06 - row * r * 0.17 - col * r * 0.04, -r * 1.05);
       g.add(hole);
     }
   }
-  // Gorget neck base flaring under the helm.
-  const gorget = new Mesh(new CylinderGeometry(r * 0.72, r * 0.9, r * 0.34, 14), darkMat());
-  gorget.position.y = -r * 0.62;
-  g.add(gorget);
-  // Crest socket + a tall glowing plume sweeping back off the comb.
-  const socket = new Mesh(new CylinderGeometry(r * 0.12, r * 0.14, r * 0.2, 8), darkMat());
-  socket.position.set(0, r * 1.4, r * 0.0);
-  g.add(socket);
-  for (let i = 0; i < 3; i++) {
-    const plume = new Mesh(new ConeGeometry(r * (0.2 - i * 0.04), r * 0.85, 6), glowMat(accent, 0.9 - i * 0.18));
-    plume.position.set(0, r * (1.75 - i * 0.04), r * (0.18 + i * 0.16));
-    plume.rotation.x = -0.5 - i * 0.18;
-    g.add(plume);
+
+  // Riveted lower-front rim.
+  for (let i = 0; i < 13; i++) {
+    const a = -Math.PI * 0.6 + (i / 12) * Math.PI * 1.2;
+    const stud = new Mesh(new SphereGeometry(r * 0.045, 6, 5), chassisMat(accent, 0.06));
+    stud.position.set(Math.sin(a) * r * 1.04, -r * 0.5, -Math.cos(a) * r * 1.06);
+    g.add(stud);
   }
+
+  // Gorget neck base flaring under the helm.
+  const gorget = new Mesh(new CylinderGeometry(r * 0.72, r * 0.9, r * 0.34, 16), darkMat());
+  gorget.position.y = -r * 0.64;
+  g.add(gorget);
   return g;
 }
 
-/** KNIGHT cuirass: domed breastplate with a central keel, layered rounded
- *  pauldrons and a heraldic boss. */
+/** KNIGHT cuirass: a tall riveted gorget, big rounded pauldrons with studded
+ *  rims + lower lames, and a studded chest yoke ending in a pointed plate. */
 function buildKnightChest(accent: number): Group {
   const g = taggedHead('knight');
-  const collar = new Mesh(new BoxGeometry(0.44, 0.1, 0.21), chassisMat(accent, 0.05));
-  collar.position.y = 0.11;
-  g.add(collar);
-  const neck = new Mesh(new CylinderGeometry(0.075, 0.095, 0.1, 8), darkMat());
-  neck.position.y = 0.17;
+
+  // Tall riveted gorget collar.
+  const gorget = new Mesh(new CylinderGeometry(0.12, 0.16, 0.17, 16), chassisMat(accent, 0.05));
+  gorget.position.y = 0.12;
+  g.add(gorget);
+  const neck = new Mesh(new CylinderGeometry(0.07, 0.085, 0.08, 8), darkMat());
+  neck.position.y = 0.2;
   g.add(neck);
-  // Layered rounded pauldrons — squashed domes stacked over each shoulder.
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    const stud = new Mesh(new SphereGeometry(0.011, 6, 5), chassisMat(accent, 0.07));
+    stud.position.set(Math.sin(a) * 0.135, 0.18, -Math.cos(a) * 0.135);
+    g.add(stud);
+  }
+
+  // Big rounded pauldrons + a studded rim + two lower lames per shoulder.
   for (const side of [-1, 1]) {
-    for (let i = 0; i < 2; i++) {
-      const pauldron = new Mesh(new SphereGeometry(0.14 - i * 0.025, 12, 8), chassisMat(accent, 0.05));
-      pauldron.scale.set(1, 0.62, 1.1);
-      pauldron.position.set(side * 0.29, 0.12 - i * 0.06, 0);
-      g.add(pauldron);
+    const pauldron = new Mesh(new SphereGeometry(0.17, 16, 12), chassisMat(accent, 0.05));
+    pauldron.scale.set(1, 0.72, 1.12);
+    pauldron.position.set(side * 0.27, 0.1, 0);
+    g.add(pauldron);
+    for (let i = 0; i < 4; i++) {
+      const stud = new Mesh(new SphereGeometry(0.012, 6, 5), chassisMat(accent, 0.07));
+      stud.position.set(side * (0.2 + i * 0.02), 0.16, -0.12 + i * 0.05);
+      g.add(stud);
     }
-    const rim = new Mesh(new SphereGeometry(0.145, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), glowMat(accent, 0.45));
-    rim.scale.set(1, 0.5, 1.1);
-    rim.position.set(side * 0.29, 0.12, 0);
-    g.add(rim);
+    for (let j = 0; j < 2; j++) {
+      const lame = new Mesh(new BoxGeometry(0.2, 0.055, 0.18), chassisMat(accent, 0.04));
+      lame.position.set(side * 0.28, -j * 0.06, 0);
+      lame.rotation.z = side * 0.12;
+      g.add(lame);
+    }
   }
-  // Domed breastplate + central keel ridge + glowing boss.
-  const trunk = new Mesh(new CylinderGeometry(0.185, 0.1, 0.42, 12), chassisMat(accent, 0.05));
-  trunk.scale.z = 0.72;
-  trunk.position.y = -0.12;
-  g.add(trunk);
-  const keel = new Mesh(new BoxGeometry(0.045, 0.42, 0.07), darkMat());
-  keel.position.set(0, -0.07, -0.14);
-  g.add(keel);
-  const boss = new Mesh(new CylinderGeometry(0.06, 0.06, 0.03, 14), glowMat(accent, 1.3));
-  boss.rotation.x = Math.PI / 2;
-  boss.position.set(0, 0.0, -0.165);
-  g.add(boss);
-  // Lower breastplate plates + side flanks.
-  for (let i = 0; i < 2; i++) {
-    const w = 0.28 - i * 0.05;
-    const plate = new Mesh(new BoxGeometry(w, 0.085, 0.06), chassisMat(accent, 0.04));
-    plate.position.set(0, -0.2 - i * 0.085, -0.11);
-    plate.rotation.x = -0.14;
-    g.add(plate);
+
+  // Studded chest yoke ending in a pointed (V) plate.
+  const yoke = new Mesh(new BoxGeometry(0.36, 0.17, 0.07), chassisMat(accent, 0.05));
+  yoke.position.set(0, 0.01, -0.13);
+  g.add(yoke);
+  const point = new Mesh(new ConeGeometry(0.13, 0.18, 4), chassisMat(accent, 0.05));
+  point.scale.set(1, 1, 0.5);
+  point.rotation.set(Math.PI, Math.PI / 4, 0); // 4-sided plate, apex pointing DOWN
+  point.position.set(0, -0.14, -0.12);
+  g.add(point);
+  for (let i = 0; i < 6; i++) {
+    const stud = new Mesh(new SphereGeometry(0.012, 6, 5), chassisMat(accent, 0.07));
+    stud.position.set(-0.14 + i * 0.056, 0.07, -0.165);
+    g.add(stud);
   }
   for (const side of [-1, 1]) {
-    const flank = new Mesh(new BoxGeometry(0.05, 0.27, 0.2), chassisMat(accent, 0.04));
-    flank.position.set(side * 0.15, -0.08, 0);
+    for (let j = 0; j < 2; j++) {
+      const stud = new Mesh(new SphereGeometry(0.012, 6, 5), chassisMat(accent, 0.07));
+      stud.position.set(side * 0.16, 0.02 - j * 0.06, -0.165);
+      g.add(stud);
+    }
+  }
+
+  // Lower body trunk + side flanks under the yoke.
+  const trunk = new Mesh(new CylinderGeometry(0.16, 0.09, 0.4, 10), darkMat());
+  trunk.scale.z = 0.7;
+  trunk.position.y = -0.16;
+  g.add(trunk);
+  for (const side of [-1, 1]) {
+    const flank = new Mesh(new BoxGeometry(0.05, 0.26, 0.2), chassisMat(accent, 0.04));
+    flank.position.set(side * 0.15, -0.1, 0);
     flank.rotation.z = side * 0.12;
     g.add(flank);
   }
