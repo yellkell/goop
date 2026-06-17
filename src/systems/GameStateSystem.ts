@@ -150,6 +150,12 @@ export class GameStateSystem extends createSystem({
   private endRound(outcome: RoundOutcome, result: RoundResult): void {
     if (outcome === 'win') match.myScore += 1;
     else if (outcome === 'loss') match.oppScore += 1;
+    // A match-deciding round lands STRAIGHT on YOU WIN / YOU LOSE — no long
+    // round-result hold between the final KO and the verdict.
+    if (match.myScore >= MATCH.winTarget || match.oppScore >= MATCH.winTarget) {
+      this.toMatchOver();
+      return;
+    }
     match.phase = 'roundOver';
     match.resultTimer = MATCH.roundOverDelay;
     match.message = outcome === 'draw' ? 'DRAW' : result === 'ko' ? (outcome === 'win' ? 'KO' : "KO'D") : outcome === 'win' ? 'WIN' : 'LOSS';

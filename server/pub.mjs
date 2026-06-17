@@ -96,7 +96,7 @@ const HP_MAX = 100;
 const WIN_TARGET = 3; // round wins to take the match (best of 5)
 const ROUND_TIME = 60; // seconds per round
 const START_COUNTDOWN = 3; // pre-round 3-2-1 countdown, before EVERY round
-const ROUND_OVER_DELAY = 7; // seconds of round-result breather between rounds
+const ROUND_OVER_DELAY = 5; // seconds of round-result breather between rounds
 const MATCH_OVER_DELAY = 6; // seconds of match-result pause
 const fight = {
   phase: 'idle',
