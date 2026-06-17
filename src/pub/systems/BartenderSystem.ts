@@ -93,7 +93,7 @@ export class BartenderSystem extends createSystem({}) {
 
     // The boxer chassis in house amber, posed standing (no IK here: the
     // torso pieces are parked at fixed heights on the wheeled base).
-    this.rig = buildBoxer(1);
+    this.rig = buildBoxer(1, BARTENDER_BEAR_SKIN.id); // house BEAR only — no other skins
     retintRig(this.rig.all, PALETTE.amber);
     // Reveal the BEAR skin across the WHOLE rig — head AND torso. The torso's
     // chest/pelvis pieces are per-skin tagged and start hidden, so skinning the

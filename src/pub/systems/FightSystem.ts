@@ -178,10 +178,11 @@ export class FightSystem extends createSystem({}) {
     // The local fighter's body: an ember (team 0) torso wearing my avatar
     // skin, exactly like the arena's PlayerBodySystem. Only the torso joins
     // the scene (my gloves are the controllers; my own head stays unseen).
-    this.bodyRig = buildBoxer(0);
+    const mySkin = avatarSkin(customization.avatar);
+    this.bodyRig = buildBoxer(0, mySkin.id); // only my skin — never switches mid-pub
     this.bodyRig.torso.name = 'pub-fighter-torso';
     this.bodyRig.torso.visible = false;
-    applyAvatarSkin(this.bodyRig.torso, avatarSkin(customization.avatar));
+    applyAvatarSkin(this.bodyRig.torso, mySkin);
     this.scene.add(this.bodyRig.torso);
 
     this.cleanupFuncs.push(

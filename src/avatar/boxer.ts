@@ -677,29 +677,68 @@ function buildEaglePelvis(accent: number): Group {
   return g;
 }
 
-/** Build the full opponent rig. Pieces start hidden; add them to the scene. */
-export function buildBoxer(team: number): BoxerRig {
-  const accent = teamColor(team);
+/** Per-skin builders, keyed by skin id — pick one (a fixed wearer) or all
+ *  three (the customisation mirror, which toggles between them live). */
+const HEAD_BUILDERS: Record<string, (accent: number) => Group> = {
+  cobalt: buildBearHead,
+  crimson: buildPantherHead,
+  valkyrie: buildEagleHead,
+};
+const CHEST_BUILDERS: Record<string, (accent: number) => Group> = {
+  cobalt: buildBearChest,
+  crimson: buildPantherChest,
+  valkyrie: buildEagleChest,
+};
+const PELVIS_BUILDERS: Record<string, (accent: number) => Group> = {
+  cobalt: buildBearPelvis,
+  crimson: buildPantherPelvis,
+  valkyrie: buildEaglePelvis,
+};
+const ALL_SKIN_IDS = ['cobalt', 'crimson', 'valkyrie'];
 
-  // --- Head: a detailed metallic ANIMAL head per skin (front is −z). All
-  //     three are built and ONE is shown by applyAvatarSkin; the bot defaults
-  //     to the panther (see OPPONENT_DEFAULT_AVATAR). Hitboxes are the BODY_IK
-  //     spheres and never change, so every fighter is equally hittable. ---
+/**
+ * Build the full opponent rig. Pieces start hidden; add them to the scene.
+ *
+ * Pass `skinId` when the wearer never changes skin (a pub punter, the bartender,
+ * a chosen fighter) and ONLY that skin's head/cuirass/hips are built — and shown
+ * straight away. With no `skinId` all three are built (two left hidden) so the
+ * customisation mirror can flip between them live; `applyAvatarSkin` reveals one.
+ * Building just the one avoids carrying two extra skins' geometry per rig — a
+ * real saving with a roomful of punters.
+ */
+export function buildBoxer(team: number, skinId?: string): BoxerRig {
+  const accent = teamColor(team);
+  const ids = skinId && HEAD_BUILDERS[skinId] ? [skinId] : ALL_SKIN_IDS;
+  const sole = ids.length === 1; // the one built skin shows without applyAvatarSkin
+
+  // --- Head: a detailed metallic ANIMAL head per built skin (front is −z).
+  //     Hitboxes are the BODY_IK spheres and never change, so every fighter is
+  //     equally hittable whatever's built. ---
   const head = new Group();
   head.name = 'opponent-head';
-  head.add(buildBearHead(accent), buildPantherHead(accent), buildEagleHead(accent));
+  for (const id of ids) {
+    const g = HEAD_BUILDERS[id](accent);
+    if (sole) g.visible = true;
+    head.add(g);
+  }
 
-  // --- Torso: a DISTINCT armoured cuirass + hip set per skin. All three are
-  //     built and applyAvatarSkin shows one (the bot defaults to the panther).
-  //     Same silhouette envelope and the same BODY_IK hitbox spheres, so every
-  //     fighter stays equally hittable. ---
+  // --- Torso: a DISTINCT armoured cuirass + hip set per built skin. Same
+  //     silhouette envelope and BODY_IK hitbox spheres, equally hittable. ---
   const chest = new Group();
   chest.name = 'opponent-chest';
-  chest.add(buildBearChest(accent), buildPantherChest(accent), buildEagleChest(accent));
+  for (const id of ids) {
+    const g = CHEST_BUILDERS[id](accent);
+    if (sole) g.visible = true;
+    chest.add(g);
+  }
 
   const pelvis = new Group();
   pelvis.name = 'opponent-pelvis';
-  pelvis.add(buildBearPelvis(accent), buildPantherPelvis(accent), buildEaglePelvis(accent));
+  for (const id of ids) {
+    const g = PELVIS_BUILDERS[id](accent);
+    if (sole) g.visible = true;
+    pelvis.add(g);
+  }
 
   const torso = new Group();
   torso.name = 'opponent-torso';

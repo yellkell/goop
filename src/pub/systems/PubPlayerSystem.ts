@@ -217,10 +217,14 @@ export class PubPlayerSystem extends createSystem({}) {
 
   private spawn(p: PubPlayerNet): void {
     if (pub.punters.has(p.id) || p.id === pub.myId) return;
-    const rig = buildBoxer(1);
+    // Build ONLY the skin this punter wears (resolves blank/locked → default) —
+    // not all three with two hidden. Always apply it so an unskinned punter
+    // shows the default body, never an invisible one.
+    const skin = avatarSkin(p.av ?? '');
+    const rig = buildBoxer(1, skin.id);
     retintRig(rig.all, p.accent);
     // Their arena skin rides over the accent tint (LEDs keep the accent).
-    if (p.av) for (const part of rig.all) applyAvatarSkin(part, avatarSkin(p.av));
+    for (const part of rig.all) applyAvatarSkin(part, skin);
     for (const part of rig.all) this.scene.add(part);
     rig.head.position.set(p.head[0], p.head[1] || 1.6, p.head[2]);
 
