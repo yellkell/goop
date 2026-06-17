@@ -48,9 +48,9 @@ export function fitStencilText(
 
 /**
  * Forged-steel headline lettering — the countdown, FIGHT, the verdicts. A dark
- * gunmetal face with a bright top bevel and a lit accent "power seam", wrapped
- * in neon tubing (wide accent halo + crisp accent rim + a hot-white core), set
- * in a heavy near-black casing so it reads as a plate cut-out lit from within.
+ * gunmetal face with a lit accent "power seam", wrapped in accent neon tubing
+ * (a wide halo + a crisp rim), set in a heavy near-black casing so it reads as a
+ * plate cut-out lit from within.
  */
 export function metalText(
   ctx: CanvasRenderingContext2D,
@@ -73,23 +73,19 @@ export function metalText(
   ctx.strokeStyle = 'rgba(0,1,4,0.97)';
   ctx.strokeText(text, x, y);
 
-  // 2) Neon tubing tracing the rim: a wide accent halo, a crisp accent line,
-  //    then a faint hot-white core — lit gas around the letterform.
+  // 2) Neon tubing tracing the rim: a wide accent halo and a crisp accent line
+  //    — lit gas around the letterform (no white core; it read as inner lines).
   ctx.shadowColor = accent;
   ctx.shadowBlur = Math.round(px * 0.46);
-  ctx.lineWidth = Math.max(4, px * 0.065);
+  ctx.lineWidth = Math.max(4, px * 0.07);
   ctx.strokeStyle = accent;
-  ctx.strokeText(text, x, y);
-  ctx.shadowBlur = Math.round(px * 0.13);
-  ctx.lineWidth = Math.max(1.5, px * 0.022);
-  ctx.strokeStyle = 'rgba(255,255,255,0.5)';
   ctx.strokeText(text, x, y);
   ctx.shadowBlur = 0;
 
-  // 3) Dark gunmetal face: a bright bevel catch-light up top falling to
-  //    near-black, with a thin lit accent SEAM raked across the middle.
+  // 3) Dark gunmetal face: a steel top sheen falling to near-black, with a thin
+  //    lit accent SEAM raked across the middle.
   const metal = ctx.createLinearGradient(0, y - px * 0.58, 0, y + px * 0.56);
-  metal.addColorStop(0.0, '#d4dcea'); // top bevel catch-light
+  metal.addColorStop(0.0, '#c2ccda'); // top sheen (a softer steel, not white)
   metal.addColorStop(0.13, '#6f7a88');
   metal.addColorStop(0.4, '#272d37');
   metal.addColorStop(0.49, accent); // the lit power seam
@@ -98,13 +94,6 @@ export function metalText(
   metal.addColorStop(1.0, '#04060a'); // deep shadow base
   ctx.fillStyle = metal;
   ctx.fillText(text, x, y);
-
-  // 4) A crisp catch-light sliver riding the very top bevel.
-  ctx.globalAlpha = 0.55;
-  ctx.lineWidth = Math.max(1, px * 0.02);
-  ctx.strokeStyle = 'rgba(238,244,255,0.9)';
-  ctx.strokeText(text, x, y - px * 0.03);
-  ctx.globalAlpha = 1;
 
   ctx.restore();
 }

@@ -119,7 +119,7 @@ function fmtTime(seconds: number): string {
 
 function verdictAccent(message: string): string {
   if (message.includes('LOSE') || message === 'LOSS' || message === "KO'D") return UI.coolBright;
-  if (/^[123]$/.test(message)) return UI.amber;
+  if (/^[123]$/.test(message)) return UI.cool; // 3-2-1 countdown in neon blue
   if (message === 'DRAW') return UI.amber;
   if (message === 'FIGHT' || message === 'TIME') return UI.danger;
   if (message === 'WIN') return UI.amber;

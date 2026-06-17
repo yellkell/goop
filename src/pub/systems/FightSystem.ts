@@ -1109,7 +1109,7 @@ export class FightSystem extends createSystem({}) {
 
     const headlineColour =
       f.phase === 'fighting' ? UI.danger
-      : f.phase === 'starting' ? UI.amber
+      : f.phase === 'starting' ? UI.cool // 3-2-1 countdown in neon blue
       : !f.winner ? UI.amber
       : f.winner === pub.myId ? UI.emberBright
       : UI.cool;
@@ -1247,7 +1247,7 @@ export class FightSystem extends createSystem({}) {
                 : `${winnerName} WINS`;
       const statusAccent =
         f.phase === 'fighting' ? UI.danger
-        : f.phase === 'starting' ? UI.amber
+        : f.phase === 'starting' ? UI.cool // 3-2-1 countdown in neon blue
         : f.phase === 'idle' ? UI.coolBright
         : !f.winner ? UI.amber
         : colours[winnerSide];
