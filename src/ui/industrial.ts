@@ -46,7 +46,12 @@ export function fitStencilText(
   return px;
 }
 
-/** Dark, chromed verdict lettering with a coloured rim-light. */
+/**
+ * Forged-steel headline lettering — the countdown, FIGHT, the verdicts. A dark
+ * gunmetal face with a bright top bevel and a lit accent "power seam", wrapped
+ * in neon tubing (wide accent halo + crisp accent rim + a hot-white core), set
+ * in a heavy near-black casing so it reads as a plate cut-out lit from within.
+ */
 export function metalText(
   ctx: CanvasRenderingContext2D,
   text: string,
@@ -61,32 +66,46 @@ export function metalText(
   ctx.textBaseline = 'middle';
   ctx.font = stencilFont(px);
   ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
 
-  ctx.lineWidth = Math.max(8, px * 0.13);
-  ctx.strokeStyle = 'rgba(1,2,5,0.95)';
+  // 1) Heavy near-black casing — the glyph reads as a forged plate cut-out.
+  ctx.lineWidth = Math.max(10, px * 0.16);
+  ctx.strokeStyle = 'rgba(0,1,4,0.97)';
   ctx.strokeText(text, x, y);
 
+  // 2) Neon tubing tracing the rim: a wide accent halo, a crisp accent line,
+  //    then a faint hot-white core — lit gas around the letterform.
   ctx.shadowColor = accent;
-  ctx.shadowBlur = Math.round(px * 0.28);
-  ctx.lineWidth = Math.max(3, px * 0.045);
+  ctx.shadowBlur = Math.round(px * 0.46);
+  ctx.lineWidth = Math.max(4, px * 0.065);
   ctx.strokeStyle = accent;
+  ctx.strokeText(text, x, y);
+  ctx.shadowBlur = Math.round(px * 0.13);
+  ctx.lineWidth = Math.max(1.5, px * 0.022);
+  ctx.strokeStyle = 'rgba(255,255,255,0.5)';
   ctx.strokeText(text, x, y);
   ctx.shadowBlur = 0;
 
-  const chrome = ctx.createLinearGradient(0, y - px * 0.62, 0, y + px * 0.55);
-  chrome.addColorStop(0, '#f9fbff');
-  chrome.addColorStop(0.18, '#8e9aac');
-  chrome.addColorStop(0.36, '#e6ebf4');
-  chrome.addColorStop(0.52, accent);
-  chrome.addColorStop(0.74, '#303746');
-  chrome.addColorStop(1, '#080a0f');
-  ctx.fillStyle = chrome;
+  // 3) Dark gunmetal face: a bright bevel catch-light up top falling to
+  //    near-black, with a thin lit accent SEAM raked across the middle.
+  const metal = ctx.createLinearGradient(0, y - px * 0.58, 0, y + px * 0.56);
+  metal.addColorStop(0.0, '#d4dcea'); // top bevel catch-light
+  metal.addColorStop(0.13, '#6f7a88');
+  metal.addColorStop(0.4, '#272d37');
+  metal.addColorStop(0.49, accent); // the lit power seam
+  metal.addColorStop(0.55, '#151a21');
+  metal.addColorStop(0.8, '#0a0d12');
+  metal.addColorStop(1.0, '#04060a'); // deep shadow base
+  ctx.fillStyle = metal;
   ctx.fillText(text, x, y);
 
-  ctx.globalAlpha = 0.42;
-  ctx.lineWidth = Math.max(1, px * 0.018);
-  ctx.strokeStyle = 'rgba(255,255,255,0.75)';
-  ctx.strokeText(text, x, y - px * 0.02);
+  // 4) A crisp catch-light sliver riding the very top bevel.
+  ctx.globalAlpha = 0.55;
+  ctx.lineWidth = Math.max(1, px * 0.02);
+  ctx.strokeStyle = 'rgba(238,244,255,0.9)';
+  ctx.strokeText(text, x, y - px * 0.03);
+  ctx.globalAlpha = 1;
+
   ctx.restore();
 }
 
