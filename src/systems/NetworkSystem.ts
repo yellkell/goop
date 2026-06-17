@@ -196,12 +196,16 @@ export class NetworkSystem extends createSystem({
         break;
       }
       case 'deflect': {
+        // They parried our ball — but only honour it if our copy is STILL a
+        // live threat (in flight or recalling). A stale report mustn't clap a
+        // phantom block or, worse, kill a ball we've already caught into hand.
         const ball = this.findMyBall(msg.hand);
-        if (ball?.object3D) {
+        const st = ball ? (ball.getValue(Fireball, 'state') ?? 0) : -1;
+        if (ball?.object3D && (st === BallState.Flying || st === BallState.Returning)) {
           spawnFireImpact(this.world, ball.object3D.position, 1);
           this.spendMyBall(ball);
+          sfx.deflect();
         }
-        sfx.deflect();
         break;
       }
       case 'clash': {

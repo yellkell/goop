@@ -208,12 +208,15 @@ export class FightSystem extends createSystem({}) {
             }
             break;
           case 'FIGHT_DEFLECT':
+            // Only spend + clap the block if our ball is STILL a live threat —
+            // a stale deflect mustn't sound a phantom block (or kill a ball we
+            // already caught back). Matches FIGHT_CLASH below.
             if (this.amFighter() && this.myBalls) {
               const ball = this.myBalls[ev.ball];
               if (ball.state === FLYING || ball.state === RETURNING) {
                 this.spendLocalBall(ball);
+                sfx.deflect();
               }
-              sfx.deflect();
             }
             break;
           case 'FIGHT_CLASH':
