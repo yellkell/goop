@@ -841,10 +841,11 @@ export class FightSystem extends createSystem({}) {
         if (ePos.distanceTo(centre) <= radius + FIREBALL.radius) {
           enemy.hitCooldown = 0.8;
           this.myHp = Math.max(0, this.myHp - damage);
-          // Taking a hit is the loudest moment: oversized fiery burst, damage
-          // number, hard double-hand buzz (arena's spawnFireImpact at 1.7).
+          // Taking a hit is the loudest moment: oversized fiery burst, hard
+          // double-hand buzz (arena's spawnFireImpact at 1.7). The damage NUMBER
+          // belongs to the ATTACKER — they spawn it via their FIGHT_HIT handler
+          // — so we don't pop one up on ourselves.
           spawnFireImpact(this.world, ePos, 1, 1.7);
-          spawnDamagePopup(this.world, ePos, damage);
           sfx.hitTaken();
           pulseHand(this.world.session, 'left', 1, 160);
           pulseHand(this.world.session, 'right', 1, 160);

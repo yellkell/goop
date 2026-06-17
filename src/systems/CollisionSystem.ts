@@ -123,10 +123,11 @@ export class CollisionSystem extends createSystem({
       const me = (hitbox.getValue(Hitbox, 'owner') as Entity | null) ?? hitbox;
       this.applyDamage(me, actualDamage);
       // Taking a hit is the loudest moment in the game: oversized burst,
-      // extra spark spray, plate-clink sound, hard double-hand buzz.
+      // extra spark spray, plate-clink sound, hard double-hand buzz. The damage
+      // NUMBER is the attacker's read-out, not ours — they spawn it on landing
+      // the hit (see myBallVsOpponent / the net `hit` handler), so we don't.
       spawnFireImpact(this.world, _ballPos, 1, 1.7);
       emberBurst(_ballPos, 18, true);
-      spawnDamagePopup(this.world, _ballPos, actualDamage);
       sfx.hitTaken();
       feedback.playerHitFlash = 1;
       const v = ball.getVectorView(Fireball, 'velocity');
