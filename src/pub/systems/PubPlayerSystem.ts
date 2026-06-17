@@ -32,6 +32,11 @@ import { bus, pub, type RemotePunter } from '../state.js';
 
 const SEND_INTERVAL = 0.05; // 20 Hz
 const EASE = 14; // exponential smoothing rate for remote pose targets
+// How far a punter's spine hangs behind their head. The default (BODY_IK's
+// 0.16) is tuned so your OWN torso doesn't block your downward view; on the
+// crowd you watch, that much set-back just reads as the head floating ahead of
+// the body, so we seat it closer over the shoulders.
+const PUNTER_SET_BACK = 0.05;
 const CLAP_DISTANCE = 0.13;
 // Hands have to come together with real intent — a slow drift between resting
 // hands shouldn't read as applause.
@@ -196,6 +201,9 @@ export class PubPlayerSystem extends createSystem({}) {
         rig.head.position.z,
         _chest,
         _pelvis,
+        // Seat the head over the shoulders for the people we LOOK AT — the
+        // first-person view-clearing set-back makes their heads jut forward.
+        PUNTER_SET_BACK,
       );
       for (const hand of [0, 1] as const) {
         const tuple = hand === 0 ? punter.left : punter.right;

@@ -949,6 +949,11 @@ const _yaw = new Quaternion();
  * their own chest instead of the base of their neck, and the torso stops
  * blocking the view of what's in front.
  *
+ * That set-back is tuned for the FIRST-PERSON wearer; a third-person viewer
+ * just sees the head jutting ahead of the chest, so callers rendering OTHER
+ * people (the pub crowd) can pass a smaller `setBackBase` to seat the head
+ * more naturally over the shoulders.
+ *
  * Returns chest/pelvis world positions for the caller's hitboxes via out args.
  */
 export function solveTorso(
@@ -959,6 +964,7 @@ export function solveTorso(
   padZ: number,
   outChest: Vector3,
   outPelvis: Vector3,
+  setBackBase: number = BODY_IK.spineSetBack,
 ): void {
   rig.head.position.copy(headPos);
   rig.head.quaternion.copy(headQuat);
@@ -973,7 +979,7 @@ export function solveTorso(
   // stretches flat out BEHIND you along the slab instead of folding straight
   // down through it.
   const duck = Math.min(1, Math.max(0, (BODY_IK.hipHeight - headPos.y + 0.35) / 0.8));
-  const setBack = BODY_IK.spineSetBack + duck * 0.5;
+  const setBack = setBackBase + duck * 0.5;
   _anchor.set(headPos.x - nx * setBack, headPos.y, headPos.z - nz * setBack);
 
   // Hips track the anchor laterally so big leans drag the torso along, and
