@@ -25,7 +25,7 @@ import {
   Vector3,
   type Intersection,
 } from 'three';
-import { app, saveAccentHue, saveEnvironment, saveShootBack, type AppState } from '../menu/appState.js';
+import { app, DEFAULT_ACCENT_HUE, saveAccentHue, saveEnvironment, saveShootBack, type AppState } from '../menu/appState.js';
 import {
   colorBarHue,
   createActionPanel,
@@ -157,16 +157,22 @@ export class MenuSystem extends createSystem({}) {
         hoverAction = action;
       }
       const gp = this.input.xr.gamepads[hand];
-      if (hit.uv && panel.drag && gp?.getButtonPressed(InputComponent.Trigger)) {
-        if (panel.drag(hit.uv.x, hit.uv.y)) dragged = true;
+      // Gate the drag branch on an ACTUAL track hit — a held trigger off the
+      // track (e.g. on the accent panel's DEFAULT button) then falls through to
+      // the click/action branch below instead of being swallowed.
+      if (
+        hit.uv && panel.drag && gp?.getButtonPressed(InputComponent.Trigger) &&
+        panel.drag(hit.uv.x, hit.uv.y)
+      ) {
+        dragged = true;
       } else if (hit.uv && action === 'av-color' && gp?.getButtonPressed(InputComponent.Trigger)) {
         // The hue bar is continuous: scrub the armour colour live while held.
         setAvatarColor(colorBarHue(hit.uv.x));
       } else if (hit.uv && gp?.getButtonDown(InputComponent.Trigger)) {
         if (panel.click) {
           if (panel.click(hit.uv.x, hit.uv.y)) clicked = true;
-        } else {
-          if (action) this.run(action);
+        } else if (action) {
+          this.run(action);
         }
       }
     }
@@ -301,6 +307,10 @@ export class MenuSystem extends createSystem({}) {
         break;
       case 'av-uncolor':
         setAvatarColor(-1); // back to the skin's own palette
+        break;
+      case 'accent-default':
+        app.accentHue = DEFAULT_ACCENT_HUE; // neon back to the house ember
+        saveAccentHue();
         break;
       case 'pf-0':
       case 'pf-1':

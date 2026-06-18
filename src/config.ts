@@ -109,8 +109,14 @@ export const ATTACH = {
   split: 1,
   grow: 2,
   shrink: 3,
-  /** Recall distance (m) at which grow/shrink reach full effect. */
-  fullRange: ARENA_GAP,
+  /**
+   * Recall distance (m) at which grow/shrink reach their FULL size/damage
+   * swing. Set well beyond the arena gap so the effect builds up gradually
+   * with travel: a short recall barely changes the ball, and you have to throw
+   * long and recall from DEEP — the ball sailing past your opponent — to earn
+   * the big swings. (Was the arena gap, which maxed out on an ordinary recall.)
+   */
+  fullRange: 6.0,
   growSize: 2.0, // up to double size on a long recall
   shrinkSize: 0.5, // down to half size on a long recall
   damageSwing: 10, // ±10 damage at full range

@@ -119,9 +119,20 @@ function glowMat(color: number, intensity = 1.4): MeshStandardMaterial {
 }
 
 /**
+ * How much of the accent the STEEL BODY takes through its emissive channel.
+ * The glowing neon parts wear the colour at full; the chassis only catches a
+ * faint warm whisper of it, so cranking the accent recolours your neon — not
+ * the whole suit. Kept well below 1 on purpose (it used to be the full hue,
+ * which washed the body in the accent colour).
+ */
+const BODY_ACCENT_TINT = 0.3;
+
+/**
  * Re-tint every accent-tagged material under a built avatar (glove or boxer)
  * to `color`. Glow highlights take it on both colour + emissive; chassis steel
- * only on its emissive tint. Cheap enough to call live while dragging a slider.
+ * only on a heavily DAMPENED emissive tint, so the body stays forged metal
+ * rather than a slab of the accent. Cheap enough to call live while dragging a
+ * slider.
  */
 export function setAvatarAccent(root: Object3D, color: number): void {
   root.traverse((o) => {
@@ -135,7 +146,9 @@ export function setAvatarAccent(root: Object3D, color: number): void {
         m.color.set(color);
         m.emissive.set(color);
       } else if (mode === 'emissive') {
-        m.emissive.set(color);
+        // `set` resets from the hue, then the scale dims it — idempotent across
+        // repeated slider drags, so the body never builds up colour.
+        m.emissive.set(color).multiplyScalar(BODY_ACCENT_TINT);
       }
     }
   });

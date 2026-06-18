@@ -77,9 +77,11 @@ export function spawnPopup(
   e.addComponent(Effect, { kind: EffectKind.Popup, life: 0.9, baseScale: scale });
 }
 
-/** A little red damage number that pops at the impact, rises and fades. */
+/** A little red damage number that pops at the impact, rises and fades.
+ *  Always a whole number — a split ball's 20/3 reads as "7", never a giant
+ *  run-on fraction. */
 export function spawnDamagePopup(world: World, pos: Vector3, dmg: number): void {
-  spawnPopup(world, pos, String(dmg));
+  spawnPopup(world, pos, String(Math.round(dmg)));
 }
 
 /**

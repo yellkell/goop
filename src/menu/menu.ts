@@ -18,7 +18,7 @@ import {
   PlaneGeometry,
   type Scene,
 } from 'three';
-import { app, saveBallAttach } from './appState.js';
+import { app, DEFAULT_ACCENT_HUE, saveBallAttach } from './appState.js';
 import { customization } from './customization.js';
 import { AVATAR_SKINS, PLATFORM_SKINS } from '../avatar/skins.js';
 import { ATTACH, GAME_TITLE, hueToColor } from '../config.js';
@@ -46,6 +46,8 @@ export type MenuAction =
   | 'av-color'
   /** Reset the armour colour to the skin's default palette. */
   | 'av-uncolor'
+  /** Reset the avatar-accent (neon) hue to the house ember default. */
+  | 'accent-default'
   | 'pf-0' | 'pf-1' | 'pf-2';
 
 const PW = 512;
@@ -624,13 +626,17 @@ export function createActionPanel(scene: Scene): ActionPanel {
 // Uses its own wider/shorter canvas so the slider isn't squashed on the plane.
 const LW = 512;
 const LH = 240;
-const SL_X = 56; // slider track left
-const SL_W = 356; // slider track width
+const SL_X = 44; // slider track left
+const SL_W = 296; // slider track width
 const SL_Y = 120; // slider track top (canvas y, down)
 const SL_H = 34; // slider track height
-const SW_X = SL_X + SL_W + 18; // colour swatch left
-const SW_Y = SL_Y - 7;
-const SW = 48; // swatch size
+const SW_X = SL_X + SL_W + 12; // colour swatch left
+const SW_Y = SL_Y - 6;
+const SW = 46; // swatch size
+// DEFAULT button — to the right of the swatch, mirroring the ARMOUR COLOUR
+// picker's reset. Sits clear of the slider track's x-range so a tap on it
+// falls through the drag handler (see dragLoadout) to a clean click.
+const ACC_DEF = { x: SW_X + SW + 12, y: SL_Y - 6, w: LW - (SW_X + SW + 12) - 16, h: 46 };
 
 function hexCss(color: number): string {
   return `#${color.toString(16).padStart(6, '0')}`;
@@ -671,19 +677,46 @@ function drawLoadout(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | nu
   // Live colour swatch.
   plate(ctx, SW_X, SW_Y, SW, SW, { cut: 8, fill: css, stroke: UI.steel, rivets: false });
 
+  // DEFAULT — revert the accent to the house ember (DEFAULT_ACCENT_HUE).
+  const atDefault = Math.abs(app.accentHue - DEFAULT_ACCENT_HUE) < 0.005;
+  const resetHot = hoverAction === 'accent-default';
+  plate(ctx, ACC_DEF.x, ACC_DEF.y, ACC_DEF.w, ACC_DEF.h, {
+    cut: 8,
+    fill: resetHot ? 'rgba(255,176,0,0.16)' : 'rgba(10,11,15,0.7)',
+    stroke: atDefault || resetHot ? UI.amber : UI.steelDim,
+    rivets: false,
+  });
+  ctx.textAlign = 'center';
+  ctx.font = '700 15px system-ui, sans-serif';
+  ctx.fillStyle = atDefault ? UI.amber : UI.textDim;
+  ctx.fillText('DEFAULT', ACC_DEF.x + ACC_DEF.w / 2, ACC_DEF.y + ACC_DEF.h / 2 + 1);
+
   ctx.font = '600 22px system-ui, sans-serif';
   ctx.fillStyle = UI.textDim;
   ctx.textAlign = 'center';
-  ctx.fillText("drag to tint your avatar's neon", LW / 2, LH - 30);
+  ctx.fillText("drag to tint your avatar's neon", LW / 2, LH - 28);
 }
 
-/** While the trigger is held over the track, set the hue from the hit X. */
+/** While the trigger is held over the TRACK (not the swatch/DEFAULT button to
+ *  its right), set the hue from the hit X. Returning false off the track lets
+ *  a tap fall through to the DEFAULT button's click. */
 function dragLoadout(u: number, v: number): boolean {
   const y = (1 - v) * LH;
-  if (y < SL_Y - 34 || y > SL_Y + SL_H + 34) return false;
   const x = u * LW;
+  if (y < SL_Y - 30 || y > SL_Y + SL_H + 30) return false;
+  if (x < SL_X - 14 || x > SL_X + SL_W + 12) return false;
   app.accentHue = Math.min(1, Math.max(0, (x - SL_X) / SL_W));
   return true;
+}
+
+/** Hover/hit test for the AVATAR ACCENT panel: only the DEFAULT button. */
+function hitLoadout(u: number, v: number): MenuAction | null {
+  const x = u * LW;
+  const y = (1 - v) * LH;
+  if (x >= ACC_DEF.x && x <= ACC_DEF.x + ACC_DEF.w && y >= ACC_DEF.y && y <= ACC_DEF.y + ACC_DEF.h) {
+    return 'accent-default';
+  }
+  return null;
 }
 
 // --- BALL LOADOUT: pick an attachment for each fist's ball -----------------
@@ -873,7 +906,7 @@ export function createMenu(scene: Scene): Menu {
   const board = makePanel('board', 1.36, 1.456, drawBoard, hitBoard, { cw: BW, ch: BH });
   // Taller than the lobby panels (own CW×CH canvas) for the colour picker row.
   const custom = makePanel('custom', 0.9, 0.915, drawCustom, hitCustom, { cw: CW, ch: CH });
-  const loadout = makePanel('loadout', 0.78, 0.36, drawLoadout, () => null, {
+  const loadout = makePanel('loadout', 0.78, 0.36, drawLoadout, hitLoadout, {
     cw: LW,
     ch: LH,
     drag: dragLoadout,

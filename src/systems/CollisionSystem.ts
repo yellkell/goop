@@ -282,8 +282,13 @@ export class CollisionSystem extends createSystem({
   }
 
   private damageFor(hitbox: Entity, baseDamage: number): number {
-    return (hitbox.getValue(Hitbox, 'kind') ?? HitboxKind.Body) === HitboxKind.Head
-      ? FIREBALL.headDamage
-      : baseDamage;
+    const isHead = (hitbox.getValue(Hitbox, 'kind') ?? HitboxKind.Body) === HitboxKind.Head;
+    // Headshots hit harder, but the bonus is a MULTIPLIER on the ball's own
+    // damage — so a 1/3-damage split shard (or a grown/shrunk ball) lands a
+    // proportional headshot, not a flat 25 that let three split shards deal 75.
+    // Round to a clean whole number: a split's 20/3 must read as "7", never a
+    // run-on "6.666666666666667" in the damage popup.
+    const raw = isHead ? baseDamage * (FIREBALL.headDamage / FIREBALL.damage) : baseDamage;
+    return Math.round(raw);
   }
 }
