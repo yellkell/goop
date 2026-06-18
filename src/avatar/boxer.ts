@@ -120,12 +120,11 @@ function glowMat(color: number, intensity = 1.4): MeshStandardMaterial {
 
 /**
  * How much of the accent the STEEL BODY takes through its emissive channel.
- * The glowing neon parts wear the colour at full; the chassis only catches a
- * faint warm whisper of it, so cranking the accent recolours your neon — not
- * the whole suit. Kept well below 1 on purpose (it used to be the full hue,
- * which washed the body in the accent colour).
+ * The glowing neon parts wear the colour at full; the chassis takes a softened
+ * share of it — enough to keep that neon-lit sheen washing over the suit, but
+ * short of the full hue (which used to paint the body a slab of the accent).
  */
-const BODY_ACCENT_TINT = 0.3;
+const BODY_ACCENT_TINT = 0.5;
 
 /**
  * Re-tint every accent-tagged material under a built avatar (glove or boxer)
