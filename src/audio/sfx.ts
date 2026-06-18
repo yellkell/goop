@@ -307,6 +307,12 @@ export function uiClick(): void {
   tone({ freq: 110, type: 'sine', dur: 0.04, gain: 0.08 });
 }
 
+/** UI: the laser pointer sweeping onto a panel — a soft, quick zap. */
+export function uiHover(): void {
+  tone({ freq: 1700, to: 2500, type: 'sine', dur: 0.05, gain: 0.035 });
+  whooshNoise(0.035, 0.018, 3200, 5200);
+}
+
 /** One strike of the ring bell — long metallic decay. */
 function bellStrike(delay: number): void {
   const c = ready();

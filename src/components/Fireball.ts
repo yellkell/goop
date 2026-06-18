@@ -53,6 +53,15 @@ export const Fireball = createComponent(
     returnHit: { type: Types.Int32, default: 0 },
     /** Seconds remaining before a spent ball may be recalled. */
     recallLock: { type: Types.Float32, default: 0 },
+    /**
+     * Active attachment effect on THIS return (ATTACH.*): 0 none, 1 split,
+     * 2 grow, 3 shrink. Set when a FLYING ball is recalled, cleared on catch.
+     */
+    attach: { type: Types.Int32, default: 0 },
+    /** 1 = a transient split shard (one of the extra balls); dies on catch. */
+    shard: { type: Types.Int32, default: 0 },
+    /** 0..2 — fan slot for a split ball, so the three spread evenly. */
+    shardIndex: { type: Types.Int32, default: 0 },
   },
   'A flaming iron ball bonded to one fist.',
 );

@@ -19,6 +19,11 @@ export interface OpponentPose {
   /** Their trigger-held flags — drives the orbit visual on their balls. */
   orbiting: [boolean, boolean];
   fisting: [boolean, boolean];
+  /**
+   * Their chosen avatar-accent hue (0..1), from their pose packets. -1 until a
+   * packet arrives (or in bot bouts) → OpponentSystem keeps the default blue.
+   */
+  accentHue: number;
 }
 
 export const opponent: OpponentPose = {
@@ -29,6 +34,7 @@ export const opponent: OpponentPose = {
   handQuat: [new Quaternion(), new Quaternion()],
   orbiting: [false, false],
   fisting: [false, false],
+  accentHue: -1,
 };
 
 /**
@@ -37,7 +43,8 @@ export const opponent: OpponentPose = {
  */
 export type BallCommand =
   | { type: 'throw'; hand: 0 | 1; pos: Vector3; vel: Vector3 }
-  | { type: 'recall'; hand: 0 | 1 }
+  /** Recall; `att`/`dmg`/`scl` carry a fired attachment (see protocol). */
+  | { type: 'recall'; hand: 0 | 1; att?: number; dmg?: number; scl?: number }
   /** The opponent's own sim reports their ball was spent (hit us / parried). */
   | { type: 'spend'; hand: 0 | 1 }
   /** A throwaway enemy ball (training targets' return fire). */

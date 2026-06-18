@@ -8,7 +8,7 @@
 
 import { createSystem, Vector3, type Entity } from '@iwsdk/core';
 import { Object3D } from 'three';
-import { buildBoxer, setGloveLit, solveTorso, type BoxerRig } from '../avatar/boxer.js';
+import { buildBoxer, setAvatarAccent, setGloveLit, solveTorso, type BoxerRig } from '../avatar/boxer.js';
 import { HAND_ADDUCTION, setHandCurl } from '../avatar/hands.js';
 import {
   OPPONENT_DEFAULT_AVATAR,
@@ -25,7 +25,7 @@ import { Hitbox, HitboxKind } from '../components/Hitbox.js';
 import { opponent } from '../combat/opponentBus.js';
 import { app } from '../menu/appState.js';
 import { rival } from '../net/leaderboard.js';
-import { ARENA_GAP, BODY_IK } from '../config.js';
+import { ARENA_GAP, BODY_IK, hueToColor, teamColor } from '../config.js';
 
 const _chest = new Vector3();
 const _pelvis = new Vector3();
@@ -38,6 +38,7 @@ export class OpponentSystem extends createSystem({
   private hitboxes: { head?: Entity; chest?: Entity; pelvis?: Entity } = {};
   private built = false;
   private appliedSkins = '';
+  private accentColor = teamColor(1);
 
   /**
    * Dress the rival the way THEY chose (skins from their `iam` message);
@@ -53,6 +54,7 @@ export class OpponentSystem extends createSystem({
     for (const piece of rig.all) applyAvatarSkin(piece, av);
     const pad = this.scene.getObjectByName('opponent-platform');
     if (pad) applyPlatformSkin(pad, pf);
+    this.accentColor = Number.NaN;
   }
 
   /** True while the opponent's bound ball for this hand is homing back. */
@@ -93,6 +95,16 @@ export class OpponentSystem extends createSystem({
     }
 
     this.applySkins(rig);
+
+    // Neon: a remote rival wears their own accent (synced over the wire); the
+    // bot keeps the readable house blue. Recolour only when it actually changes.
+    const want = app.mode === 'net' && opponent.accentHue >= 0
+      ? hueToColor(opponent.accentHue)
+      : teamColor(1);
+    if (want !== this.accentColor) {
+      this.accentColor = want;
+      for (const piece of rig.all) setAvatarAccent(piece, want);
+    }
 
     // Head + torso from the bus pose; gloves straight onto the hand poses.
     solveTorso(rig, opponent.headPos, opponent.headQuat, 0, -ARENA_GAP, _chest, _pelvis);

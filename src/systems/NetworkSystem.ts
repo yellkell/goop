@@ -144,7 +144,7 @@ export class NetworkSystem extends createSystem({
         (gp?.getButtonPressed(InputComponent.Trigger) ?? false);
     }
 
-    net.send({ k: 'pose', head: headPose, left: hands[0], right: hands[1], orbit, fist, hp: this.myHp });
+    net.send({ k: 'pose', head: headPose, left: hands[0], right: hands[1], orbit, fist, hp: this.myHp, acc: app.accentHue });
   }
 
   // --- incoming ------------------------------------------------------------
@@ -165,6 +165,7 @@ export class NetworkSystem extends createSystem({
         opponent.orbiting[1] = msg.orbit[1];
         opponent.fisting[0] = msg.fist?.[0] ?? false;
         opponent.fisting[1] = msg.fist?.[1] ?? false;
+        if (typeof msg.acc === 'number') opponent.accentHue = msg.acc;
         this.setTheirHp(msg.hp);
         target.fresh = true;
         break;
@@ -176,7 +177,7 @@ export class NetworkSystem extends createSystem({
         break;
       }
       case 'recall':
-        ballCommands.push({ type: 'recall', hand: msg.hand });
+        ballCommands.push({ type: 'recall', hand: msg.hand, att: msg.att, dmg: msg.dmg, scl: msg.scl });
         break;
       case 'hit': {
         // Their client ruled our ball connected: damage them on our side and

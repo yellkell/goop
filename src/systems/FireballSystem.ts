@@ -25,7 +25,7 @@ import { app, training } from '../menu/appState.js';
 import { net } from '../net/client.js';
 import { pulseHand } from '../input/haptics.js';
 import * as sfx from '../audio/sfx.js';
-import { ARENA_BOUNDS, ARENA_GAP, FIREBALL, NET } from '../config.js';
+import { ARENA_BOUNDS, ARENA_GAP, ATTACH, FIREBALL, NET } from '../config.js';
 
 const HANDS = ['left', 'right'] as const;
 type Hand = 0 | 1;
@@ -69,6 +69,16 @@ const _dir = new Vector3();
 const _aim = new Vector3();
 const _offset = new Vector3();
 const _camQ = new Quaternion();
+const _target = new Vector3();
+const _perp1 = new Vector3();
+const _perp2 = new Vector3();
+
+interface AttachEffect {
+  att: number;
+  dmg: number;
+  scl: number;
+}
+const NO_ATTACH: AttachEffect = { att: 0, dmg: FIREBALL.damage, scl: 1 };
 
 export class FireballSystem extends createSystem({
   balls: { required: [Fireball] },
@@ -91,6 +101,88 @@ export class FireballSystem extends createSystem({
     for (const owner of [0, 1] as const) {
       for (const hand of [0, 1] as const) {
         this.createBall(owner, hand);
+      }
+    }
+  }
+
+  // --- attachments (the BALL LOADOUT) ------------------------------------
+
+  /**
+   * Apply YOUR ball's equipped attachment at the moment of a live recall, and
+   * return the effect to broadcast. Scaling reads `_grip` (set by the caller).
+   */
+  private applyAttachment(ball: Entity, hand: Hand): AttachEffect {
+    const type = app.ballAttach[hand] ?? 0;
+    if (!type) return NO_ATTACH;
+    const dist = ball.object3D!.position.distanceTo(_grip);
+    const eff = this.computeEffect(type, dist);
+    this.equip(ball, 0, hand, eff);
+    return eff;
+  }
+
+  /** Apply the rival's broadcast attachment onto our copy of their ball. */
+  private applyAttachmentRemote(ball: Entity, hand: Hand, att: number, dmg: number, scl: number): void {
+    this.equip(ball, 1, hand, { att, dmg, scl });
+  }
+
+  /** Damage/size for an attachment given the recall distance. */
+  private computeEffect(type: number, dist: number): AttachEffect {
+    if (type === ATTACH.split) {
+      return { att: ATTACH.split, dmg: FIREBALL.damage / ATTACH.splitCount, scl: ATTACH.splitSize };
+    }
+    const t = Math.min(1, Math.max(0, dist / ATTACH.fullRange));
+    if (type === ATTACH.grow) {
+      return { att: ATTACH.grow, dmg: FIREBALL.damage - ATTACH.damageSwing * t, scl: 1 + (ATTACH.growSize - 1) * t };
+    }
+    return { att: ATTACH.shrink, dmg: FIREBALL.damage + ATTACH.damageSwing * t, scl: 1 - (1 - ATTACH.shrinkSize) * t };
+  }
+
+  /** Stamp an effect onto a main ball and spawn the extra balls for a split. */
+  private equip(ball: Entity, owner: 0 | 1, hand: Hand, eff: AttachEffect): void {
+    ball.setValue(Fireball, 'attach', eff.att);
+    ball.setValue(Fireball, 'damage', eff.dmg);
+    ball.setValue(Fireball, 'radius', FIREBALL.radius * eff.scl);
+    ball.setValue(Fireball, 'shardIndex', 0);
+    if (eff.att === ATTACH.split) {
+      const pos = ball.object3D!.position;
+      for (let i = 1; i < ATTACH.splitCount; i++) {
+        this.spawnShard(owner, hand, i, pos, eff.dmg, FIREBALL.radius * eff.scl);
+      }
+    }
+  }
+
+  /** One extra split ball, born mid-air already homing for the fist. */
+  private spawnShard(owner: 0 | 1, hand: Hand, index: number, pos: Vector3, damage: number, radius: number): void {
+    const e = this.createBall(owner, hand);
+    e.setValue(Fireball, 'shard', 1);
+    e.setValue(Fireball, 'shardIndex', index);
+    e.setValue(Fireball, 'attach', ATTACH.split);
+    e.setValue(Fireball, 'damage', damage);
+    e.setValue(Fireball, 'radius', radius);
+    e.setValue(Fireball, 'state', BallState.Returning);
+    e.setValue(Fireball, 'returnHit', 0);
+    e.object3D!.position.copy(pos);
+    e.object3D!.visible = true;
+  }
+
+  /** Recall complete (or round reset): make a main ball whole and normal. */
+  private revertBall(ball: Entity): void {
+    ball.setValue(Fireball, 'attach', 0);
+    ball.setValue(Fireball, 'shardIndex', 0);
+    ball.setValue(Fireball, 'damage', FIREBALL.damage);
+    ball.setValue(Fireball, 'radius', FIREBALL.radius);
+    ball.object3D?.scale.setScalar(1);
+  }
+
+  /** Destroy any split shards bound to this owner+hand. */
+  private destroyShards(owner: number, hand: Hand): void {
+    for (const e of [...this.queries.balls.entities]) {
+      if (
+        (e.getValue(Fireball, 'shard') ?? 0) === 1 &&
+        (e.getValue(Fireball, 'owner') ?? 0) === owner &&
+        (e.getValue(Fireball, 'hand') ?? 0) === hand
+      ) {
+        this.destroyBall(e);
       }
     }
   }
@@ -126,18 +218,20 @@ export class FireballSystem extends createSystem({
       const owner = ball.getValue(Fireball, 'owner') ?? 0;
       const hand = (ball.getValue(Fireball, 'hand') ?? 0) as Hand;
       const transient = (ball.getValue(Fireball, 'transient') ?? 0) === 1;
+      const shard = (ball.getValue(Fireball, 'shard') ?? 0) === 1;
 
       // The opponent's bound pair only exists while an opponent does.
       const visible = live && (owner === 0 || transient || (app.state === 'playing' && opponent.active));
       obj.visible = visible;
       if (!visible) {
-        if (transient) this.destroyBall(ball);
+        if (transient || shard) this.destroyBall(ball);
         continue;
       }
 
       const recallLock = ball.getValue(Fireball, 'recallLock') ?? 0;
       if (recallLock > 0) ball.setValue(Fireball, 'recallLock', Math.max(0, recallLock - delta));
-      if (owner === 0) this.updateLocalControl(ball, hand, delta);
+      // Only the two bound main balls answer the trigger; shards just fly home.
+      if (owner === 0 && !shard) this.updateLocalControl(ball, hand, delta);
       this.integrate(ball, hand, owner, transient, delta);
       this.updateVisual(ball, delta);
     }
@@ -192,6 +286,8 @@ export class FireballSystem extends createSystem({
         state === BallState.Flying ||
         (state === BallState.Dead && (ball.getValue(Fireball, 'recallLock') ?? 0) <= 0)
       ) {
+        // Attachments only fire on a LIVE recall — a dead ball returns plain.
+        const eff = state === BallState.Flying ? this.applyAttachment(ball, hand) : NO_ATTACH;
         ball.setValue(Fireball, 'state', BallState.Returning);
         ball.setValue(Fireball, 'recallLock', 0);
         // Fresh return-pass window — but ONLY for a ball recalled mid-
@@ -199,7 +295,11 @@ export class FireballSystem extends createSystem({
         // leg connect again read as an awful instant double hit.
         ball.setValue(Fireball, 'returnHit', state === BallState.Dead ? 1 : 0);
         sfx.recall();
-        net.send({ k: 'recall', hand });
+        net.send(
+          eff.att
+            ? { k: 'recall', hand, att: eff.att, dmg: eff.dmg, scl: eff.scl }
+            : { k: 'recall', hand },
+        );
       }
     }
 
@@ -216,6 +316,9 @@ export class FireballSystem extends createSystem({
     // Keep the catch check here where we know the grip pose.
     const st = ball.getValue(Fireball, 'state') ?? 0;
     if (st === BallState.Returning && obj.position.distanceTo(_grip) <= FIREBALL.catchRadius) {
+      // Recall complete: the ball is whole and normal again, shards retired.
+      this.revertBall(ball);
+      this.destroyShards(0, hand);
       ball.setValue(Fireball, 'state', pressed ? BallState.Orbit : BallState.Hover);
       ball.setValue(Fireball, 'spin', 0);
       sfx.catchBall();
@@ -330,13 +433,46 @@ export class FireballSystem extends createSystem({
       }
       case BallState.Returning: {
         this.handPose(owner, hand);
-        _dir.copy(_grip).sub(obj.position);
+        const shard = (ball.getValue(Fireball, 'shard') ?? 0) === 1;
+        const attach = ball.getValue(Fireball, 'attach') ?? 0;
+
+        // Home toward the hand. Split balls fan out around the return path,
+        // the fan collapsing to the fist as they close so they read as three.
+        _target.copy(_grip);
+        if (attach === ATTACH.split) {
+          _dir.copy(_grip).sub(obj.position);
+          const d = _dir.length();
+          if (d > 1e-3) {
+            _dir.multiplyScalar(1 / d);
+            _perp1.set(0, 1, 0).cross(_dir);
+            if (_perp1.lengthSq() < 1e-4) _perp1.set(1, 0, 0);
+            _perp1.normalize();
+            _perp2.copy(_dir).cross(_perp1).normalize();
+            const idx = ball.getValue(Fireball, 'shardIndex') ?? 0;
+            const ang = (idx * Math.PI * 2) / ATTACH.splitCount;
+            const fan = ATTACH.splitSpread * Math.min(1, d / ATTACH.splitSpreadRange);
+            _target
+              .addScaledVector(_perp1, Math.cos(ang) * fan)
+              .addScaledVector(_perp2, Math.sin(ang) * fan);
+          }
+        }
+
+        _dir.copy(_target).sub(obj.position);
         const dist = _dir.length();
         const speed = Math.min(FIREBALL.returnSpeed, 3 + dist * 7);
         obj.position.addScaledVector(_dir.normalize(), Math.min(speed * delta, dist));
-        // Opponent-owned balls "catch" here (we know their hand pose).
-        if (owner === 1 && dist <= FIREBALL.catchRadius) {
-          ball.setValue(Fireball, 'state', BallState.Hover);
+
+        // Catch: a shard just vanishes; an opponent main ball settles back to
+        // normal (your own main balls catch in updateLocalControl, where the
+        // trigger state decides hover vs. orbit).
+        if (obj.position.distanceTo(_grip) <= FIREBALL.catchRadius) {
+          if (shard) {
+            this.destroyBall(ball);
+          } else if (owner === 1) {
+            this.revertBall(ball);
+            this.destroyShards(1, hand);
+            ball.setValue(Fireball, 'state', BallState.Hover);
+          }
         }
         break;
       }
@@ -428,6 +564,11 @@ export class FireballSystem extends createSystem({
           ball.setValue(Fireball, 'recallLock', 0);
           ball.setValue(Fireball, 'returnHit', st === BallState.Dead ? 1 : 0);
           this.netBlend.delete(ball);
+          // Mirror the rival's fired attachment onto our copy of their ball so
+          // it splits/scales and deals matching damage when it reaches us.
+          if (cmd.att) {
+            this.applyAttachmentRemote(ball, cmd.hand, cmd.att, cmd.dmg ?? FIREBALL.damage, cmd.scl ?? 1);
+          }
           break;
         }
         case 'spend':
@@ -465,6 +606,10 @@ export class FireballSystem extends createSystem({
     const visual = this.visuals.get(ball);
     const obj = ball.object3D;
     if (!visual || !obj) return;
+
+    // Size tracks the (possibly attachment-scaled) radius; 1.0 for normal balls.
+    const r = ball.getValue(Fireball, 'radius') ?? FIREBALL.radius;
+    obj.scale.setScalar(r / FIREBALL.radius);
 
     const state = ball.getValue(Fireball, 'state') ?? 0;
     const target =
@@ -520,13 +665,14 @@ export class FireballSystem extends createSystem({
     ball.destroy();
   }
 
-  /** A bound (non-transient) ball by owner+hand. */
+  /** A bound (non-transient, non-shard) ball by owner+hand. */
   private findBall(owner: number, hand: number): Entity | undefined {
     for (const e of this.queries.balls.entities) {
       if (
         (e.getValue(Fireball, 'owner') ?? 0) === owner &&
         (e.getValue(Fireball, 'hand') ?? 0) === hand &&
-        (e.getValue(Fireball, 'transient') ?? 0) === 0
+        (e.getValue(Fireball, 'transient') ?? 0) === 0 &&
+        (e.getValue(Fireball, 'shard') ?? 0) === 0
       ) {
         return e;
       }
@@ -536,7 +682,7 @@ export class FireballSystem extends createSystem({
 
   private resetBalls(): void {
     for (const ball of [...this.queries.balls.entities]) {
-      if ((ball.getValue(Fireball, 'transient') ?? 0) === 1) {
+      if ((ball.getValue(Fireball, 'transient') ?? 0) === 1 || (ball.getValue(Fireball, 'shard') ?? 0) === 1) {
         this.destroyBall(ball);
         continue;
       }
@@ -545,6 +691,7 @@ export class FireballSystem extends createSystem({
       ball.setValue(Fireball, 'elapsed', 0);
       ball.setValue(Fireball, 'returnHit', 0);
       ball.setValue(Fireball, 'recallLock', 0);
+      this.revertBall(ball);
     }
     this.netBlend.clear();
     this.trackers[0].reset();

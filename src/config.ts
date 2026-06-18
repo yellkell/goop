@@ -96,6 +96,30 @@ export const FIREBALL = {
   deflectBonus: 0.05, // extra contact radius for the parry check
 };
 
+/**
+ * Per-ball attachments (the BALL LOADOUT panel). Each of your two balls can
+ * carry one. The effect fires the instant you RECALL a still-FLYING ball — a
+ * dead ball on the floor returns plain — and lasts only until you catch it,
+ * after which the ball is normal again. Grow/shrink scale with the recall
+ * distance: the farther out the ball was when you pulled it back, the bigger
+ * the swing, up to the caps below. Split is a fixed fan of three.
+ */
+export const ATTACH = {
+  none: 0,
+  split: 1,
+  grow: 2,
+  shrink: 3,
+  /** Recall distance (m) at which grow/shrink reach full effect. */
+  fullRange: ARENA_GAP,
+  growSize: 2.0, // up to double size on a long recall
+  shrinkSize: 0.5, // down to half size on a long recall
+  damageSwing: 10, // ±10 damage at full range
+  splitCount: 3, // total balls a split becomes
+  splitSize: 0.62, // each shard's size vs a normal ball
+  splitSpread: 0.26, // lateral fan radius (m) mid-return
+  splitSpreadRange: 1.4, // distance (m) over which the fan collapses to the hand
+} as const;
+
 /** Combat tuning: health pools shared by the IK body parts. */
 export const COMBAT = {
   playerHealth: 100,
@@ -253,4 +277,29 @@ export const PALETTE = {
 /** Team → fire tint: 0 = you (orange), 1 = opponent (blue). */
 export function teamColor(team: number): number {
   return team === 0 ? PALETTE.ember : PALETTE.coolFlame;
+}
+
+/**
+ * Map a hue (0..1 around the wheel) to a saturated glow colour for avatar
+ * accents. Saturation/lightness are fixed to the ember vibe, so the default
+ * hue (≈0.07) reproduces the classic orange — see DEFAULT_ACCENT_HUE.
+ */
+export function hueToColor(hue: number): number {
+  const h = (((hue % 1) + 1) % 1) * 6;
+  const s = 1;
+  const l = 0.55;
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs((h % 2) - 1));
+  const m = l - c / 2;
+  let r = 0, g = 0, b = 0;
+  if (h < 1) { r = c; g = x; }
+  else if (h < 2) { r = x; g = c; }
+  else if (h < 3) { g = c; b = x; }
+  else if (h < 4) { g = x; b = c; }
+  else if (h < 5) { r = x; b = c; }
+  else { r = c; b = x; }
+  const R = Math.round((r + m) * 255);
+  const G = Math.round((g + m) * 255);
+  const B = Math.round((b + m) * 255);
+  return (R << 16) | (G << 8) | B;
 }

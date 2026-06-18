@@ -25,7 +25,7 @@ import {
   Vector3,
   type Intersection,
 } from 'three';
-import { app, saveEnvironment, saveShootBack, type AppState } from '../menu/appState.js';
+import { app, saveAccentHue, saveEnvironment, saveShootBack, type AppState } from '../menu/appState.js';
 import {
   colorBarHue,
   createActionPanel,
@@ -38,7 +38,7 @@ import {
 } from '../menu/menu.js';
 import { createNameKeyboard, type NameKeyboard } from '../menu/keyboard.js';
 import { customization, myAvatarSkin, setAvatarColor, setAvatarSkin, setPlatformSkin } from '../menu/customization.js';
-import { buildBoxer, solveTorso, type BoxerRig } from '../avatar/boxer.js';
+import { buildBoxer, setAvatarAccent, solveTorso, type BoxerRig } from '../avatar/boxer.js';
 import {
   AVATAR_SKINS,
   PLATFORM_SKINS,
@@ -60,7 +60,7 @@ import {
   setLeaderboardTab,
   setPlayerName,
 } from '../net/leaderboard.js';
-import { pubUrl } from '../config.js';
+import { hueToColor, pubUrl } from '../config.js';
 import * as sfx from '../audio/sfx.js';
 
 const _origin = new Vector3();
@@ -98,6 +98,8 @@ export class MenuSystem extends createSystem({}) {
   private skinVersion = 0;
   private boardScrollCooldown = 0;
   private boardScrollDir = 0;
+  private draggingHue = false;
+  private accentHue = Number.NaN;
 
   init(): void {
     this.menu = createMenu(this.scene);
@@ -105,6 +107,7 @@ export class MenuSystem extends createSystem({}) {
     this.keyboard = createNameKeyboard(this.scene);
     this.pointers.left = this.makePointer();
     this.pointers.right = this.makePointer();
+
     this.applyState();
   }
 
@@ -125,7 +128,7 @@ export class MenuSystem extends createSystem({}) {
 
     // Customisation is modal: the arc swaps out for the panel + mirror.
     for (const p of this.menu.panels) {
-      if (p.id === 'custom') p.mesh.visible = customization.open;
+      if (p.id === 'custom' || p.id === 'loadout' || p.id === 'balls') p.mesh.visible = customization.open;
       else if (p.id !== 'board') p.mesh.visible = !customization.open;
     }
     if (this.mirror) this.mirror.group.visible = customization.open;
@@ -135,6 +138,8 @@ export class MenuSystem extends createSystem({}) {
     let hoverAction: MenuAction | null = null;
     let boardPointed = false;
     let boardScrollAxis = 0;
+    let dragged = false;
+    let clicked = false;
     const meshes = this.menu.panels.filter((p) => p.mesh.visible).map((p) => p.mesh);
     for (const hand of ['left', 'right'] as const) {
       const hit = this.updatePointer(hand, meshes);
@@ -152,20 +157,44 @@ export class MenuSystem extends createSystem({}) {
         hoverAction = action;
       }
       const gp = this.input.xr.gamepads[hand];
-      if (hit.uv && action === 'av-color' && gp?.getButtonPressed(InputComponent.Trigger)) {
+      if (hit.uv && panel.drag && gp?.getButtonPressed(InputComponent.Trigger)) {
+        if (panel.drag(hit.uv.x, hit.uv.y)) dragged = true;
+      } else if (hit.uv && action === 'av-color' && gp?.getButtonPressed(InputComponent.Trigger)) {
         // The hue bar is continuous: scrub the armour colour live while held.
         setAvatarColor(colorBarHue(hit.uv.x));
       } else if (hit.uv && gp?.getButtonDown(InputComponent.Trigger)) {
-        if (action) this.run(action);
+        if (panel.click) {
+          if (panel.click(hit.uv.x, hit.uv.y)) clicked = true;
+        } else {
+          if (action) this.run(action);
+        }
       }
     }
     const boardScrolled = this.updateBoardScroll(boardPointed, boardScrollAxis, delta);
     const skinChanged = customization.version !== this.lastSkinDraw;
     if (skinChanged) this.lastSkinDraw = customization.version;
-    if (hover !== this.hovered || hoverAction !== this.hoveredAction || boardScrolled || skinChanged) {
+    const hoverChanged = hover !== this.hovered || hoverAction !== this.hoveredAction;
+    if (hoverChanged || boardScrolled || skinChanged) {
       this.hovered = hover;
       this.hoveredAction = hoverAction;
       this.menu.redrawAll(hover, hoverAction);
+      if (hoverChanged && hover) sfx.uiHover(); // soft laser zap as the pointer lands
+    }
+
+    // Self-contained panel click (e.g. the ball loadout tiles).
+    if (clicked) {
+      sfx.ensureAudio();
+      sfx.uiClick();
+      this.menu.redrawAll(this.hovered, this.hoveredAction);
+    }
+
+    // Live-update the accent slider; persist once the trigger is released.
+    if (dragged) {
+      this.draggingHue = true;
+      this.menu.redrawAll(this.hovered, this.hoveredAction);
+    } else if (this.draggingHue) {
+      this.draggingHue = false;
+      saveAccentHue();
     }
 
     // Periodic redraw so live text (queue status) stays fresh.
@@ -308,7 +337,8 @@ export class MenuSystem extends createSystem({}) {
     group.rotation.y = Math.PI + Math.atan2(0 - group.position.x, 0 - group.position.z);
     this.scene.add(group);
     this.mirror = { group, rig };
-    this.skinVersion = 0; // force a re-apply so the mirror dresses correctly
+    this.skinVersion = -1; // force a re-apply so the mirror dresses correctly
+    this.accentHue = Number.NaN;
   }
 
   /**
@@ -317,16 +347,30 @@ export class MenuSystem extends createSystem({}) {
    * hitboxes never move.
    */
   private applyOwnSkins(): void {
-    if (customization.version === this.skinVersion) return;
-    this.skinVersion = customization.version;
-    const av = myAvatarSkin(); // chosen shape + custom colour
-    const pf = platformSkin(customization.platform);
-    for (const name of ['player-torso', 'player-glove-left', 'player-glove-right', 'mirror-avatar']) {
-      const obj = this.scene.getObjectByName(name);
-      if (obj) applyAvatarSkin(obj, av);
+    const skinChanged = customization.version !== this.skinVersion;
+    const accentChanged = app.accentHue !== this.accentHue;
+    if (!skinChanged && !accentChanged) return;
+
+    const names = ['player-torso', 'player-glove-left', 'player-glove-right', 'mirror-avatar'];
+    if (skinChanged) {
+      this.skinVersion = customization.version;
+      const av = myAvatarSkin(); // chosen shape + custom colour
+      const pf = platformSkin(customization.platform);
+      for (const name of names) {
+        const obj = this.scene.getObjectByName(name);
+        if (obj) applyAvatarSkin(obj, av);
+      }
+      const pad = this.scene.getObjectByName('player-platform');
+      if (pad) applyPlatformSkin(pad, pf);
+      this.accentHue = Number.NaN;
     }
-    const pad = this.scene.getObjectByName('player-platform');
-    if (pad) applyPlatformSkin(pad, pf);
+
+    const accent = hueToColor(app.accentHue);
+    for (const name of names) {
+      const obj = this.scene.getObjectByName(name);
+      if (obj) setAvatarAccent(obj, accent);
+    }
+    this.accentHue = app.accentHue;
   }
 
   /** Point + trigger types on the keyboard; OK saves and resumes the action. */

@@ -19,6 +19,7 @@ import {
   Group,
   Mesh,
   MeshStandardMaterial,
+  type Object3D,
   Quaternion,
   RepeatWrapping,
   SphereGeometry,
@@ -74,6 +75,8 @@ export interface BoxerRig {
   all: Group[];
 }
 
+export const GLOVE_VISUAL_SCALE = 1.28;
+
 function chassisMat(emissive = 0, intensity = 0): MeshStandardMaterial {
   // Near-black mirror steel: the RoomEnvironment reflections do the reading.
   const m = new MeshStandardMaterial({
@@ -85,6 +88,8 @@ function chassisMat(emissive = 0, intensity = 0): MeshStandardMaterial {
   });
   if (STEEL_ROUGH) m.roughnessMap = STEEL_ROUGH; // brushed-metal grain
   m.userData.role = 'chassis'; // skin recolour target (avatar/skins.ts)
+  // Steel body tinted by the accent through its emissive channel only.
+  if (emissive) m.userData.accent = 'emissive';
   return m;
 }
 
@@ -108,7 +113,32 @@ function glowMat(color: number, intensity = 1.4): MeshStandardMaterial {
     roughness: 0.3,
   });
   m.userData.role = 'glow';
+  // A pure neon highlight: both its base colour and glow follow the accent.
+  m.userData.accent = 'glow';
   return m;
+}
+
+/**
+ * Re-tint every accent-tagged material under a built avatar (glove or boxer)
+ * to `color`. Glow highlights take it on both colour + emissive; chassis steel
+ * only on its emissive tint. Cheap enough to call live while dragging a slider.
+ */
+export function setAvatarAccent(root: Object3D, color: number): void {
+  root.traverse((o) => {
+    const mesh = o as Mesh;
+    if (!mesh.isMesh) return;
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    for (const mat of mats) {
+      const mode = (mat as MeshStandardMaterial).userData?.accent;
+      const m = mat as MeshStandardMaterial;
+      if (mode === 'glow') {
+        m.color.set(color);
+        m.emissive.set(color);
+      } else if (mode === 'emissive') {
+        m.emissive.set(color);
+      }
+    }
+  });
 }
 
 /**
@@ -120,9 +150,9 @@ function glowMat(color: number, intensity = 1.4): MeshStandardMaterial {
  * and `setGloveLit` flares them while the owner squeezes trigger/grip — a
  * readable tell on BOTH boxers' fists.
  */
-export function buildGlove(team: number): Group {
+export function buildGlove(team: number, accent: number = teamColor(team)): Group {
   const glove = new Group();
-  const accent = teamColor(team);
+  glove.scale.setScalar(GLOVE_VISUAL_SCALE);
 
   const leds: MeshStandardMaterial[] = [];
   /** Register a material as an LED: `lit` flares it to litIntensity. */
@@ -1003,4 +1033,27 @@ export function solveTorso(
 
   outChest.copy(_chest);
   outPelvis.copy(_hips);
+}
+
+/**
+ * A static, posed bust of YOUR boxer for the lobby customization preview —
+ * head over chest over pelvis with both gauntlets up in a guard. Built at the
+ * given accent so the slider visibly drives the whole avatar's neon, not just
+ * the gloves. Returns one group; scale/position/spin it as you like, and call
+ * `setAvatarAccent` on it to recolour live.
+ */
+export function buildBoxerPreview(accent: number): Group {
+  const rig = buildBoxer(0, 'cobalt');
+
+  rig.pelvis.position.set(0, 0, 0);
+  rig.chest.position.set(0, 0.4, 0);
+  rig.head.position.set(0, 0.78, 0);
+  rig.gloves[0].position.set(-0.26, 0.46, -0.14);
+  rig.gloves[1].position.set(0.26, 0.46, -0.14);
+
+  const preview = new Group();
+  preview.name = 'avatar-preview';
+  preview.add(...rig.all); // head, torso (chest+pelvis), both gloves
+  setAvatarAccent(preview, accent);
+  return preview;
 }

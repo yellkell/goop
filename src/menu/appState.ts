@@ -25,6 +25,23 @@ export interface LifetimeStats {
   hitsLanded: number;
 }
 
+/** Default glove-accent hue (≈0.07 → the classic ember orange). */
+export const DEFAULT_ACCENT_HUE = 0.07;
+
+function loadAccentHue(): number {
+  const raw = localStorage.getItem('ff-accent');
+  const n = raw == null ? NaN : parseFloat(raw);
+  return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : DEFAULT_ACCENT_HUE;
+}
+
+/** Per-fist ball attachment: [left, right], each 0 none / 1 split / 2 grow / 3 shrink. */
+function loadBallAttach(): [number, number] {
+  const raw = localStorage.getItem('ff-ballattach');
+  const parts = (raw ?? '').split(',').map((s) => parseInt(s, 10));
+  const clamp = (n: number): number => (Number.isFinite(n) && n >= 0 && n <= 3 ? n : 0);
+  return [clamp(parts[0]), clamp(parts[1])];
+}
+
 function loadStats(): LifetimeStats {
   try {
     const raw = localStorage.getItem('ff-stats');
@@ -52,6 +69,10 @@ export const app: {
   pubCount: number;
   /** Which backdrop the arena renders — held across every mode. */
   environment: AppEnvironment;
+  /** Player's chosen avatar-accent hue (0..1 around the colour wheel). */
+  accentHue: number;
+  /** Ball attachment per fist: [left, right] (0 none/1 split/2 grow/3 shrink). */
+  ballAttach: [number, number];
   stats: LifetimeStats;
 } = {
   state: 'menu',
@@ -63,6 +84,8 @@ export const app: {
   searching: -1,
   pubCount: -1,
   environment: localStorage.getItem('ff-env') === 'desert' ? 'desert' : 'ar',
+  accentHue: loadAccentHue(),
+  ballAttach: loadBallAttach(),
   stats: loadStats(),
 };
 
@@ -85,6 +108,22 @@ export function saveShootBack(): void {
 export function saveEnvironment(): void {
   try {
     localStorage.setItem('ff-env', app.environment);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function saveAccentHue(): void {
+  try {
+    localStorage.setItem('ff-accent', app.accentHue.toFixed(4));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function saveBallAttach(): void {
+  try {
+    localStorage.setItem('ff-ballattach', `${app.ballAttach[0]},${app.ballAttach[1]}`);
   } catch {
     /* ignore */
   }

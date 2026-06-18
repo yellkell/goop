@@ -18,15 +18,15 @@ import {
   PlaneGeometry,
   type Scene,
 } from 'three';
-import { app } from './appState.js';
+import { app, saveBallAttach } from './appState.js';
 import { customization } from './customization.js';
 import { AVATAR_SKINS, PLATFORM_SKINS } from '../avatar/skins.js';
-import { GAME_TITLE } from '../config.js';
+import { ATTACH, GAME_TITLE, hueToColor } from '../config.js';
 import { LEADERBOARD_VISIBLE_ROWS, leaderboard, leaderboardRows, myStats } from '../net/leaderboard.js';
 import { PUB_MAX_PLAYERS } from '../pub/protocol.js';
 import { UI, buttonPlate, hazardStrip, plate, stencilFont } from '../ui/industrial.js';
 
-export type PanelId = 'train' | 'duel' | 'info' | 'board' | 'custom';
+export type PanelId = 'train' | 'duel' | 'info' | 'board' | 'custom' | 'loadout' | 'balls';
 
 export type MenuAction =
   | 'start-training'
@@ -73,6 +73,18 @@ export interface MenuPanel {
   redraw: (hoverAction: MenuAction | null) => void;
   /** Map a hit UV (u right, v up) to an action, or null. */
   hitTest: (u: number, v: number) => MenuAction | null;
+  /**
+   * Continuous control (e.g. a slider): called every frame the trigger is
+   * held over the panel. Returns true if the hit landed on the control (the
+   * caller then redraws and suppresses the click action).
+   */
+  drag?: (u: number, v: number) => boolean;
+  /**
+   * Self-contained click on trigger-down (mutates + persists its own state).
+   * Returns true if it handled the hit, so the caller redraws + clicks the
+   * relay sound instead of running a global MenuAction.
+   */
+  click?: (u: number, v: number) => boolean;
 }
 
 export interface Menu {
@@ -112,15 +124,22 @@ function panelBg(
   ctx.textAlign = 'center';
 }
 
+interface PanelOpts {
+  cw?: number;
+  ch?: number;
+  drag?: MenuPanel['drag'];
+  click?: MenuPanel['click'];
+}
+
 function makePanel(
   id: PanelId,
   wMeters: number,
   hMeters: number,
   draw: (ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null) => void,
   hitTest: MenuPanel['hitTest'],
-  cw = PW,
-  ch = PH,
+  opts: PanelOpts = {},
 ): MenuPanel {
+  const { cw = PW, ch = PH, drag, click } = opts;
   const canvas = document.createElement('canvas');
   canvas.width = cw;
   canvas.height = ch;
@@ -138,7 +157,7 @@ function makePanel(
     draw(ctx, hoverAction);
     texture.needsUpdate = true;
   };
-  return { id, mesh, redraw, hitTest };
+  return { id, mesh, redraw, hitTest, drag, click };
 }
 
 /** Centre — AIM TRAINING: the big start plate + the shoot-back toggle. */
@@ -601,6 +620,247 @@ export function createActionPanel(scene: Scene): ActionPanel {
   };
 }
 
+// --- AVATAR ACCENT: a hue slider for all your neon highlights ---------------
+// Uses its own wider/shorter canvas so the slider isn't squashed on the plane.
+const LW = 512;
+const LH = 240;
+const SL_X = 56; // slider track left
+const SL_W = 356; // slider track width
+const SL_Y = 120; // slider track top (canvas y, down)
+const SL_H = 34; // slider track height
+const SW_X = SL_X + SL_W + 18; // colour swatch left
+const SW_Y = SL_Y - 7;
+const SW = 48; // swatch size
+
+function hexCss(color: number): string {
+  return `#${color.toString(16).padStart(6, '0')}`;
+}
+
+/** AVATAR ACCENT: drag a hue bar to tint every neon highlight you wear. */
+function drawLoadout(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
+  const hover = hoverAction !== null;
+  const col = hueToColor(app.accentHue);
+  const css = hexCss(col);
+  panelBg(ctx, hover, css, 'AVATAR ACCENT', LW, LH);
+
+  // Slider housing.
+  plate(ctx, SL_X - 10, SL_Y - 12, SL_W + 20, SL_H + 24, {
+    cut: 8,
+    fill: 'rgba(10,11,14,0.55)',
+    stroke: hover ? css : UI.steel,
+    rivets: false,
+  });
+
+  // Hue gradient track.
+  const grad = ctx.createLinearGradient(SL_X, 0, SL_X + SL_W, 0);
+  for (let i = 0; i <= 12; i++) {
+    const f = i / 12;
+    grad.addColorStop(f, hexCss(hueToColor(f)));
+  }
+  ctx.fillStyle = grad;
+  ctx.fillRect(SL_X, SL_Y, SL_W, SL_H);
+
+  // Knob.
+  const kx = SL_X + Math.min(1, Math.max(0, app.accentHue)) * SL_W;
+  ctx.fillStyle = '#f4f6fb';
+  ctx.strokeStyle = 'rgba(0,0,0,0.65)';
+  ctx.lineWidth = 3;
+  ctx.fillRect(kx - 5, SL_Y - 9, 10, SL_H + 18);
+  ctx.strokeRect(kx - 5, SL_Y - 9, 10, SL_H + 18);
+
+  // Live colour swatch.
+  plate(ctx, SW_X, SW_Y, SW, SW, { cut: 8, fill: css, stroke: UI.steel, rivets: false });
+
+  ctx.font = '600 22px system-ui, sans-serif';
+  ctx.fillStyle = UI.textDim;
+  ctx.textAlign = 'center';
+  ctx.fillText("drag to tint your avatar's neon", LW / 2, LH - 30);
+}
+
+/** While the trigger is held over the track, set the hue from the hit X. */
+function dragLoadout(u: number, v: number): boolean {
+  const y = (1 - v) * LH;
+  if (y < SL_Y - 34 || y > SL_Y + SL_H + 34) return false;
+  const x = u * LW;
+  app.accentHue = Math.min(1, Math.max(0, (x - SL_X) / SL_W));
+  return true;
+}
+
+// --- BALL LOADOUT: pick an attachment for each fist's ball -----------------
+
+interface AttachInfo {
+  name: string;
+  color: string;
+  desc: string;
+}
+const ATTACHMENTS: AttachInfo[] = [
+  { name: 'SPLIT', color: UI.cool, desc: 'On recall it breaks into three smaller balls, evenly spread — each lands a third of the damage.' },
+  { name: 'GROW', color: UI.emberBright, desc: 'Swells on the way back: easier to land but softer, down to 10 less damage. The longer the recall, the bigger.' },
+  { name: 'SHRINK', color: UI.amber, desc: 'Shrinks on the way back: harder to land but vicious, up to 10 more damage. The longer the recall, the smaller.' },
+];
+const TYPES = [ATTACH.split, ATTACH.grow, ATTACH.shrink];
+
+const BALL_W = 560;
+const BALL_H = 480;
+const BMX = 36; // side margin
+const BGAP = 18; // gap between tiles
+const TILE_W = (BALL_W - 2 * BMX - 2 * BGAP) / 3;
+const TILE_H = 92;
+const ROW_L_Y = 120; // left-fist tile row top
+const ROW_R_Y = 244; // right-fist tile row top
+const DESC_Y = 360;
+const tileX = (i: number): number => BMX + i * (TILE_W + BGAP);
+
+/** Last attachment whose description is shown in the box (−1 = none yet). */
+let ballDescIdx = -1;
+
+/** A small arrowhead triangle at (x,y) pointing along `ang`. */
+function arrowHead(ctx: CanvasRenderingContext2D, x: number, y: number, ang: number, size: number): void {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(ang);
+  ctx.beginPath();
+  ctx.moveTo(size, 0);
+  ctx.lineTo(-size * 0.6, size * 0.6);
+  ctx.lineTo(-size * 0.6, -size * 0.6);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+/** Draw the icon for an attachment type (ATTACH.*) centred at (cx,cy). */
+function drawAttachIcon(ctx: CanvasRenderingContext2D, type: number, cx: number, cy: number, r: number, color: string): void {
+  ctx.fillStyle = color;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 3;
+  if (type === ATTACH.split) {
+    for (let k = 0; k < 3; k++) {
+      const ang = -Math.PI / 2 + (k * Math.PI * 2) / 3;
+      ctx.beginPath();
+      ctx.arc(cx + Math.cos(ang) * r * 0.55, cy + Math.sin(ang) * r * 0.55, r * 0.3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    return;
+  }
+  const grow = type === ATTACH.grow;
+  // Outer ring.
+  ctx.globalAlpha = 0.55;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.82, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+  // Solid core — small for grow (about to grow), large for shrink.
+  ctx.beginPath();
+  ctx.arc(cx, cy, grow ? r * 0.26 : r * 0.5, 0, Math.PI * 2);
+  ctx.fill();
+  // Four arrows: outward for grow, inward for shrink.
+  for (let k = 0; k < 4; k++) {
+    const ang = Math.PI / 4 + (k * Math.PI) / 2;
+    const rad = grow ? r * 0.5 : r * 0.78;
+    arrowHead(ctx, cx + Math.cos(ang) * rad, cy + Math.sin(ang) * rad, grow ? ang : ang + Math.PI, r * 0.22);
+  }
+}
+
+/** Word-wrap `text` into `maxW`, returning the count of lines drawn. */
+function wrapText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, maxW: number, lineH: number): void {
+  const words = text.split(' ');
+  let line = '';
+  let cy = y;
+  for (const w of words) {
+    const test = line ? `${line} ${w}` : w;
+    if (ctx.measureText(test).width > maxW && line) {
+      ctx.fillText(line, x, cy);
+      line = w;
+      cy += lineH;
+    } else {
+      line = test;
+    }
+  }
+  if (line) ctx.fillText(line, x, cy);
+}
+
+function drawBallRow(ctx: CanvasRenderingContext2D, side: 0 | 1, label: string, rowY: number): void {
+  const equipped = app.ballAttach[side] ?? 0;
+  ctx.textAlign = 'left';
+  ctx.font = '700 23px system-ui, sans-serif';
+  ctx.fillStyle = UI.text;
+  const eqName = equipped ? ATTACHMENTS[equipped - 1].name.toLowerCase() : 'none';
+  ctx.fillText(`${label}  ·  ${eqName}`, BMX, rowY - 16);
+
+  for (let i = 0; i < 3; i++) {
+    const type = TYPES[i];
+    const info = ATTACHMENTS[i];
+    const selected = equipped === type;
+    const x = tileX(i);
+    plate(ctx, x, rowY, TILE_W, TILE_H, {
+      cut: 10,
+      fill: selected ? 'rgba(255,255,255,0.10)' : 'rgba(18,19,24,0.6)',
+      stroke: selected ? info.color : UI.steelDim,
+      rivets: false,
+    });
+    drawAttachIcon(ctx, type, x + TILE_W / 2, rowY + 34, 24, selected ? info.color : UI.steel);
+    ctx.textAlign = 'center';
+    ctx.font = '700 18px system-ui, sans-serif';
+    ctx.fillStyle = selected ? info.color : UI.textDim;
+    ctx.fillText(info.name, x + TILE_W / 2, rowY + TILE_H - 16);
+  }
+}
+
+/** BALL LOADOUT: per-fist attachment picker with click-to-read descriptions. */
+function drawBalls(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
+  const hover = hoverAction !== null;
+  panelBg(ctx, hover, UI.emberBright, 'BALL LOADOUT', BALL_W, BALL_H);
+
+  drawBallRow(ctx, 0, 'LEFT FIST', ROW_L_Y);
+  drawBallRow(ctx, 1, 'RIGHT FIST', ROW_R_Y);
+
+  // Description box for the last-tapped attachment.
+  plate(ctx, BMX, DESC_Y, BALL_W - 2 * BMX, 104, {
+    cut: 10,
+    fill: 'rgba(10,11,14,0.55)',
+    stroke: UI.steelDim,
+    rivets: false,
+  });
+  ctx.textAlign = 'left';
+  if (ballDescIdx < 0) {
+    ctx.font = '600 22px system-ui, sans-serif';
+    ctx.fillStyle = UI.textDim;
+    ctx.fillText('tap an attachment to read what it does', BMX + 20, DESC_Y + 52);
+  } else {
+    const info = ATTACHMENTS[ballDescIdx];
+    ctx.font = '800 24px system-ui, sans-serif';
+    ctx.fillStyle = info.color;
+    ctx.fillText(info.name, BMX + 20, DESC_Y + 28);
+    ctx.font = '500 20px system-ui, sans-serif';
+    ctx.fillStyle = UI.text;
+    wrapText(ctx, info.desc, BMX + 20, DESC_Y + 58, BALL_W - 2 * BMX - 40, 26);
+  }
+
+  ctx.textAlign = 'center';
+  ctx.font = '500 17px system-ui, sans-serif';
+  ctx.fillStyle = UI.textDim;
+  ctx.fillText('fires on a live recall · the ball is normal again once caught', BALL_W / 2, BALL_H - 14);
+}
+
+/** Tap a tile → equip/clear that attachment and show its description. */
+function clickBalls(u: number, v: number): boolean {
+  const x = u * BALL_W;
+  const y = (1 - v) * BALL_H;
+  for (const [side, rowY] of [[0, ROW_L_Y], [1, ROW_R_Y]] as const) {
+    if (y < rowY || y > rowY + TILE_H) continue;
+    const i = Math.floor((x - BMX) / (TILE_W + BGAP));
+    if (i < 0 || i > 2) return false;
+    const tx = tileX(i);
+    if (x < tx || x > tx + TILE_W) return false;
+    const type = TYPES[i];
+    ballDescIdx = i;
+    app.ballAttach[side] = app.ballAttach[side] === type ? 0 : type;
+    saveBallAttach();
+    return true;
+  }
+  return false;
+}
+
 export function createMenu(scene: Scene): Menu {
   const group = new Group();
   group.name = 'lobby-menu';
@@ -610,9 +870,19 @@ export function createMenu(scene: Scene): Menu {
   const info = makePanel('info', 0.78, 0.62, drawInfo, hitInfo);
   // Taller than the lobby panels (1.36 × 1.456 ≈ BW:BH) so the full top 10
   // reads at a glance; its own BW×BH canvas keeps the text at lobby density.
-  const board = makePanel('board', 1.36, 1.456, drawBoard, hitBoard, BW, BH);
+  const board = makePanel('board', 1.36, 1.456, drawBoard, hitBoard, { cw: BW, ch: BH });
   // Taller than the lobby panels (own CW×CH canvas) for the colour picker row.
-  const custom = makePanel('custom', 0.9, 0.915, drawCustom, hitCustom, CW, CH);
+  const custom = makePanel('custom', 0.9, 0.915, drawCustom, hitCustom, { cw: CW, ch: CH });
+  const loadout = makePanel('loadout', 0.78, 0.36, drawLoadout, () => null, {
+    cw: LW,
+    ch: LH,
+    drag: dragLoadout,
+  });
+  const balls = makePanel('balls', 0.84, 0.72, drawBalls, () => null, {
+    cw: BALL_W,
+    ch: BALL_H,
+    click: clickBalls,
+  });
 
   // Shallow arc in front of the player, tilted inward toward the centre.
   const y = 1.45;
@@ -629,8 +899,15 @@ export function createMenu(scene: Scene): Menu {
   custom.mesh.position.set(0.5, 1.45, -1.1);
   custom.mesh.rotation.y = -0.3;
   custom.mesh.visible = false;
+  // Loadout extras are part of the customisation modal.
+  balls.mesh.position.set(-0.66, 1.18, -1.06);
+  balls.mesh.rotation.y = 0.32;
+  balls.mesh.visible = false;
+  loadout.mesh.position.set(0.54, 0.78, -1.08);
+  loadout.mesh.rotation.y = -0.3;
+  loadout.mesh.visible = false;
 
-  const panels = [train, duel, info, board, custom];
+  const panels = [train, duel, info, board, custom, balls, loadout];
   for (const p of panels) {
     p.redraw(null);
     group.add(p.mesh);
