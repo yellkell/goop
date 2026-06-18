@@ -57,10 +57,11 @@ const PH = 400;
 // scaled to match, so the text keeps the lobby's pixel density (no stretch).
 const BW = 512;
 const BH = 548;
-// The customisation plate is taller than the lobby panels too — room for the
-// avatar/platform chips AND the armour-colour picker beneath them.
+// The customisation plate: room for the avatar/platform chips AND the armour-
+// colour picker beneath them. (The CLOSE button now lives on the AVATAR ACCENT
+// panel, so this plate ends just under the colour picker.)
 const CW = 512;
-const CH = 524;
+const CH = 430;
 /** The hue-picker bar on the customisation panel (canvas coords). */
 const COLOR_BAR = { x: 40, y: 322, w: CW - 80, h: 44 };
 
@@ -421,11 +422,11 @@ function drawCustom(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | nul
     ctx.strokeRect(cx - 2.5, COLOR_BAR.y - 5, 5, COLOR_BAR.h + 10);
   }
 
+  // CLOSE now lives on the AVATAR ACCENT panel, beneath the accent slider.
   ctx.textAlign = 'center';
-  buttonPlate(ctx, (CW - 200) / 2, 398, 200, 56, 'CLOSE', UI.amber, hoverAction === 'custom-close');
   ctx.font = '600 20px system-ui, sans-serif';
   ctx.fillStyle = UI.textDim;
-  ctx.fillText('looks only — your hitbox never changes', CW / 2, 486);
+  ctx.fillText('looks only — your hitbox never changes', CW / 2, 400);
 }
 
 function hitCustom(u: number, v: number): MenuAction | null {
@@ -450,7 +451,6 @@ function hitCustom(u: number, v: number): MenuAction | null {
   ) {
     return 'av-color';
   }
-  if (y >= 392 && y <= 458 && x >= 148 && x <= 364) return 'custom-close';
   return null;
 }
 
@@ -623,9 +623,10 @@ export function createActionPanel(scene: Scene): ActionPanel {
 }
 
 // --- AVATAR ACCENT: a hue slider for all your neon highlights ---------------
-// Uses its own wider/shorter canvas so the slider isn't squashed on the plane.
+// Its own canvas; tall enough to carry the slider up top and the customisation
+// CLOSE button beneath it (moved here off the CUSTOMISE plate).
 const LW = 512;
-const LH = 240;
+const LH = 312;
 const SL_X = 44; // slider track left
 const SL_W = 296; // slider track width
 const SL_Y = 120; // slider track top (canvas y, down)
@@ -637,6 +638,10 @@ const SW = 46; // swatch size
 // picker's reset. Sits clear of the slider track's x-range so a tap on it
 // falls through the drag handler (see dragLoadout) to a clean click.
 const ACC_DEF = { x: SW_X + SW + 12, y: SL_Y - 6, w: LW - (SW_X + SW + 12) - 16, h: 46 };
+// CLOSE the whole customisation modal — sits beneath the accent slider (moved
+// off the CUSTOMISE plate). Well below the slider's drag band, so a tap on it
+// falls through dragLoadout to a clean click.
+const ACC_CLOSE = { x: (LW - 220) / 2, y: 232, w: 220, h: 60 };
 
 function hexCss(color: number): string {
   return `#${color.toString(16).padStart(6, '0')}`;
@@ -694,7 +699,10 @@ function drawLoadout(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | nu
   ctx.font = '600 22px system-ui, sans-serif';
   ctx.fillStyle = UI.textDim;
   ctx.textAlign = 'center';
-  ctx.fillText("drag to tint your avatar's neon", LW / 2, LH - 28);
+  ctx.fillText("drag to tint your avatar's neon", LW / 2, 196);
+
+  // CLOSE the customisation modal — moved here, directly beneath the slider.
+  buttonPlate(ctx, ACC_CLOSE.x, ACC_CLOSE.y, ACC_CLOSE.w, ACC_CLOSE.h, 'CLOSE', UI.amber, hoverAction === 'custom-close');
 }
 
 /** While the trigger is held over the TRACK (not the swatch/DEFAULT button to
@@ -715,6 +723,9 @@ function hitLoadout(u: number, v: number): MenuAction | null {
   const y = (1 - v) * LH;
   if (x >= ACC_DEF.x && x <= ACC_DEF.x + ACC_DEF.w && y >= ACC_DEF.y && y <= ACC_DEF.y + ACC_DEF.h) {
     return 'accent-default';
+  }
+  if (x >= ACC_CLOSE.x && x <= ACC_CLOSE.x + ACC_CLOSE.w && y >= ACC_CLOSE.y && y <= ACC_CLOSE.y + ACC_CLOSE.h) {
+    return 'custom-close';
   }
   return null;
 }
@@ -900,8 +911,8 @@ export function createMenu(scene: Scene): Menu {
   // reads at a glance; its own BW×BH canvas keeps the text at lobby density.
   const board = makePanel('board', 1.36, 1.456, drawBoard, hitBoard, { cw: BW, ch: BH });
   // Taller than the lobby panels (own CW×CH canvas) for the colour picker row.
-  const custom = makePanel('custom', 0.9, 0.915, drawCustom, hitCustom, { cw: CW, ch: CH });
-  const loadout = makePanel('loadout', 0.78, 0.36, drawLoadout, hitLoadout, {
+  const custom = makePanel('custom', 0.9, 0.756, drawCustom, hitCustom, { cw: CW, ch: CH });
+  const loadout = makePanel('loadout', 0.78, 0.475, drawLoadout, hitLoadout, {
     cw: LW,
     ch: LH,
     drag: dragLoadout,
@@ -924,7 +935,9 @@ export function createMenu(scene: Scene): Menu {
   board.mesh.rotation.y = Math.PI;
   // Customisation: hidden until opened; sits right of centre so the avatar
   // mirror has room to stand beside it (MenuSystem owns the mirror).
-  custom.mesh.position.set(0.5, 1.45, -1.1);
+  // Shorter plate now (CLOSE moved off it): nudge up so its TOP edge — where
+  // the chips sit — stays put while the cropped bottom rises.
+  custom.mesh.position.set(0.5, 1.53, -1.1);
   custom.mesh.rotation.y = -0.3;
   custom.mesh.visible = false;
   // Loadout extras are part of the customisation modal.
