@@ -868,11 +868,6 @@ function drawBalls(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null
     ctx.fillStyle = UI.text;
     wrapText(ctx, info.desc, BMX + 20, DESC_Y + 58, BALL_W - 2 * BMX - 40, 26);
   }
-
-  ctx.textAlign = 'center';
-  ctx.font = '500 17px system-ui, sans-serif';
-  ctx.fillStyle = UI.textDim;
-  ctx.fillText('fires on a live recall · the ball is normal again once caught', BALL_W / 2, BALL_H - 14);
 }
 
 /** Tap a tile → equip/clear that attachment and show its description. */

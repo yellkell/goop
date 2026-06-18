@@ -111,12 +111,12 @@ export const ATTACH = {
   shrink: 3,
   /**
    * Recall distance (m) at which grow/shrink reach their FULL size/damage
-   * swing. Set well beyond the arena gap so the effect builds up gradually
-   * with travel: a short recall barely changes the ball, and you have to throw
-   * long and recall from DEEP — the ball sailing past your opponent — to earn
-   * the big swings. (Was the arena gap, which maxed out on an ordinary recall.)
+   * swing — set FAR out so the effect ramps very gradually with travel. A
+   * normal recall (the ball near your opponent, ~3 m) barely changes it; you
+   * have to throw it long and recall from deep — the ball sailing well past
+   * your opponent toward the back of the arena — to approach the big swings.
    */
-  fullRange: 6.0,
+  fullRange: 10.0,
   growSize: 2.0, // up to double size on a long recall
   shrinkSize: 0.5, // down to half size on a long recall
   damageSwing: 10, // ±10 damage at full range
