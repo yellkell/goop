@@ -944,7 +944,9 @@ export function createMenu(scene: Scene): Menu {
   balls.mesh.position.set(-0.66, 1.18, -1.06);
   balls.mesh.rotation.y = 0.32;
   balls.mesh.visible = false;
-  loadout.mesh.position.set(0.54, 0.78, -1.08);
+  // Raised a touch (was 0.78) so the slider and the CLOSE button beneath it sit
+  // higher — there's room under the trimmed CUSTOMISE plate above.
+  loadout.mesh.position.set(0.54, 0.86, -1.08);
   loadout.mesh.rotation.y = -0.3;
   loadout.mesh.visible = false;
 
