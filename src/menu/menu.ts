@@ -943,8 +943,10 @@ export function createMenu(scene: Scene): Menu {
   // BALL LOADOUT lives out on the RIGHT, wrapped toward you alongside the other
   // controls — the whole LEFT is left clear for the avatar mirror, so while
   // changing your skin you can still see it (it used to sit in front of it).
-  balls.mesh.position.set(1.2, 1.18, -0.82);
-  balls.mesh.rotation.y = -0.68;
+  // Nudged further right + forward so the CUSTOMISE plate's edge no longer
+  // clips it.
+  balls.mesh.position.set(1.32, 1.18, -0.66);
+  balls.mesh.rotation.y = -0.6;
   balls.mesh.visible = false;
   // Raised a touch (was 0.78) so the slider and the CLOSE button beneath it sit
   // higher — there's room under the trimmed CUSTOMISE plate above.
