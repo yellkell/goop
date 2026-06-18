@@ -1,24 +1,23 @@
 /**
- * The pub JUKEBOX — server-synced web radio.
+ * The pub JUKEBOX — server-synced local songs.
  *
- * The pub server holds ONE station the whole room shares (pub.music, −1 = off).
- * Walk up to the cabinet and pull the trigger to cycle off → station 0 → 1 →
- * off; that asks the server, which broadcasts the new station to everyone, so
- * the room always hears the same thing (and late joiners catch whatever's on).
+ * Songs live in src/pub/songs (drop in `.mp3` files, see songs.ts). The pub
+ * server holds ONE track the whole room shares (pub.music, −1 = off). Walk up
+ * to the cabinet and pull the trigger to cycle off → track 0 → 1 → … → off;
+ * that asks the server, which broadcasts the choice to everyone, so the room
+ * always hears the same thing (and late joiners catch whatever's on).
  *
- * Each station is a plain <audio> element pointed at an Icecast/SHOUTcast MP3
- * (see JUKEBOX.stations). We deliberately DON'T route it through Web Audio: a
- * cross-origin radio stream only survives a MediaElementSource if the station
- * sends CORS headers (most don't), so instead we just roll the element's own
- * `volume` with distance to the cabinet and duck it while anyone's talking.
- * Not true HRTF panning, but it gives the walk-up "louder up close" feel with
- * any stream, no CORS surprises.
+ * Each track is a plain <audio> element pointed at the bundled file. The
+ * selected song LOOPS until you flip. We roll the element's own `volume` with
+ * distance to the cabinet and duck it while anyone's talking — the walk-up
+ * "louder up close" feel, no Web Audio routing needed for same-origin files.
  */
 
 import { createSystem, InputComponent } from '@iwsdk/core';
 import { Mesh, MeshStandardMaterial, Vector3 } from 'three';
 import { uiClick } from '../../audio/sfx.js';
 import { JUKEBOX } from '../config.js';
+import { TRACKS } from '../songs.js';
 import { pubSendRaw } from '../net.js';
 import { bus, pub } from '../state.js';
 import { anyPubVoiceSpeaking } from '../voice/playback.js';
@@ -30,13 +29,13 @@ const _box = new Vector3();
 const _hand = new Vector3();
 
 export class MusicSystem extends createSystem({}) {
-  /** One <audio> per station, created the first time that station is selected. */
-  private audios: (HTMLAudioElement | null)[] = JUKEBOX.stations.map(() => null);
-  /** Station currently playing locally (−1 = off) — mirrors pub.music. */
+  /** One <audio> per track, created the first time that track is selected. */
+  private audios: (HTMLAudioElement | null)[] = TRACKS.map(() => null);
+  /** Track currently playing locally (−1 = off) — mirrors pub.music. */
   private station = -1;
   /** A play() the browser blocked (autoplay policy) — retry on the next trigger. */
   private pendingPlay = false;
-  /** Connection state of the active station, for the marquee readout. */
+  /** Playback state of the active track, for the marquee readout. */
   private signal: 'connecting' | 'live' | 'nosignal' = 'connecting';
   /** True while a hand is close enough to interact — the cabinet flares up. */
   private lit = false;
@@ -115,7 +114,8 @@ export class MusicSystem extends createSystem({}) {
 
   /** Cycle off → 0 → 1 → … → off, tell the room, and apply locally right away. */
   private flip(): void {
-    const next = this.station + 1 >= JUKEBOX.stations.length ? -1 : this.station + 1;
+    if (TRACKS.length === 0) return; // no songs committed yet — nothing to play
+    const next = this.station + 1 >= TRACKS.length ? -1 : this.station + 1;
     uiClick();
     if (pub.online) pubSendRaw({ t: 'music', station: next });
     pub.music = next;
@@ -130,7 +130,7 @@ export class MusicSystem extends createSystem({}) {
     this.station = s;
     this.pendingPlay = false;
     this.signal = 'connecting';
-    if (s >= 0 && s < JUKEBOX.stations.length) {
+    if (s >= 0 && s < TRACKS.length) {
       const audio = this.ensureAudio(s);
       audio.volume = 0; // the update loop sets the real level from distance
       audio.play().catch((e: unknown) => this.onPlayReject(e));
@@ -160,12 +160,13 @@ export class MusicSystem extends createSystem({}) {
   private ensureAudio(s: number): HTMLAudioElement {
     let audio = this.audios[s];
     if (!audio) {
-      audio = new Audio(JUKEBOX.stations[s].url);
+      audio = new Audio(TRACKS[s].url);
       audio.preload = 'none';
-      audio.crossOrigin = null; // plain element playback — never tainted, no CORS need
+      audio.loop = true; // the chosen song plays on a loop until you flip
+      audio.crossOrigin = null; // same-origin bundled file — no CORS need
       audio.volume = 0;
-      // A dead/blocked SomaFM mount shows "no signal" (skippable) instead of
-      // silent dead air; a real connect flips the marquee to live.
+      // A file that won't decode shows "no signal" (skippable); a real start
+      // flips the marquee to playing.
       audio.addEventListener('playing', () => {
         if (s === this.station) this.setSignal('live');
       });
@@ -180,6 +181,13 @@ export class MusicSystem extends createSystem({}) {
   private drawMarquee(): void {
     const panel = pub.refs?.jukeboxPanel;
     if (!panel) return;
+    if (TRACKS.length === 0) {
+      panel.setLines([
+        { text: 'JUKEBOX', size: 58, colour: '#ffb000', bold: true },
+        { text: 'add songs to src/pub/songs', size: 26, colour: '#aeb6c2' },
+      ]);
+      return;
+    }
     if (this.station < 0) {
       panel.setLines([
         { text: 'JUKEBOX', size: 58, colour: '#ffb000', bold: true },
@@ -187,14 +195,14 @@ export class MusicSystem extends createSystem({}) {
       ]);
       return;
     }
-    const st = JUKEBOX.stations[this.station];
+    const t = TRACKS[this.station];
     const sub =
-      this.signal === 'nosignal' ? 'no signal — trigger to skip'
-      : this.signal === 'connecting' ? 'connecting…'
-      : st.sub;
+      this.signal === 'nosignal' ? "can't play this file — trigger to skip"
+      : this.signal === 'connecting' ? 'loading…'
+      : `track ${this.station + 1} of ${TRACKS.length}`;
     panel.setLines([
-      { text: `♪ ${st.name}`, size: 54, colour: '#ffb000', bold: true },
-      { text: sub, size: 30, colour: this.signal === 'nosignal' ? '#e8352a' : '#aeb6c2' },
+      { text: `♪ ${t.name}`, size: 50, colour: '#ffb000', bold: true },
+      { text: sub, size: 28, colour: this.signal === 'nosignal' ? '#e8352a' : '#aeb6c2' },
     ]);
   }
 }

@@ -80,7 +80,9 @@ let snakePlayer = null;
 // Jukebox station the whole room shares (−1 = off). Flipped at the cabinet by
 // any punter; reset when the pub empties. Mirrors JUKEBOX in src/pub/config.ts.
 let music = -1;
-const MUSIC_STATIONS = 12; // = JUKEBOX.stations.length in src/pub/config.ts
+// Songs are bundled client-side now (src/pub/songs), so the count is dynamic;
+// this is just a sanity cap on the index a client may select.
+const MUSIC_STATIONS = 64;
 let nextId = 1;
 let joinCount = 0;
 

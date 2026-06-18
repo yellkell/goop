@@ -97,24 +97,8 @@ export const JUKEBOX = {
   volume: 0.6,
   /** Music ducks to this fraction while anyone in the room is talking. */
   duck: 0.34,
-  /** SomaFM web radio, by their real station names — extend/swap with any
-   *  Icecast or SHOUTcast MP3 stream. NOTE: keep MUSIC_STATIONS in
-   *  server/pub.mjs equal to this list's length, or the server clamps the
-   *  higher stations back to off when someone selects them. */
-  stations: [
-    { name: 'GROOVE SALAD', sub: 'chilled beats & grooves', url: 'https://ice1.somafm.com/groovesalad-128-mp3' },
-    { name: 'FLUID', sub: 'instrumental hip-hop', url: 'https://ice1.somafm.com/fluid-128-mp3' },
-    { name: 'BEAT BLENDER', sub: 'deep house & downtempo', url: 'https://ice1.somafm.com/beatblender-128-mp3' },
-    { name: 'THE TRIP', sub: 'prog house & trance', url: 'https://ice1.somafm.com/thetrip-128-mp3' },
-    { name: 'LUSH', sub: 'vocal electronica', url: 'https://ice1.somafm.com/lush-128-mp3' },
-    { name: 'INDIE POP ROCKS', sub: 'indie pop', url: 'https://ice1.somafm.com/indiepop-128-mp3' },
-    { name: 'SECRET AGENT', sub: 'spy jazz & lounge', url: 'https://ice1.somafm.com/secretagent-128-mp3' },
-    { name: 'UNDERGROUND 80S', sub: 'early synthpop', url: 'https://ice1.somafm.com/u80s-128-mp3' },
-    { name: 'BOOT LIQUOR', sub: 'americana roadhouse', url: 'https://ice1.somafm.com/bootliquor-128-mp3' },
-    { name: 'DEF CON RADIO', sub: 'music for hacking', url: 'https://ice1.somafm.com/defcon-128-mp3' },
-    { name: 'DRONE ZONE', sub: 'ambient space', url: 'https://ice1.somafm.com/dronezone-128-mp3' },
-    { name: 'METAL DETECTOR', sub: 'the metal stream', url: 'https://ice1.somafm.com/metal-128-mp3' },
-  ],
+  // Songs are bundled local .mp3 files now (not radio) — drop them into
+  // src/pub/songs and they're auto-discovered. See src/pub/songs.ts.
 } as const;
 
 /**
