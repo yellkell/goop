@@ -307,11 +307,12 @@ export function uiClick(): void {
   tone({ freq: 110, type: 'sine', dur: 0.04, gain: 0.08 });
 }
 
-/** UI: the laser pointer sweeping onto a panel — a soft, quick zap. Kept very
- *  quiet: it fires on every hover, so it should barely register. */
+/** UI: the pointer landing on a panel — the same relay snap as a click/
+ *  attachment select, but softer. It fires on every hover, so it sits well
+ *  under the click it echoes. */
 export function uiHover(): void {
-  tone({ freq: 1700, to: 2500, type: 'sine', dur: 0.05, gain: 0.016 });
-  whooshNoise(0.035, 0.008, 3200, 5200);
+  clank(1500, 0.024, 0.035);
+  tone({ freq: 110, type: 'sine', dur: 0.035, gain: 0.038 });
 }
 
 /** One strike of the ring bell — long metallic decay. */
