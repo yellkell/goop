@@ -6,6 +6,7 @@
  */
 
 import { type AvatarSkin, avatarSkin, platformSkin, resolveAvatarSkin } from '../avatar/skins.js';
+import { app } from './appState.js';
 
 function load(key: string, fallback: string): string {
   try {
@@ -49,9 +50,15 @@ export function setAvatarColor(hue: number): void {
   customization.version += 1;
 }
 
-/** The fully-resolved skin the LOCAL player wears: chosen shape + custom colour. */
+/**
+ * The fully-resolved skin the LOCAL player wears: chosen shape + colour. The
+ * steel takes your custom ARMOUR colour, or — if you've left that on default —
+ * your AVATAR ACCENT hue, so the colour you picked is the colour you wear in
+ * fights, instead of the skin's stock red/blue resetting onto your body.
+ */
 export function myAvatarSkin(): AvatarSkin {
-  return resolveAvatarSkin(customization.avatar, customization.colorHue);
+  const hue = customization.colorHue >= 0 ? customization.colorHue : app.accentHue;
+  return resolveAvatarSkin(customization.avatar, hue);
 }
 
 export function setAvatarSkin(id: string): void {

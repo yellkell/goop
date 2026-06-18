@@ -362,9 +362,13 @@ export class MenuSystem extends createSystem({}) {
     if (!skinChanged && !accentChanged) return;
 
     const names = ['player-torso', 'player-glove-left', 'player-glove-right', 'mirror-avatar'];
-    if (skinChanged) {
+    // The body steel follows your ARMOUR colour, or your ACCENT hue when no
+    // armour colour is set (see myAvatarSkin). In that case an accent change
+    // must RE-SKIN the body too, not just re-glow the neon.
+    const reskin = skinChanged || (accentChanged && customization.colorHue < 0);
+    if (reskin) {
       this.skinVersion = customization.version;
-      const av = myAvatarSkin(); // chosen shape + custom colour
+      const av = myAvatarSkin(); // chosen shape + colour
       const pf = platformSkin(customization.platform);
       for (const name of names) {
         const obj = this.scene.getObjectByName(name);
@@ -372,7 +376,6 @@ export class MenuSystem extends createSystem({}) {
       }
       const pad = this.scene.getObjectByName('player-platform');
       if (pad) applyPlatformSkin(pad, pf);
-      this.accentHue = Number.NaN;
     }
 
     const accent = hueToColor(app.accentHue);
