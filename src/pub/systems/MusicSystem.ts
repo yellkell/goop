@@ -16,7 +16,7 @@
  */
 
 import { createSystem, InputComponent } from '@iwsdk/core';
-import { Vector3 } from 'three';
+import { Mesh, MeshStandardMaterial, Vector3 } from 'three';
 import { uiClick } from '../../audio/sfx.js';
 import { JUKEBOX } from '../config.js';
 import { pubSendRaw } from '../net.js';
@@ -38,6 +38,8 @@ export class MusicSystem extends createSystem({}) {
   private pendingPlay = false;
   /** Connection state of the active station, for the marquee readout. */
   private signal: 'connecting' | 'live' | 'nosignal' = 'connecting';
+  /** True while a hand is close enough to interact — the cabinet flares up. */
+  private lit = false;
 
   init(): void {
     // The room (or another punter) chose a station: switch to match.
@@ -49,6 +51,20 @@ export class MusicSystem extends createSystem({}) {
   update(): void {
     if (!this.player || !pub.refs) return;
     pub.refs.jukebox.getWorldPosition(_box);
+
+    // Light the cabinet up when a hand is close enough to use it — the same
+    // "you can interact with this" cue the grabbable props (beer, darts) give.
+    let near = false;
+    for (const hand of HANDS) {
+      const grip = this.player.gripSpaces[hand];
+      if (!grip) continue;
+      grip.getWorldPosition(_hand);
+      if (nearXZ(_hand, _box, JUKEBOX.reach * 1.4)) {
+        near = true;
+        break;
+      }
+    }
+    this.setLit(near);
 
     // Walk-up control: a trigger pull with a hand near the cabinet flips station.
     let triggered = false;
@@ -77,6 +93,24 @@ export class MusicSystem extends createSystem({}) {
       if (anyPubVoiceSpeaking()) vol *= JUKEBOX.duck;
       audio.volume = vol;
     }
+  }
+
+  /** Flare the whole cabinet's neon up (or back to rest) when in reach. */
+  private setLit(on: boolean): void {
+    if (on === this.lit) return;
+    this.lit = on;
+    const juke = pub.refs?.jukebox;
+    if (!juke) return;
+    juke.traverse((o) => {
+      const mesh = o as Mesh;
+      if (!mesh.isMesh) return;
+      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      for (const mat of mats) {
+        const m = mat as MeshStandardMaterial;
+        const base = m.userData?.baseGlow as number | undefined;
+        if (typeof base === 'number') m.emissiveIntensity = base * (on ? 1.85 : 1);
+      }
+    });
   }
 
   /** Cycle off → 0 → 1 → … → off, tell the room, and apply locally right away. */

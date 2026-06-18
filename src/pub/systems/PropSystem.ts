@@ -67,7 +67,9 @@ const RANGE_GRAB_MAX = 1.0;
 const RANGE_GRAB_CONE_COS = Math.cos((30 * Math.PI) / 180);
 
 const UP = new Vector3(0, 1, 0);
-const INTO_BOARD = new Vector3(1, 0, 0); // east wall: darts embed pointing +x
+// The dartboard hangs on the NORTH wall (faces +z into the room), so a dart
+// embeds pointing −z (into the wall) and stands proud toward the throwers.
+const INTO_BOARD = new Vector3(0, 0, -1);
 
 const raycaster = new Raycaster();
 const _a = new Vector3();
@@ -693,7 +695,9 @@ export class PropSystem extends createSystem({
   private stickDart(rec: PropRec, point: Vector3, surface: string, uv: { x: number; y: number } | null): void {
     rec.mesh.position.copy(point);
     rec.mesh.quaternion.setFromUnitVectors(UP, INTO_BOARD);
-    rec.mesh.position.x -= 0.02; // tip buried, flight proud of the board
+    // Pull it 2 cm back out of the board so the tip stays buried but the shaft
+    // and flight sit PROUD, pointing straight out at the thrower (not flat).
+    rec.mesh.position.addScaledVector(INTO_BOARD, -0.02);
     rec.stuckTimer = 0;
     rec.fadeTimer = 0;
     rec.mode = 'stuck';

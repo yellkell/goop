@@ -590,49 +590,78 @@ function buildJukebox(): { group: Group; panel: Panel } {
 
   const wood = new MeshStandardMaterial({ map: woodTexture('#5a2f17', [2, 2]), roughness: 0.6, metalness: 0.05 });
   const trim = new MeshStandardMaterial({ map: woodTexture('#2c1810', [1, 2]), roughness: 0.7 });
+  // Coloured neon tubing. Each material tags its base glow so MusicSystem can
+  // flare the WHOLE cabinet brighter when a hand is close enough to use it.
+  const neon = (c: number, i = 1.6): MeshStandardMaterial => {
+    const m = new MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: i, metalness: 0.2, roughness: 0.3 });
+    m.userData.baseGlow = i;
+    return m;
+  };
+  const chrome = (): MeshStandardMaterial =>
+    new MeshStandardMaterial({ color: 0xd7dee7, metalness: 1, roughness: 0.16 });
+  const N = { amber: 0xffb000, yellow: 0xffd24a, orange: 0xff5a1f, green: 0x3be870, red: 0xff2f3b };
 
-  const W = 0.74;
+  const W = 0.8;
   const D = 0.46;
-  const BODY_H = 1.18;
+  const BODY_H = 1.12;
+  const F = -D / 2 + 0.008; // room-facing front face — proud neon mounts here
 
-  // Main body, set against the wall (front face toward −z).
-  const body = new Mesh(roundedBox(W, BODY_H, D, 0.06), wood);
+  // Body + heavy plinth.
+  const body = new Mesh(roundedBox(W, BODY_H, D, 0.12), wood);
   body.position.set(0, BODY_H / 2, 0);
   g.add(body);
-  // Dark plinth so it sits heavy on the floor.
-  const base = new Mesh(new BoxGeometry(W + 0.06, 0.12, D + 0.06), trim);
-  base.position.set(0, 0.06, 0);
+  const base = new Mesh(new BoxGeometry(W + 0.08, 0.14, D + 0.06), trim);
+  base.position.set(0, 0.07, 0);
   g.add(base);
 
-  // Glowing crown header across the top, with the iconic amber arch on its
-  // front face (a half-torus standing up — a clean, orientation-safe dome).
-  const crown = new Mesh(roundedBox(W, 0.16, D, 0.06), amberGlow(0.6));
-  crown.position.set(0, BODY_H + 0.02, 0);
+  // --- Domed crown + concentric neon arches (the signature Wurlitzer top) ------
+  const crown = new Mesh(roundedBox(W, 0.42, D, 0.19), wood);
+  crown.position.set(0, BODY_H + 0.12, 0);
   g.add(crown);
-  const arch = new Mesh(new TorusGeometry(W / 2 - 0.05, 0.022, 8, 24, Math.PI), amberGlow(1.4));
-  arch.position.set(0, BODY_H + 0.02, -D / 2 + 0.03);
-  g.add(arch);
+  const archY = BODY_H + 0.08;
+  for (const [r, c, tube] of [
+    [W / 2 - 0.03, N.amber, 0.028],
+    [W / 2 - 0.105, N.yellow, 0.024],
+    [W / 2 - 0.175, N.orange, 0.022],
+  ] as const) {
+    const a = new Mesh(new TorusGeometry(r, tube, 10, 30, Math.PI), neon(c, 1.7));
+    a.position.set(0, archY, F);
+    g.add(a);
+  }
+  // A bright chrome rim hugging the outer arch.
+  const rim = new Mesh(new TorusGeometry(W / 2 - 0.002, 0.011, 8, 30, Math.PI), chrome());
+  rim.position.set(0, archY, F - 0.006);
+  g.add(rim);
 
-  // Speaker grille — a recessed dark panel low on the front, with bars.
-  const grille = new Mesh(new BoxGeometry(W - 0.16, 0.34, 0.03), trim);
-  grille.position.set(0, 0.42, -D / 2 - 0.005);
+  // --- Vertical bubble tubes: GREEN left, RED right, chrome-capped -------------
+  for (const [sx, c] of [[-1, N.green], [1, N.red]] as const) {
+    const tube = new Mesh(new CylinderGeometry(0.03, 0.03, BODY_H - 0.08, 12), neon(c, 1.6));
+    tube.position.set(sx * (W / 2 - 0.045), BODY_H / 2 + 0.02, F);
+    g.add(tube);
+    for (const cy of [BODY_H - 0.02, 0.1]) {
+      const cap = new Mesh(new CylinderGeometry(0.04, 0.04, 0.03, 12), chrome());
+      cap.position.set(sx * (W / 2 - 0.045), cy, F);
+      g.add(cap);
+    }
+  }
+
+  // --- Speaker grille: a dark recess, chrome bars, a hot orange centre knob ----
+  const grille = new Mesh(new BoxGeometry(W - 0.2, 0.36, 0.03), trim);
+  grille.position.set(0, 0.42, F - 0.004);
   g.add(grille);
-  for (let i = 0; i < 5; i++) {
-    const bar = new Mesh(new BoxGeometry(W - 0.22, 0.018, 0.02), gunmetal(0.4));
-    bar.position.set(0, 0.30 + i * 0.06, -D / 2 - 0.02);
+  for (let i = 0; i < 6; i++) {
+    const bar = new Mesh(new BoxGeometry(W - 0.26, 0.015, 0.02), chrome());
+    bar.position.set(0, 0.28 + i * 0.058, F - 0.018);
     g.add(bar);
   }
-  // Amber side pilasters for the period look.
-  for (const sx of [-1, 1]) {
-    const pil = new Mesh(new CylinderGeometry(0.026, 0.026, BODY_H - 0.2, 10), amberGlow(0.9));
-    pil.position.set(sx * (W / 2 - 0.03), BODY_H / 2 + 0.02, -D / 2 + 0.03);
-    g.add(pil);
-  }
+  const knob = new Mesh(new CylinderGeometry(0.05, 0.05, 0.03, 18), neon(N.orange, 2.4));
+  knob.rotation.x = Math.PI / 2;
+  knob.position.set(0, 0.42, F - 0.03);
+  g.add(knob);
 
-  // The marquee: a Panel up under the crown showing the current station. Faces
-  // −z (the room), proud of the body so it reads from the floor.
-  const panel = new Panel(0.5, 0.26, 384);
-  panel.mesh.position.set(0, 0.86, -D / 2 - 0.012);
+  // --- Marquee: the current-track readout, up under the arch -------------------
+  const panel = new Panel(0.52, 0.2, 384);
+  panel.mesh.position.set(0, 0.86, F - 0.02);
   panel.mesh.rotation.y = Math.PI; // plane faces +z by default; turn it to −z
   panel.setLines([
     { text: 'JUKEBOX', size: 58, colour: '#ffb000', bold: true },
