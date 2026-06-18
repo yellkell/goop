@@ -727,9 +727,9 @@ interface AttachInfo {
   desc: string;
 }
 const ATTACHMENTS: AttachInfo[] = [
-  { name: 'SPLIT', color: UI.cool, desc: 'On recall it breaks into three smaller balls, evenly spread — each lands a third of the damage.' },
-  { name: 'GROW', color: UI.emberBright, desc: 'Swells on the way back: easier to land but softer, down to 10 less damage. The longer the recall, the bigger.' },
-  { name: 'SHRINK', color: UI.amber, desc: 'Shrinks on the way back: harder to land but vicious, up to 10 more damage. The longer the recall, the smaller.' },
+  { name: 'SPLIT', color: UI.cool, desc: 'Splits on return.' },
+  { name: 'GROW', color: UI.emberBright, desc: 'Gets bigger on return with less damage.' },
+  { name: 'SHRINK', color: UI.amber, desc: 'Gets smaller on return for more damage.' },
 ];
 const TYPES = [ATTACH.split, ATTACH.grow, ATTACH.shrink];
 
