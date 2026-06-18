@@ -940,9 +940,11 @@ export function createMenu(scene: Scene): Menu {
   custom.mesh.position.set(0.5, 1.53, -1.1);
   custom.mesh.rotation.y = -0.3;
   custom.mesh.visible = false;
-  // Loadout extras are part of the customisation modal.
-  balls.mesh.position.set(-0.66, 1.18, -1.06);
-  balls.mesh.rotation.y = 0.32;
+  // BALL LOADOUT lives out on the RIGHT, wrapped toward you alongside the other
+  // controls — the whole LEFT is left clear for the avatar mirror, so while
+  // changing your skin you can still see it (it used to sit in front of it).
+  balls.mesh.position.set(1.2, 1.18, -0.82);
+  balls.mesh.rotation.y = -0.68;
   balls.mesh.visible = false;
   // Raised a touch (was 0.78) so the slider and the CLOSE button beneath it sit
   // higher — there's room under the trimmed CUSTOMISE plate above.
