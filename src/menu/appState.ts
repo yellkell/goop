@@ -32,6 +32,14 @@ function loadAccentHue(): number {
   return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : DEFAULT_ACCENT_HUE;
 }
 
+/** Per-fist ball attachment: [left, right], each 0 none / 1 split / 2 grow / 3 shrink. */
+function loadBallAttach(): [number, number] {
+  const raw = localStorage.getItem('ff-ballattach');
+  const parts = (raw ?? '').split(',').map((s) => parseInt(s, 10));
+  const clamp = (n: number): number => (Number.isFinite(n) && n >= 0 && n <= 3 ? n : 0);
+  return [clamp(parts[0]), clamp(parts[1])];
+}
+
 function loadStats(): LifetimeStats {
   try {
     const raw = localStorage.getItem('ff-stats');
@@ -51,8 +59,10 @@ export const app: {
   netStatus: string;
   /** Aim Training option: targets shoot back so you can train dodging. */
   shootBack: boolean;
-  /** Player's chosen glove-accent hue (0..1 around the colour wheel). */
+  /** Player's chosen avatar-accent hue (0..1 around the colour wheel). */
   accentHue: number;
+  /** Ball attachment per fist: [left, right] (0 none/1 split/2 grow/3 shrink). */
+  ballAttach: [number, number];
   stats: LifetimeStats;
 } = {
   state: 'menu',
@@ -61,6 +71,7 @@ export const app: {
   netStatus: 'not connected',
   shootBack: localStorage.getItem('ff-shootback') !== '0',
   accentHue: loadAccentHue(),
+  ballAttach: loadBallAttach(),
   stats: loadStats(),
 };
 
@@ -83,6 +94,14 @@ export function saveShootBack(): void {
 export function saveAccentHue(): void {
   try {
     localStorage.setItem('ff-accent', app.accentHue.toFixed(4));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function saveBallAttach(): void {
+  try {
+    localStorage.setItem('ff-ballattach', `${app.ballAttach[0]},${app.ballAttach[1]}`);
   } catch {
     /* ignore */
   }

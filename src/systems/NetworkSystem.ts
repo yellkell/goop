@@ -98,7 +98,7 @@ export class NetworkSystem extends createSystem({
       orbit[hand] = this.input.xr.gamepads[HANDS[hand]]?.getButtonPressed(InputComponent.Trigger) ?? false;
     }
 
-    net.send({ k: 'pose', head: headPose, left: hands[0], right: hands[1], orbit, hp: this.myHp });
+    net.send({ k: 'pose', head: headPose, left: hands[0], right: hands[1], orbit, hp: this.myHp, acc: app.accentHue });
   }
 
   // --- incoming ------------------------------------------------------------
@@ -117,6 +117,7 @@ export class NetworkSystem extends createSystem({
         // theirs — their flags map straight onto their balls.
         opponent.orbiting[0] = msg.orbit[0];
         opponent.orbiting[1] = msg.orbit[1];
+        if (typeof msg.acc === 'number') opponent.accentHue = msg.acc;
         this.setTheirHp(msg.hp);
         target.fresh = true;
         break;
@@ -128,7 +129,7 @@ export class NetworkSystem extends createSystem({
         break;
       }
       case 'recall':
-        ballCommands.push({ type: 'recall', hand: msg.hand });
+        ballCommands.push({ type: 'recall', hand: msg.hand, att: msg.att, dmg: msg.dmg, scl: msg.scl });
         break;
       case 'hit': {
         // Their client ruled our ball connected: damage them on our side and

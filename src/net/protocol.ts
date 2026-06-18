@@ -13,12 +13,20 @@
 export type PoseTuple = [number, number, number, number, number, number, number];
 
 export type PeerMessage =
-  /** ~20 Hz body pose: head, left hand, right hand, trigger-orbit flags, hp. */
-  | { k: 'pose'; head: PoseTuple; left: PoseTuple; right: PoseTuple; orbit: [boolean, boolean]; hp: number }
+  /**
+   * ~20 Hz body pose: head, left hand, right hand, trigger-orbit flags, hp.
+   * `acc` is my chosen avatar-accent hue (0..1) so my neon shows on your copy.
+   */
+  | { k: 'pose'; head: PoseTuple; left: PoseTuple; right: PoseTuple; orbit: [boolean, boolean]; hp: number; acc?: number }
   /** I punched my `hand` ball: it left from `pos` with velocity `vel`. */
   | { k: 'throw'; hand: 0 | 1; pos: [number, number, number]; vel: [number, number, number] }
-  /** I recalled my `hand` ball. */
-  | { k: 'recall'; hand: 0 | 1 }
+  /**
+   * I recalled my `hand` ball. If it carried an attachment that fired (a live
+   * recall, not a dead ball), `att` is the effect (ATTACH.*), `dmg` the
+   * resulting per-ball damage and `scl` the size multiplier — sent so your
+   * copy of my ball splits/scales and deals the same damage you'd take.
+   */
+  | { k: 'recall'; hand: 0 | 1; att?: number; dmg?: number; scl?: number }
   /**
    * Your `hand` ball HIT me (victim-authoritative) for `dmg`. `ret` means it
    * connected mid-RETURN (you recalled it through me) — the ball is not

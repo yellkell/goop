@@ -21,6 +21,8 @@ import {
 } from 'three';
 import { app, saveAccentHue, saveShootBack, type AppState } from '../menu/appState.js';
 import { createMenu, type Menu, type MenuAction, type PanelId } from '../menu/menu.js';
+import { buildBoxerPreview, setAvatarAccent } from '../avatar/boxer.js';
+import { hueToColor } from '../config.js';
 import { net } from '../net/client.js';
 import * as sfx from '../audio/sfx.js';
 
@@ -41,16 +43,30 @@ export class MenuSystem extends createSystem({}) {
   private pointers: Record<'left' | 'right', Pointer> = {} as Record<'left' | 'right', Pointer>;
   private redrawTimer = 0;
   private draggingHue = false;
+  private preview?: Object3D;
+  private previewHue = Number.NaN;
 
   init(): void {
     this.menu = createMenu(this.scene);
     this.pointers.left = this.makePointer();
     this.pointers.right = this.makePointer();
+
+    // A rotating bust of your own boxer so the accent slider visibly recolours
+    // the whole avatar's neon, not just the gloves you wear in the arena.
+    this.preview = buildBoxerPreview(hueToColor(app.accentHue));
+    this.preview.scale.setScalar(0.5);
+    this.preview.position.set(0, 0.85, -0.9);
+    this.preview.visible = false;
+    this.scene.add(this.preview);
+    this.previewHue = app.accentHue;
+
     this.applyState();
   }
 
   update(delta: number): void {
     if (app.state !== this.lastState) this.applyState();
+
+    this.updatePreview(delta);
 
     if (app.state === 'playing' || app.state === 'training') {
       this.hidePointers();
@@ -60,6 +76,7 @@ export class MenuSystem extends createSystem({}) {
     // Lobby / queueing: hover + click the panels (and drag the accent slider).
     let hover: PanelId | null = null;
     let dragged = false;
+    let clicked = false;
     const meshes = this.menu.panels.map((p) => p.mesh);
     for (const hand of ['left', 'right'] as const) {
       const hit = this.updatePointer(hand, meshes);
@@ -71,14 +88,25 @@ export class MenuSystem extends createSystem({}) {
       if (hit.uv && panel.drag && gp?.getButtonPressed(InputComponent.Trigger)) {
         if (panel.drag(hit.uv.x, hit.uv.y)) dragged = true;
       } else if (hit.uv && gp?.getButtonDown(InputComponent.Trigger)) {
-        const action = panel.hitTest(hit.uv.x, hit.uv.y);
-        if (action) this.run(action);
+        if (panel.click) {
+          if (panel.click(hit.uv.x, hit.uv.y)) clicked = true;
+        } else {
+          const action = panel.hitTest(hit.uv.x, hit.uv.y);
+          if (action) this.run(action);
+        }
       }
     }
     if (hover !== this.hovered) {
       this.hovered = hover;
       this.menu.redrawAll(hover);
       if (hover) sfx.uiHover(); // soft laser zap as the pointer lands
+    }
+
+    // Self-contained panel click (e.g. the ball loadout tiles).
+    if (clicked) {
+      sfx.ensureAudio();
+      sfx.uiClick();
+      this.menu.redrawAll(this.hovered);
     }
 
     // Live-update the accent slider; persist once the trigger is released.
@@ -95,6 +123,20 @@ export class MenuSystem extends createSystem({}) {
     if (this.redrawTimer <= 0) {
       this.redrawTimer = 0.5;
       this.menu.redrawAll(this.hovered);
+    }
+  }
+
+  /** Spin the avatar preview in the lobby and recolour it as the slider moves. */
+  private updatePreview(delta: number): void {
+    const p = this.preview;
+    if (!p) return;
+    const inLobby = app.state === 'menu' || app.state === 'queueing';
+    p.visible = inLobby;
+    if (!inLobby) return;
+    p.rotation.y += delta * 0.6;
+    if (this.previewHue !== app.accentHue) {
+      setAvatarAccent(p, hueToColor(app.accentHue));
+      this.previewHue = app.accentHue;
     }
   }
 

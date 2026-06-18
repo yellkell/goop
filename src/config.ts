@@ -85,6 +85,30 @@ export const FIREBALL = {
   deflectBonus: 0.05, // extra contact radius for the parry check
 };
 
+/**
+ * Per-ball attachments (the BALL LOADOUT panel). Each of your two balls can
+ * carry one. The effect fires the instant you RECALL a still-FLYING ball — a
+ * dead ball on the floor returns plain — and lasts only until you catch it,
+ * after which the ball is normal again. Grow/shrink scale with the recall
+ * distance: the farther out the ball was when you pulled it back, the bigger
+ * the swing, up to the caps below. Split is a fixed fan of three.
+ */
+export const ATTACH = {
+  none: 0,
+  split: 1,
+  grow: 2,
+  shrink: 3,
+  /** Recall distance (m) at which grow/shrink reach full effect. */
+  fullRange: ARENA_GAP,
+  growSize: 2.0, // up to double size on a long recall
+  shrinkSize: 0.5, // down to half size on a long recall
+  damageSwing: 10, // ±10 damage at full range
+  splitCount: 3, // total balls a split becomes
+  splitSize: 0.62, // each shard's size vs a normal ball
+  splitSpread: 0.26, // lateral fan radius (m) mid-return
+  splitSpreadRange: 1.4, // distance (m) over which the fan collapses to the hand
+} as const;
+
 /** Combat tuning: health pools shared by the IK body parts. */
 export const COMBAT = {
   playerHealth: 100,

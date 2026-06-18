@@ -6,46 +6,34 @@
  */
 
 import { createSystem, InputComponent } from '@iwsdk/core';
-import { Mesh, type Group, type Material } from 'three';
-import { buildGlove, GLOVE_VISUAL_SCALE } from '../avatar/boxer.js';
+import type { Group } from 'three';
+import { buildGlove, GLOVE_VISUAL_SCALE, setAvatarAccent } from '../avatar/boxer.js';
 import { hueToColor } from '../config.js';
 import { app } from '../menu/appState.js';
 
 const HANDS = ['left', 'right'] as const;
 
-/** Free a glove's geometries/materials before we drop it on a recolour. */
-function disposeGlove(glove: Group): void {
-  glove.traverse((o) => {
-    if (o instanceof Mesh) {
-      o.geometry.dispose();
-      const mat = o.material as Material | Material[];
-      if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
-      else mat.dispose();
-    }
-  });
-}
-
 export class PlayerGloveSystem extends createSystem({}) {
   private gloves: Partial<Record<'left' | 'right', Group>> = {};
-  private builtHue = Number.NaN;
+  private accentHue = Number.NaN;
 
   update(delta: number): void {
     const show = app.state === 'playing' || app.state === 'training';
+    // Recolour the neon when the slider moves — cheap material tweak, no rebuild.
+    const recolour = this.accentHue !== app.accentHue;
     const accent = hueToColor(app.accentHue);
     for (const hand of HANDS) {
       const grip = this.world.playerSpaceEntities.gripSpaces[hand]?.object3D;
       if (!grip) continue;
 
       let glove = this.gloves[hand];
-      if (!glove || this.builtHue !== app.accentHue) {
-        if (glove) {
-          grip.remove(glove);
-          disposeGlove(glove);
-        }
+      if (!glove) {
         glove = buildGlove(0, accent);
         glove.name = `player-glove-${hand}`;
         grip.add(glove);
         this.gloves[hand] = glove;
+      } else if (recolour) {
+        setAvatarAccent(glove, accent);
       }
       glove.visible = show;
       if (!show) continue;
@@ -56,6 +44,6 @@ export class PlayerGloveSystem extends createSystem({}) {
       const s = glove.scale.x + (target - glove.scale.x) * Math.min(1, delta * 14);
       glove.scale.setScalar(s);
     }
-    this.builtHue = app.accentHue;
+    this.accentHue = app.accentHue;
   }
 }

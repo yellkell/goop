@@ -8,13 +8,13 @@
 
 import { createSystem, Vector3, type Entity } from '@iwsdk/core';
 import { Object3D } from 'three';
-import { buildBoxer, solveTorso, type BoxerRig } from '../avatar/boxer.js';
+import { buildBoxer, setAvatarAccent, solveTorso, type BoxerRig } from '../avatar/boxer.js';
 import { Combatant } from '../components/Combatant.js';
 import { Health } from '../components/Health.js';
 import { Hitbox } from '../components/Hitbox.js';
 import { opponent } from '../combat/opponentBus.js';
 import { app } from '../menu/appState.js';
-import { ARENA_GAP, BODY_IK } from '../config.js';
+import { ARENA_GAP, BODY_IK, hueToColor, teamColor } from '../config.js';
 
 const _chest = new Vector3();
 const _pelvis = new Vector3();
@@ -25,6 +25,7 @@ export class OpponentSystem extends createSystem({
   private rig?: BoxerRig;
   private hitboxes: { head?: Entity; chest?: Entity; pelvis?: Entity } = {};
   private built = false;
+  private accentColor = teamColor(1);
 
   init(): void {
     this.rig = buildBoxer(1);
@@ -47,6 +48,16 @@ export class OpponentSystem extends createSystem({
     if (!fighting) {
       this.parkHitboxes();
       return;
+    }
+
+    // Neon: a remote rival wears their own accent (synced over the wire); the
+    // bot keeps the readable house blue. Recolour only when it actually changes.
+    const want = app.mode === 'net' && opponent.accentHue >= 0
+      ? hueToColor(opponent.accentHue)
+      : teamColor(1);
+    if (want !== this.accentColor) {
+      this.accentColor = want;
+      for (const piece of rig.all) setAvatarAccent(piece, want);
     }
 
     // Head + torso from the bus pose; gloves straight onto the hand poses.
