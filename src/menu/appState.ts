@@ -23,6 +23,15 @@ export interface LifetimeStats {
   hitsLanded: number;
 }
 
+/** Default glove-accent hue (≈0.07 → the classic ember orange). */
+export const DEFAULT_ACCENT_HUE = 0.07;
+
+function loadAccentHue(): number {
+  const raw = localStorage.getItem('ff-accent');
+  const n = raw == null ? NaN : parseFloat(raw);
+  return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : DEFAULT_ACCENT_HUE;
+}
+
 function loadStats(): LifetimeStats {
   try {
     const raw = localStorage.getItem('ff-stats');
@@ -42,6 +51,8 @@ export const app: {
   netStatus: string;
   /** Aim Training option: targets shoot back so you can train dodging. */
   shootBack: boolean;
+  /** Player's chosen glove-accent hue (0..1 around the colour wheel). */
+  accentHue: number;
   stats: LifetimeStats;
 } = {
   state: 'menu',
@@ -49,6 +60,7 @@ export const app: {
   side: 0,
   netStatus: 'not connected',
   shootBack: localStorage.getItem('ff-shootback') !== '0',
+  accentHue: loadAccentHue(),
   stats: loadStats(),
 };
 
@@ -63,6 +75,14 @@ export function saveStats(): void {
 export function saveShootBack(): void {
   try {
     localStorage.setItem('ff-shootback', app.shootBack ? '1' : '0');
+  } catch {
+    /* ignore */
+  }
+}
+
+export function saveAccentHue(): void {
+  try {
+    localStorage.setItem('ff-accent', app.accentHue.toFixed(4));
   } catch {
     /* ignore */
   }

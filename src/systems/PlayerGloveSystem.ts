@@ -1,28 +1,48 @@
 /**
- * Your boxing gloves: an ember-orange glove locked to each controller grip
- * whenever you're in the arena (bout or training). They squeeze down slightly
- * when you grip, and hide in the lobby so the menu lasers read clearly.
+ * Your boxing gloves: a glove locked to each controller grip whenever you're
+ * in the arena (bout or training). The accent glow follows the hue you pick
+ * on the lobby's GLOVE ACCENT slider. They squeeze down slightly when you
+ * grip, and hide in the lobby so the menu lasers read clearly.
  */
 
 import { createSystem, InputComponent } from '@iwsdk/core';
-import type { Group } from 'three';
+import { Mesh, type Group, type Material } from 'three';
 import { buildGlove, GLOVE_VISUAL_SCALE } from '../avatar/boxer.js';
+import { hueToColor } from '../config.js';
 import { app } from '../menu/appState.js';
 
 const HANDS = ['left', 'right'] as const;
 
+/** Free a glove's geometries/materials before we drop it on a recolour. */
+function disposeGlove(glove: Group): void {
+  glove.traverse((o) => {
+    if (o instanceof Mesh) {
+      o.geometry.dispose();
+      const mat = o.material as Material | Material[];
+      if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
+      else mat.dispose();
+    }
+  });
+}
+
 export class PlayerGloveSystem extends createSystem({}) {
   private gloves: Partial<Record<'left' | 'right', Group>> = {};
+  private builtHue = Number.NaN;
 
   update(delta: number): void {
     const show = app.state === 'playing' || app.state === 'training';
+    const accent = hueToColor(app.accentHue);
     for (const hand of HANDS) {
       const grip = this.world.playerSpaceEntities.gripSpaces[hand]?.object3D;
       if (!grip) continue;
 
       let glove = this.gloves[hand];
-      if (!glove) {
-        glove = buildGlove(0);
+      if (!glove || this.builtHue !== app.accentHue) {
+        if (glove) {
+          grip.remove(glove);
+          disposeGlove(glove);
+        }
+        glove = buildGlove(0, accent);
         glove.name = `player-glove-${hand}`;
         grip.add(glove);
         this.gloves[hand] = glove;
@@ -36,5 +56,6 @@ export class PlayerGloveSystem extends createSystem({}) {
       const s = glove.scale.x + (target - glove.scale.x) * Math.min(1, delta * 14);
       glove.scale.setScalar(s);
     }
+    this.builtHue = app.accentHue;
   }
 }

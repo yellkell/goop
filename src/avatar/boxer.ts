@@ -71,9 +71,8 @@ function glowMat(color: number, intensity = 1.4): MeshStandardMaterial {
  * with glowing studs, side armour, a top piston, and a flared cuff with a
  * team-glow ring. Knuckles point down local -Z.
  */
-export function buildGlove(team: number): Group {
+export function buildGlove(team: number, accent: number = teamColor(team)): Group {
   const glove = new Group();
-  const accent = teamColor(team);
   glove.scale.setScalar(GLOVE_VISUAL_SCALE);
 
   // The fist: one thick armoured block.
@@ -124,8 +123,7 @@ export function buildGlove(team: number): Group {
 }
 
 /** Build the full opponent rig. Pieces start hidden; add them to the scene. */
-export function buildBoxer(team: number): BoxerRig {
-  const accent = teamColor(team);
+export function buildBoxer(team: number, accent: number = teamColor(team)): BoxerRig {
 
   // --- Head: eight-sided helmet, visor slit, jaw guard, crest fin ---
   const head = new Group();
@@ -197,7 +195,7 @@ export function buildBoxer(team: number): BoxerRig {
   torso.name = 'opponent-torso';
   torso.add(chest, pelvis);
 
-  const gloves: [Group, Group] = [buildGlove(team), buildGlove(team)];
+  const gloves: [Group, Group] = [buildGlove(team, accent), buildGlove(team, accent)];
   gloves[0].name = 'opponent-glove-left';
   gloves[1].name = 'opponent-glove-right';
 

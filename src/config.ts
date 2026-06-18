@@ -225,3 +225,28 @@ export const PALETTE = {
 export function teamColor(team: number): number {
   return team === 0 ? PALETTE.ember : PALETTE.coolFlame;
 }
+
+/**
+ * Map a hue (0..1 around the wheel) to a saturated glow colour for avatar
+ * accents. Saturation/lightness are fixed to the ember vibe, so the default
+ * hue (≈0.07) reproduces the classic orange — see DEFAULT_ACCENT_HUE.
+ */
+export function hueToColor(hue: number): number {
+  const h = (((hue % 1) + 1) % 1) * 6;
+  const s = 1;
+  const l = 0.55;
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs((h % 2) - 1));
+  const m = l - c / 2;
+  let r = 0, g = 0, b = 0;
+  if (h < 1) { r = c; g = x; }
+  else if (h < 2) { r = x; g = c; }
+  else if (h < 3) { g = c; b = x; }
+  else if (h < 4) { g = x; b = c; }
+  else if (h < 5) { r = x; b = c; }
+  else { r = c; b = x; }
+  const R = Math.round((r + m) * 255);
+  const G = Math.round((g + m) * 255);
+  const B = Math.round((b + m) * 255);
+  return (R << 16) | (G << 8) | B;
+}

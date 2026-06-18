@@ -19,7 +19,7 @@ import {
   Vector3,
   type Intersection,
 } from 'three';
-import { app, saveShootBack, type AppState } from '../menu/appState.js';
+import { app, saveAccentHue, saveShootBack, type AppState } from '../menu/appState.js';
 import { createMenu, type Menu, type MenuAction, type PanelId } from '../menu/menu.js';
 import { net } from '../net/client.js';
 import * as sfx from '../audio/sfx.js';
@@ -40,6 +40,7 @@ export class MenuSystem extends createSystem({}) {
   private lastState: AppState | null = null;
   private pointers: Record<'left' | 'right', Pointer> = {} as Record<'left' | 'right', Pointer>;
   private redrawTimer = 0;
+  private draggingHue = false;
 
   init(): void {
     this.menu = createMenu(this.scene);
@@ -56,8 +57,9 @@ export class MenuSystem extends createSystem({}) {
       return;
     }
 
-    // Lobby / queueing: hover + click the panels.
+    // Lobby / queueing: hover + click the panels (and drag the accent slider).
     let hover: PanelId | null = null;
+    let dragged = false;
     const meshes = this.menu.panels.map((p) => p.mesh);
     for (const hand of ['left', 'right'] as const) {
       const hit = this.updatePointer(hand, meshes);
@@ -65,7 +67,10 @@ export class MenuSystem extends createSystem({}) {
       const panel = this.menu.panels.find((p) => p.mesh === hit.object);
       if (!panel) continue;
       hover = panel.id;
-      if (hit.uv && this.input.xr.gamepads[hand]?.getButtonDown(InputComponent.Trigger)) {
+      const gp = this.input.xr.gamepads[hand];
+      if (hit.uv && panel.drag && gp?.getButtonPressed(InputComponent.Trigger)) {
+        if (panel.drag(hit.uv.x, hit.uv.y)) dragged = true;
+      } else if (hit.uv && gp?.getButtonDown(InputComponent.Trigger)) {
         const action = panel.hitTest(hit.uv.x, hit.uv.y);
         if (action) this.run(action);
       }
@@ -73,6 +78,16 @@ export class MenuSystem extends createSystem({}) {
     if (hover !== this.hovered) {
       this.hovered = hover;
       this.menu.redrawAll(hover);
+      if (hover) sfx.uiHover(); // soft laser zap as the pointer lands
+    }
+
+    // Live-update the accent slider; persist once the trigger is released.
+    if (dragged) {
+      this.draggingHue = true;
+      this.menu.redrawAll(this.hovered);
+    } else if (this.draggingHue) {
+      this.draggingHue = false;
+      saveAccentHue();
     }
 
     // Periodic redraw so live text (queue status) stays fresh.
