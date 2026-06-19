@@ -100,6 +100,10 @@ export class MenuSystem extends createSystem({}) {
   private boardScrollDir = 0;
   private draggingHue = false;
   private accentHue = Number.NaN;
+  /** Which hand+panel currently owns a slider scrub. A scrub may only START on
+   *  a fresh trigger press over the track, so a trigger held from opening the
+   *  panel (or clicking elsewhere) can't hijack a slider as the ray crosses it. */
+  private sliderGrab: { hand: 'left' | 'right'; panel: PanelId } | null = null;
 
   init(): void {
     this.menu = createMenu(this.scene);
@@ -157,18 +161,25 @@ export class MenuSystem extends createSystem({}) {
         hoverAction = action;
       }
       const gp = this.input.xr.gamepads[hand];
-      // Gate the drag branch on an ACTUAL track hit — a held trigger off the
-      // track (e.g. on the accent panel's DEFAULT button) then falls through to
-      // the click/action branch below instead of being swallowed.
-      if (
-        hit.uv && panel.drag && gp?.getButtonPressed(InputComponent.Trigger) &&
-        panel.drag(hit.uv.x, hit.uv.y)
-      ) {
+      const held = gp?.getButtonPressed(InputComponent.Trigger) ?? false;
+      const down = gp?.getButtonDown(InputComponent.Trigger) ?? false;
+      // A scrub may only BEGIN on a fresh press over the track (`down`); once
+      // grabbed it continues while held (`owns`), even as the ray wanders. This
+      // stops a trigger still held from opening the panel — or from a click
+      // elsewhere — from hijacking a slider the instant the ray sweeps over it.
+      if (!held && this.sliderGrab?.hand === hand) this.sliderGrab = null;
+      const owns = this.sliderGrab?.hand === hand && this.sliderGrab?.panel === panel.id;
+      // Gate the drag branch on an ACTUAL track hit — a press off the track
+      // (e.g. on the accent panel's DEFAULT button) then falls through to the
+      // click/action branch below instead of being swallowed.
+      if (hit.uv && panel.drag && (down || owns) && panel.drag(hit.uv.x, hit.uv.y)) {
+        if (down) this.sliderGrab = { hand, panel: panel.id };
         dragged = true;
-      } else if (hit.uv && action === 'av-color' && gp?.getButtonPressed(InputComponent.Trigger)) {
+      } else if (hit.uv && action === 'av-color' && (down || owns)) {
+        if (down) this.sliderGrab = { hand, panel: panel.id };
         // The hue bar is continuous: scrub the armour colour live while held.
         setAvatarColor(colorBarHue(hit.uv.x));
-      } else if (hit.uv && gp?.getButtonDown(InputComponent.Trigger)) {
+      } else if (hit.uv && down) {
         if (panel.click) {
           if (panel.click(hit.uv.x, hit.uv.y)) clicked = true;
         } else if (action) {
