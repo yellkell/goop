@@ -49,6 +49,27 @@ function loadData() {
     return { snakeHi: { name: '—', score: 0 } };
   }
 }
+
+// --- moderation -----------------------------------------------------------------
+// An admin (yellkell) can remove a misbehaving punter from the browser admin
+// panel (hold Z+A+P). A ban closes their socket — which also cuts their voice,
+// since voice rides this same socket — and remembers their IP + client id so
+// they can't just rejoin. The list persists with the rest of the pub data.
+//
+// Bans must carry ADMIN_TOKEN (set it in the Render service environment);
+// without it the ban controls are inert, so a random punter can't wield them.
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
+// This name can never be banned, however it's typed (case/space-insensitive).
+const PROTECTED_NAME = 'yellkell';
+
+function clientIp(req) {
+  const fwd = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  return fwd || req.socket.remoteAddress || '';
+}
+
+function isBanned(ip, cid) {
+  return (ip && data.bans.ips.includes(ip)) || (cid && data.bans.cids.includes(cid));
+}
 function saveData() {
   try {
     writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
@@ -57,6 +78,7 @@ function saveData() {
   }
 }
 const data = loadData();
+if (!data.bans) data.bans = { ips: [], cids: [] };
 
 // --- room state ---------------------------------------------------------------
 /** id → { ws, name, accent, head, left, right } */
@@ -395,12 +417,13 @@ const http = createServer((req, res) => {
 
 const wss = new WebSocketServer({ server: http });
 
-wss.on('connection', (ws) => {
+wss.on('connection', (ws, req) => {
   ws.isAlive = true;
   ws.on('pong', () => {
     ws.isAlive = true;
   });
 
+  const ip = clientIp(req);
   let myId = null;
 
   ws.on('message', (raw, isBinary) => {
@@ -418,6 +441,12 @@ wss.on('connection', (ws) => {
 
     if (msg.t === 'hello') {
       if (myId) return;
+      const cid = String(msg.cid || '').slice(0, 64);
+      if (isBanned(ip, cid)) {
+        send(ws, { t: 'banned' });
+        ws.close(1008, 'banned');
+        return;
+      }
       if (players.size >= MAX_PLAYERS) {
         send(ws, { t: 'full' });
         ws.close(1013, 'pub full');
@@ -427,6 +456,8 @@ wss.on('connection', (ws) => {
       const accent = ACCENTS[joinCount++ % ACCENTS.length];
       players.set(myId, {
         ws,
+        ip,
+        cid,
         name: String(msg.name || myId).slice(0, 14),
         accent,
         av: String(msg.av || '').slice(0, 16),
@@ -534,6 +565,33 @@ wss.on('connection', (ws) => {
         const s = Number.isInteger(msg.station) ? msg.station : -1;
         music = s >= 0 && s < MUSIC_STATIONS ? s : -1;
         broadcast({ t: 'music', station: music });
+        break;
+      }
+      case 'admin-ban': {
+        if (!ADMIN_TOKEN || msg.token !== ADMIN_TOKEN) {
+          send(ws, {
+            t: 'admin-result',
+            ok: false,
+            msg: ADMIN_TOKEN ? 'wrong admin key' : 'admin disabled — no ADMIN_TOKEN set on the server',
+          });
+          break;
+        }
+        const target = players.get(msg.id);
+        if (!target) {
+          send(ws, { t: 'admin-result', ok: false, msg: 'that punter has already left' });
+          break;
+        }
+        if (String(target.name).trim().toLowerCase() === PROTECTED_NAME) {
+          send(ws, { t: 'admin-result', ok: false, msg: `${target.name} can't be banned` });
+          break;
+        }
+        if (target.ip && !data.bans.ips.includes(target.ip)) data.bans.ips.push(target.ip);
+        if (target.cid && !data.bans.cids.includes(target.cid)) data.bans.cids.push(target.cid);
+        saveData();
+        send(target.ws, { t: 'banned' });
+        target.ws.close(1008, 'banned'); // the close handler clears their seat + props
+        send(ws, { t: 'admin-result', ok: true, msg: `banned ${target.name}` });
+        console.log(`[iron-balls-pub] ADMIN ${myId} banned ${msg.id} (${target.name}) ip=${target.ip} cid=${target.cid}`);
         break;
       }
       case 'ev':

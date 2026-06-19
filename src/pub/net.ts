@@ -10,6 +10,25 @@ import { bus, normalizeFight, pub } from './state.js';
 
 let ws: WebSocket | null = null;
 
+/**
+ * A stable per-device id, shared with the FIRE FIGHT leaderboard
+ * (`ff-player-id`). Sent on join so an admin ban can block this device's
+ * rejoin — best-effort (clearing storage mints a new one), but enough to keep
+ * out a casual repeat offender.
+ */
+function clientId(): string {
+  try {
+    let id = localStorage.getItem('ff-player-id');
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem('ff-player-id', id);
+    }
+    return id;
+  } catch {
+    return '';
+  }
+}
+
 /** Called by PubPlayerSystem when a player record arrives off the wire. */
 export type SpawnHook = (p: PubPlayerNet) => void;
 let spawnHook: SpawnHook | null = null;
@@ -39,7 +58,7 @@ export function pubConnect(url: string, name: string, av = '', pf = '', avc = -1
   }
   ws.binaryType = 'arraybuffer'; // voice frames ride as binary alongside the JSON
 
-  ws.onopen = () => pubSendRaw({ t: 'hello', name, av, pf, avc });
+  ws.onopen = () => pubSendRaw({ t: 'hello', name, av, pf, avc, cid: clientId() });
 
   ws.onmessage = (e) => {
     // Binary payloads are voice frames; everything else is JSON game traffic.
@@ -163,6 +182,12 @@ function handle(msg: PubServerMsg): void {
       break;
     case 'ev':
       bus.emit('gameEvent', { from: msg.from, ev: msg.ev });
+      break;
+    case 'banned':
+      bus.emit('banned', undefined);
+      break;
+    case 'admin-result':
+      bus.emit('adminResult', { ok: msg.ok, msg: msg.msg });
       break;
   }
 }

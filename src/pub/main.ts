@@ -26,6 +26,7 @@ import { customization } from '../menu/customization.js';
 import { PUB, pubServerUrl } from './config.js';
 import { buildPub } from './environment.js';
 import { pubConnect } from './net.js';
+import { installAdminPanel } from './admin.js';
 import { Panel } from './panel.js';
 import { bus, pub } from './state.js';
 import { buildProps, PropSystem } from './systems/PropSystem.js';
@@ -131,6 +132,9 @@ World.create(container, {
 
   // Your arena cosmetics walk in with you.
   pubConnect(pubServerUrl(), pub.myName, customization.avatar, customization.platform, customization.colorHue);
+
+  // Browser-only moderation: hold Z+A+P to open the admin ban panel.
+  installAdminPanel();
 
   const xrSupported = (await navigator.xr?.isSessionSupported(SessionMode.ImmersiveVR).catch(() => false)) === true;
 

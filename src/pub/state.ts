@@ -79,6 +79,10 @@ interface Events {
   glassOut: number;
   /** The room's selected jukebox station (−1 = off), server-synced. */
   music: number;
+  /** An admin removed us from the room. */
+  banned: undefined;
+  /** Reply to an admin action we issued (ban succeeded / was refused). */
+  adminResult: { ok: boolean; msg: string };
 }
 
 type Handler<T> = (payload: T) => void;

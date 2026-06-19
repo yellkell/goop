@@ -127,7 +127,7 @@ export type PubEvent =
   | { e: 'SNAKE_OVER'; score: number };
 
 export type PubClientMsg =
-  | { t: 'hello'; name: string; av?: string; pf?: string; avc?: number }
+  | { t: 'hello'; name: string; av?: string; pf?: string; avc?: number; cid?: string }
   | { t: 'pose'; head: PoseTuple; left: PoseTuple; right: PoseTuple }
   /** I want to hold prop `id` (fresh grab or a mid-air catch). */
   | { t: 'grab'; id: number }
@@ -145,6 +145,8 @@ export type PubClientMsg =
   | { t: 'leave-fight' }
   /** Flip the jukebox to `station` (−1 = off) for the whole room. */
   | { t: 'music'; station: number }
+  /** Admin: remove punter `id` and block their rejoin. Needs the admin key. */
+  | { t: 'admin-ban'; token: string; id: string }
   | { t: 'ev'; ev: PubEvent };
 
 export type PubServerMsg =
@@ -183,6 +185,10 @@ export type PubServerMsg =
   | { t: 'glass-out'; id: number }
   /** The room's jukebox is now on `station` (−1 = off). */
   | { t: 'music'; station: number }
+  /** You've been removed by an admin (sent just before the socket closes). */
+  | { t: 'banned' }
+  /** Result of an admin action, sent back to the admin who asked. */
+  | { t: 'admin-result'; ok: boolean; msg: string }
   | { t: 'ev'; from: string; ev: PubEvent };
 
 export const PUB_MAX_PLAYERS = 12;
