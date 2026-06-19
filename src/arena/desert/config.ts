@@ -45,6 +45,9 @@ export const CONFIG = {
     tumbleweed: ['#b59257', '#9a7842', '#caa978'],
     wood: '#875432',
     bone: '#ece2cb',
+    agave: '#8aa86a',
+    cloud: '#f4e8d4',
+    dust: ['#d8bd92', '#c2a072', '#cdb487'],
   },
 
   /** The folded-paper ground. */
@@ -78,5 +81,30 @@ export const CONFIG = {
     count: 9,
     windSpeed: 2.6,
     radius: 0.55,
+  },
+
+  /** Splayed agave rosettes that sway in the wind near the clearing. */
+  agave: {
+    count: 15,
+    clearRadius: 7,
+    spread: 46, // kept mid-ground so distant sand stays clean
+  },
+
+  /** Slow paper clouds drifting above the mesas. */
+  clouds: {
+    count: 6,
+    heightMin: 36,
+    heightMax: 58,
+    spread: 110,
+    drift: 0.55, // base x-speed (m/s)
+  },
+
+  /** Occasional dust devils that spin up, wander and dissipate. */
+  dustDevils: {
+    maxActive: 2,
+    firstAt: 9, // seconds after the desert first shows
+    intervalMin: 16,
+    intervalMax: 30,
+    fieldHalf: 92,
   },
 } as const;

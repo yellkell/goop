@@ -19,6 +19,7 @@ import {
   Group,
   HemisphereLight,
   Mesh,
+  Object3D,
   ShaderMaterial,
   SphereGeometry,
   Vector3,
@@ -28,13 +29,24 @@ import { makePaperDouble } from './paper.js';
 import { buildTerrain } from './terrain.js';
 import { buildBoulders, buildMesas } from './rocks.js';
 import { buildCacti } from './cactus.js';
+import { buildAgave } from './agave.js';
+import { animateClouds, buildClouds, type CloudDrift } from './clouds.js';
+import { DustField } from './dustdevil.js';
 import { buildProps } from './props.js';
 import { animateTumbleweeds, buildTumbleweeds, type Tumbleweed } from './tumbleweed.js';
+
+/** A plant that leans back and forth in the wind about its base. */
+export interface Swayer {
+  obj: Object3D;
+  phase: number;
+  amp: number;
+  speed: number;
+}
 
 export interface Desert {
   /** Everything: terrain, sky, sun, props. Toggle `.visible` to show/hide. */
   root: Group;
-  /** Advance the rolling tumbleweeds. Call each frame while visible. */
+  /** Advance the living parts — sway, clouds, tumbleweeds, dust devils. */
   update(delta: number, time: number): void;
 }
 
@@ -115,12 +127,19 @@ export function buildDesert(): Desert {
   buildTerrain(root);
   buildMesas(root);
   buildBoulders(root);
-  buildCacti(root);
+  const swayers: Swayer[] = [...buildCacti(root), ...buildAgave(root)];
   buildProps(root);
   const weeds: Tumbleweed[] = buildTumbleweeds(root);
+  const clouds: CloudDrift[] = buildClouds(root);
+  const dust = new DustField(root);
 
   return {
     root,
-    update: (delta, time) => animateTumbleweeds(weeds, delta, time),
+    update: (delta, time) => {
+      for (const s of swayers) s.obj.rotation.z = Math.sin(time * s.speed + s.phase) * s.amp;
+      animateClouds(clouds, delta);
+      animateTumbleweeds(weeds, delta, time);
+      dust.update(delta, time);
+    },
   };
 }
