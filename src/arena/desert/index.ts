@@ -31,6 +31,7 @@ import { buildBoulders, buildMesas } from './rocks.js';
 import { buildCacti } from './cactus.js';
 import { buildAgave } from './agave.js';
 import { animateClouds, buildClouds, type CloudDrift } from './clouds.js';
+import { animateVultures, buildVultures } from './birds.js';
 import { DustField } from './dustdevil.js';
 import { buildProps } from './props.js';
 import { animateTumbleweeds, buildTumbleweeds, type Tumbleweed } from './tumbleweed.js';
@@ -131,6 +132,7 @@ export function buildDesert(): Desert {
   buildProps(root);
   const weeds: Tumbleweed[] = buildTumbleweeds(root);
   const clouds: CloudDrift[] = buildClouds(root);
+  const vultures = buildVultures(root);
   const dust = new DustField(root);
 
   return {
@@ -139,6 +141,7 @@ export function buildDesert(): Desert {
       for (const s of swayers) s.obj.rotation.z = Math.sin(time * s.speed + s.phase) * s.amp;
       animateClouds(clouds, delta);
       animateTumbleweeds(weeds, delta, time);
+      animateVultures(vultures, time);
       dust.update(delta, time);
     },
   };

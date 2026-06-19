@@ -48,6 +48,7 @@ export const CONFIG = {
     agave: '#8aa86a',
     cloud: '#f4e8d4',
     dust: ['#d8bd92', '#c2a072', '#cdb487'],
+    bird: '#2f2820', // dark silhouette against the bright sky
   },
 
   /** The folded-paper ground. */
@@ -106,5 +107,33 @@ export const CONFIG = {
     intervalMin: 16,
     intervalMax: 30,
     fieldHalf: 92,
+  },
+
+  /**
+   * Vulture-like birds circling high and far off, surveying their territory.
+   * Kept few, small, distant and spread around the compass so you only catch
+   * one now and then if you look up — never the whole flock at once.
+   */
+  vultures: {
+    count: 3,
+    wingspan: 4.8,
+    centerMin: 95, // orbit-centre distance from the arena
+    centerMax: 165,
+    radiusMin: 26, // how wide each lazy loop is
+    radiusMax: 46,
+    heightMin: 46, // soaring altitude
+    heightMax: 80,
+    omegaMin: 0.05, // angular speed (rad/s) — a slow loop is ~1–2 minutes
+    omegaMax: 0.1,
+    bank: 0.34, // roll into the turn (rad)
+    bobAmp: 4.5, // gentle vertical drift on the thermals (m)
+    // Each bird soars for a spell, glides down out of sight to rest, then
+    // climbs back up. Staggered per bird so the sky thins and refills rather
+    // than emptying all at once — you won't always have one overhead.
+    soarMin: 28, // seconds aloft before going to rest
+    soarMax: 55,
+    restMin: 30, // seconds perched out of sight
+    restMax: 64,
+    glide: 7, // seconds to spiral down to rest / climb back up
   },
 } as const;
