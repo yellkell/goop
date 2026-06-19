@@ -15,14 +15,16 @@
 import {
   BufferGeometry,
   CapsuleGeometry,
+  DoubleSide,
   Euler,
   Float32BufferAttribute,
   type Group as GroupT,
   Group,
   Mesh,
+  MeshBasicMaterial,
 } from 'three';
 import { CONFIG } from './config.js';
-import { makePaper, makePaperDouble, makeRng } from './paper.js';
+import { makeRng } from './paper.js';
 
 const P = CONFIG.palette;
 const V = CONFIG.vultures;
@@ -84,7 +86,10 @@ function makeVulture(rng: () => number): { obj: Group; wings: Group[] } {
   const bird = new Group();
   const span = V.wingspan * (0.85 + rng() * 0.3);
   const chord = span * 0.18;
-  const wingMat = makePaperDouble(P.bird);
+  // Unlit so the birds stay flat black against the bright sky however the warm
+  // sun happens to fall — they're meant to read as silhouettes, not shaded
+  // paper. Double-sided so the wings hold their colour as the bird banks over.
+  const mat = new MeshBasicMaterial({ color: P.bird, side: DoubleSide });
   const wingGeo = makeWingGeometry(span, chord);
   const dihedral = 0.13 + rng() * 0.05; // shallow soaring V
 
@@ -92,7 +97,7 @@ function makeVulture(rng: () => number): { obj: Group; wings: Group[] } {
   // hangs off its own pivot so the wings can flex about the body.
   const wings: Group[] = [];
   for (const side of [1, -1]) {
-    const wing = new Mesh(wingGeo, wingMat);
+    const wing = new Mesh(wingGeo, mat);
     wing.scale.x = side;
     const pivot = new Group();
     pivot.add(wing);
@@ -102,7 +107,7 @@ function makeVulture(rng: () => number): { obj: Group; wings: Group[] } {
   }
 
   // A slim spindle of a body so the wings aren't joined to nothing.
-  const body = new Mesh(new CapsuleGeometry(chord * 0.09, chord * 1.1, 2, 5), makePaper(P.bird, 0.95));
+  const body = new Mesh(new CapsuleGeometry(chord * 0.09, chord * 1.1, 2, 5), mat);
   body.rotation.x = Math.PI / 2; // lie it along the fore/aft axis
   bird.add(body);
 

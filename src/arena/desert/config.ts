@@ -48,7 +48,7 @@ export const CONFIG = {
     agave: '#8aa86a',
     cloud: '#f4e8d4',
     dust: ['#d8bd92', '#c2a072', '#cdb487'],
-    bird: '#2f2820', // dark silhouette against the bright sky
+    bird: '#100e14', // near-black; rendered unlit so it reads as a silhouette
   },
 
   /** The folded-paper ground. */
