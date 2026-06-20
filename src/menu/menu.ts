@@ -33,7 +33,7 @@ import {
   type LeaderboardTab,
 } from '../net/leaderboard.js';
 import { PUB_MAX_PLAYERS } from '../pub/protocol.js';
-import { UI, buttonPlate, hazardStrip, plate, stencilFont } from '../ui/industrial.js';
+import { UI, buttonPlate, hazardStrip, plate, segmentBar, stencilFont } from '../ui/industrial.js';
 
 export type PanelId = 'train' | 'duel' | 'info' | 'board' | 'custom' | 'loadout' | 'balls';
 
@@ -657,18 +657,28 @@ function drawProfile(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | nu
   const own = row.me;
   const tier = tierForXp(row.xp);
   const badge = rankBadge(tier.index);
-  if (badge) ctx.drawImage(badge, BW / 2 - 64, 144, 128, 128);
+  if (badge) ctx.drawImage(badge, BW / 2 - 58, 134, 116, 116);
 
   ctx.textAlign = 'center';
-  ctx.font = stencilFont(40);
+  ctx.font = stencilFont(38);
   ctx.fillStyle = UI.emberBright;
-  ctx.fillText(row.name, BW / 2, 308);
-  ctx.font = stencilFont(26);
+  ctx.fillText(row.name, BW / 2, 286);
+  ctx.font = stencilFont(24);
   ctx.fillStyle = UI.amber;
-  ctx.fillText(tier.name, BW / 2, 346);
-  ctx.font = '700 24px system-ui, sans-serif';
+  ctx.fillText(tier.name, BW / 2, 320);
+  ctx.font = '700 22px system-ui, sans-serif';
   ctx.fillStyle = UI.amberSoft;
-  ctx.fillText(`${row.elo} ELO       ${row.xp} XP`, BW / 2, 386);
+  ctx.fillText(`${row.elo} ELO       ${row.xp} XP`, BW / 2, 352);
+
+  // Progress toward the next rank emblem.
+  segmentBar(ctx, 80, 366, BW - 160, 16, tier.progress, UI.ember);
+  ctx.font = '700 14px system-ui, sans-serif';
+  ctx.fillStyle = UI.amberSoft;
+  ctx.fillText(
+    tier.next === null ? 'MAX RANK' : `${tier.next - row.xp} XP TO ${tierForXp(tier.next).name}`,
+    BW / 2,
+    396,
+  );
 
   // Note plate — clipped so a long note can never spill past the box.
   plate(ctx, 56, 408, BW - 112, 72, { cut: 10, fill: 'rgba(18,19,24,0.5)', stroke: UI.steelDim, rivets: false });
