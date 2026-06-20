@@ -6,6 +6,8 @@
  * moment it's ready and skip it before then (the lobby redraws on a cadence).
  */
 
+import { SRGBColorSpace, Texture } from 'three';
+
 const modules = import.meta.glob('../assets/ranks/*.png', {
   eager: true,
   query: '?url',
@@ -27,4 +29,20 @@ const images = urls.map((url) => {
 export function rankBadge(index: number): HTMLImageElement | null {
   const img = images[index];
   return img && img.complete && img.naturalWidth > 0 ? img : null;
+}
+
+const texCache: Array<Texture | null> = images.map(() => null);
+
+/** The badge as a Three texture (for the 3D promotion FX), or null until loaded. */
+export function rankBadgeTexture(index: number): Texture | null {
+  const img = rankBadge(index);
+  if (!img) return null;
+  let tex = texCache[index];
+  if (!tex) {
+    tex = new Texture(img);
+    tex.colorSpace = SRGBColorSpace;
+    tex.needsUpdate = true;
+    texCache[index] = tex;
+  }
+  return tex;
 }

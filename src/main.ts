@@ -25,6 +25,7 @@ import { CollisionSystem } from './systems/CollisionSystem.js';
 import { BoundarySystem } from './systems/BoundarySystem.js';
 import { GameStateSystem } from './systems/GameStateSystem.js';
 import { MenuSystem } from './systems/MenuSystem.js';
+import { PromotionSystem } from './systems/PromotionSystem.js';
 import { PlayerFeedbackSystem } from './systems/PlayerFeedbackSystem.js';
 import { PlayerGloveSystem } from './systems/PlayerGloveSystem.js';
 import { PlayerGestureSystem } from './systems/PlayerGestureSystem.js';
@@ -88,8 +89,9 @@ World.create(container, {
   // Rim barrier damage, then the match brain + scoreboards.
   world.registerSystem(BoundarySystem);
   world.registerSystem(GameStateSystem);
-  // Lobby menu, hit vignette, gloves, transient FX + fire particle pools.
+  // Lobby menu, promotion celebration, hit vignette, gloves, transient FX.
   world.registerSystem(MenuSystem);
+  world.registerSystem(PromotionSystem);
   world.registerSystem(PlayerFeedbackSystem);
   world.registerSystem(PlayerGloveSystem);
   world.registerSystem(PlayerGestureSystem);
