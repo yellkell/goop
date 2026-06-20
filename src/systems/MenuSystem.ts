@@ -311,8 +311,11 @@ export class MenuSystem extends createSystem({}) {
         app.environment = app.environment === 'desert' ? 'ar' : 'desert';
         saveEnvironment();
         break;
-      case 'lb-duel':
-        setLeaderboardTab('duel');
+      case 'lb-ranked':
+        setLeaderboardTab('ranked');
+        break;
+      case 'lb-xp':
+        setLeaderboardTab('xp');
         break;
       case 'lb-training':
         setLeaderboardTab('training');

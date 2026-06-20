@@ -16,6 +16,36 @@ import type { Vector2Tuple } from 'three';
 export const GAME_TITLE = 'FIRE FIGHT';
 
 /**
+ * Progression — the Bronze→Overlord ladder. XP is cumulative across every
+ * mode (Aim Training, Quick/bot, Ranked) and only climbs; it sets the rank
+ * badge (emblems in src/assets/ranks). A flat ~250-point ladder, Overlord at
+ * 2000+. Skill rating (ELO) is separate and lives in the leaderboard.
+ */
+export const PROGRESSION = {
+  tiers: [
+    { name: 'BRONZE', xp: 0 },
+    { name: 'SILVER', xp: 250 },
+    { name: 'GOLD', xp: 500 },
+    { name: 'PLATINUM', xp: 750 },
+    { name: 'DIAMOND', xp: 1000 },
+    { name: 'MASTER', xp: 1250 },
+    { name: 'GRANDMASTER', xp: 1500 },
+    { name: 'LEGENDARY', xp: 1750 },
+    { name: 'OVERLORD', xp: 2000 },
+  ],
+
+  // Aim Training pays a fraction of the run score (capped), + a best bonus.
+  trainingPerScore: 0.01,
+  trainingMax: 40,
+  trainingBestBonus: 15,
+  // A real 1v1: participation + win bonus (loss still banks participation).
+  matchPlay: 12,
+  matchWin: 20,
+  // A bot win banks a token amount (bot losses report nothing).
+  botWin: 8,
+};
+
+/**
  * Where the IRON BALLS PUB social area lives. It builds side by side with
  * the arena in this same app (see vite.config.ts rollup inputs: pub.html),
  * so the lobby button is one page hop away. Override with ?pub=<url>.

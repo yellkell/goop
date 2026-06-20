@@ -16,15 +16,18 @@
  */
 
 import { FIREBASE_ENABLED, firebaseConfig } from './firebaseConfig.js';
+import { xpForBotWin, xpForMatch, xpForTraining } from '../menu/progression.js';
 
 export interface LbRow {
   name: string;
   value: number;
   /** This row is YOU — the UI highlights it. */
   me: boolean;
+  /** This player's cumulative XP — drives their rank badge on every board. */
+  xp: number;
 }
 
-export type LeaderboardTab = 'duel' | 'training';
+export type LeaderboardTab = 'ranked' | 'xp' | 'training';
 
 const LEADERBOARD_FETCH_LIMIT = 50;
 /** Rows the lobby board shows at once — the full top 10, no scrolling needed
@@ -34,10 +37,11 @@ export const LEADERBOARD_VISIBLE_ROWS = 10;
 
 /** Live leaderboard state the lobby panel reads each redraw. */
 export const leaderboard = {
-  tab: 'duel' as LeaderboardTab,
-  duel: [] as LbRow[],
+  tab: 'ranked' as LeaderboardTab,
+  ranked: [] as LbRow[],
+  xp: [] as LbRow[],
   training: [] as LbRow[],
-  scroll: { duel: 0, training: 0 } as Record<LeaderboardTab, number>,
+  scroll: { ranked: 0, xp: 0, training: 0 } as Record<LeaderboardTab, number>,
   status: FIREBASE_ENABLED ? 'loading…' : 'leaderboard offline',
 };
 
@@ -51,10 +55,10 @@ const ELO_K = 32;
 const SCORE_WIN = 20;
 const SCORE_BOT_WIN = 2;
 
-const profile = { id: '', name: '', score: 0, elo: 1000, training: 0 };
+const profile = { id: '', name: '', score: 0, elo: 1000, training: 0, xp: 0 };
 
 export function leaderboardRows(tab: LeaderboardTab = leaderboard.tab): LbRow[] {
-  return tab === 'duel' ? leaderboard.duel : leaderboard.training;
+  return tab === 'ranked' ? leaderboard.ranked : tab === 'xp' ? leaderboard.xp : leaderboard.training;
 }
 
 export function clampLeaderboardScroll(tab: LeaderboardTab = leaderboard.tab): void {
@@ -83,8 +87,14 @@ export function myElo(): number {
 }
 
 /** My own board numbers, for the panel footer. */
-export function myStats(): { name: string; score: number; training: number } {
-  return { name: profile.name, score: profile.score, training: profile.training };
+export function myStats(): { name: string; score: number; training: number; xp: number; elo: number } {
+  return {
+    name: profile.name,
+    score: profile.score,
+    training: profile.training,
+    xp: profile.xp,
+    elo: profile.elo,
+  };
 }
 
 function localId(): string {
@@ -173,6 +183,7 @@ export function initLeaderboard(): void {
         profile.score = (d.score as number) ?? 0;
         profile.elo = (d.elo as number) ?? 1000;
         profile.training = (d.training as number) ?? 0;
+        profile.xp = (d.xp as number) ?? 0;
         // A locally renamed player syncs the doc's stale callsign.
         if ((d.name as string) !== profile.name) writeMine({});
       } else {
@@ -181,6 +192,7 @@ export function initLeaderboard(): void {
           score: 0,
           elo: 1000,
           training: 0,
+          xp: 0,
           updatedAt: h.fs.serverTimestamp(),
         });
       }
@@ -202,18 +214,26 @@ export async function refreshLeaderboard(force = false): Promise<void> {
   const { fs, db } = h;
   try {
     const players = fs.collection(db, 'players');
-    const pull = async (field: 'score' | 'training'): Promise<LbRow[]> => {
+    const pull = async (field: 'elo' | 'xp' | 'training'): Promise<LbRow[]> => {
       const snap = await fs.getDocs(fs.query(players, fs.orderBy(field, 'desc'), fs.limit(LEADERBOARD_FETCH_LIMIT)));
       return snap.docs
         .map((d) => ({
           name: (d.data().name as string) ?? '???',
           value: (d.data()[field] as number) ?? 0,
           me: d.id === profile.id,
+          xp: (d.data().xp as number) ?? 0,
         }))
-        .filter((r) => r.value > 0);
+        // Ranked shows only players whose rating has actually moved (played a
+        // real bout); XP/training boards show anyone who's earned anything.
+        .filter((r) => (field === 'elo' ? r.value !== 1000 : r.value > 0));
     };
-    [leaderboard.duel, leaderboard.training] = await Promise.all([pull('score'), pull('training')]);
-    clampLeaderboardScroll('duel');
+    [leaderboard.ranked, leaderboard.xp, leaderboard.training] = await Promise.all([
+      pull('elo'),
+      pull('xp'),
+      pull('training'),
+    ]);
+    clampLeaderboardScroll('ranked');
+    clampLeaderboardScroll('xp');
     clampLeaderboardScroll('training');
     leaderboard.status = '';
   } catch {
@@ -246,7 +266,8 @@ export function reportResult(win: boolean, oppElo: number): void {
   if (win) profile.score += SCORE_WIN;
   const expected = 1 / (1 + Math.pow(10, (oppElo - profile.elo) / 400));
   profile.elo = Math.max(100, Math.round(profile.elo + ELO_K * ((win ? 1 : 0) - expected)));
-  writeMine({ score: profile.score, elo: profile.elo });
+  profile.xp += xpForMatch(win); // every real bout feeds the rank ladder
+  writeMine({ score: profile.score, elo: profile.elo, xp: profile.xp });
   void refreshLeaderboard(true);
 }
 
@@ -257,14 +278,16 @@ export function reportResult(win: boolean, oppElo: number): void {
 export function reportBotResult(win: boolean): void {
   if (!win) return;
   profile.score += SCORE_BOT_WIN;
-  writeMine({ score: profile.score });
+  profile.xp += xpForBotWin();
+  writeMine({ score: profile.score, xp: profile.xp });
   void refreshLeaderboard(true);
 }
 
-/** An Aim Training run ended — publish a new personal best. */
+/** An Aim Training run ended — bank XP (every run) and a new personal best. */
 export function reportTraining(score: number): void {
-  if (score <= profile.training) return;
-  profile.training = score;
-  writeMine({ training: profile.training });
+  const newBest = score > profile.training;
+  profile.xp += xpForTraining(score, newBest);
+  if (newBest) profile.training = score;
+  writeMine({ training: profile.training, xp: profile.xp });
   void refreshLeaderboard(true);
 }

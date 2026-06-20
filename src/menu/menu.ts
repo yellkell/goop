@@ -20,9 +20,11 @@ import {
 } from 'three';
 import { app, DEFAULT_ACCENT_HUE, saveBallAttach } from './appState.js';
 import { customization } from './customization.js';
+import { rankBadge } from './rankBadges.js';
+import { tierForXp } from './progression.js';
 import { AVATAR_SKINS, PLATFORM_SKINS } from '../avatar/skins.js';
 import { ATTACH, GAME_TITLE, hueToColor } from '../config.js';
-import { LEADERBOARD_VISIBLE_ROWS, leaderboard, leaderboardRows, myStats } from '../net/leaderboard.js';
+import { LEADERBOARD_VISIBLE_ROWS, leaderboard, leaderboardRows, myStats, type LeaderboardTab } from '../net/leaderboard.js';
 import { PUB_MAX_PLAYERS } from '../pub/protocol.js';
 import { UI, buttonPlate, hazardStrip, plate, stencilFont } from '../ui/industrial.js';
 
@@ -42,7 +44,8 @@ export type MenuAction =
   | 'kp-join'
   | `kp-${number}`
   | 'toggle-environment'
-  | 'lb-duel'
+  | 'lb-ranked'
+  | 'lb-xp'
   | 'lb-training'
   | 'rename'
   | 'open-pub'
@@ -289,14 +292,12 @@ function drawDuelRoot(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | n
   const kw = sw / 2 - 12;
   ctx.fillRect(on ? sx + sw - kw - 8 : sx + 8, sy + 8, kw, sh - 16);
 
-  ctx.textAlign = 'center';
-  ctx.font = '600 20px system-ui, sans-serif';
-  ctx.fillStyle = 'rgba(159,226,255,0.85)';
-  ctx.fillText(
-    queueing ? 'searching for an opponent…' : 'ranked waits for a human · quick drops you on a bot',
-    PW / 2,
-    372,
-  );
+  if (queueing) {
+    ctx.textAlign = 'center';
+    ctx.font = '600 20px system-ui, sans-serif';
+    ctx.fillStyle = 'rgba(159,226,255,0.85)';
+    ctx.fillText('searching for an opponent…', PW / 2, 372);
+  }
 }
 
 function hitDuelRoot(v: number): MenuAction | null {
@@ -586,65 +587,77 @@ const BOARD_ROW_STEP = 30;
 function drawBoard(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
   panelBg(ctx, false, UI.amber, 'LEADERBOARD', BW, BH);
 
-  // Tab plates: 1V1 (score) | AIM TRAINING (best runs).
-  const tabs: Array<['duel' | 'training', string]> = [
-    ['duel', '1V1'],
-    ['training', 'AIM TRAINING'],
+  // Tab plates: RANKED (ELO) | XP (rank ladder) | AIM TRAINING (best runs).
+  const tabs: Array<[LeaderboardTab, string, MenuAction]> = [
+    ['ranked', 'RANKED', 'lb-ranked'],
+    ['xp', 'XP', 'lb-xp'],
+    ['training', 'AIM', 'lb-training'],
   ];
-  const tw = (BW - 96 - 16) / 2;
+  const tw = (BW - 96 - 32) / 3;
   let x = 48;
-  for (const [id, label] of tabs) {
+  for (const [id, label, action] of tabs) {
     const active = leaderboard.tab === id;
-    const action: MenuAction = id === 'duel' ? 'lb-duel' : 'lb-training';
     const hot = hoverAction === action;
     plate(ctx, x, 88, tw, 44, {
       cut: 10,
-      fill: active
-        ? 'rgba(255,176,0,0.18)'
-        : hot
-          ? 'rgba(255,176,0,0.14)'
-          : 'rgba(150,150,170,0.10)',
+      fill: active ? 'rgba(255,176,0,0.18)' : hot ? 'rgba(255,176,0,0.14)' : 'rgba(150,150,170,0.10)',
       stroke: active || hot ? UI.amber : UI.steelDim,
       rivets: false,
     });
-    ctx.font = '700 24px system-ui, sans-serif';
+    ctx.font = '700 22px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillStyle = active || hot ? UI.amber : UI.textDim;
     ctx.fillText(label, x + tw / 2, 110);
     x += tw + 16;
   }
 
-  // Ranked rows — the whole top 10 at a glance; your own entry burns ember.
+  // Rows: rank emblem, position + name, then the board value. Your row burns ember.
   const rows = leaderboardRows();
   const offset = leaderboard.scroll[leaderboard.tab];
-  ctx.font = '600 22px system-ui, sans-serif';
   rows.slice(offset, offset + LEADERBOARD_VISIBLE_ROWS).forEach((r, i) => {
     const y = BOARD_ROW_Y0 + i * BOARD_ROW_STEP;
+    const badge = rankBadge(tierForXp(r.xp).index);
+    if (badge) ctx.drawImage(badge, 48, y - 22, 34, 34);
+    ctx.font = '600 22px system-ui, sans-serif';
     ctx.fillStyle = r.me ? UI.emberBright : UI.textDim;
     ctx.textAlign = 'left';
-    ctx.fillText(`${offset + i + 1}.  ${r.name}`, 56, y);
+    ctx.fillText(`${offset + i + 1}.  ${r.name}`, 92, y);
     ctx.textAlign = 'right';
     ctx.fillText(String(r.value), BW - 56, y);
   });
   if (!rows.length) {
     ctx.textAlign = 'center';
     ctx.fillStyle = UI.textDim;
+    ctx.font = '600 22px system-ui, sans-serif';
     ctx.fillText(leaderboard.status || 'no entries yet', BW / 2, BOARD_ROW_Y0 + 4 * BOARD_ROW_STEP);
   }
 
+  // Footer: your rank emblem + tier on the left, RENAME on the right, your
+  // numbers across the bottom.
   const mine = myStats();
+  const tier = tierForXp(mine.xp);
+  const myBadge = rankBadge(tier.index);
+  if (myBadge) ctx.drawImage(myBadge, 48, 452, 38, 38);
+  ctx.textAlign = 'left';
+  ctx.font = stencilFont(24);
+  ctx.fillStyle = UI.emberBright;
+  ctx.fillText(tier.name, 94, 476);
+  buttonPlate(ctx, BW - 188, 452, 144, 42, 'RENAME', UI.amber, hoverAction === 'rename');
   ctx.textAlign = 'center';
-  ctx.font = '700 20px system-ui, sans-serif';
+  ctx.font = '700 17px system-ui, sans-serif';
   ctx.fillStyle = UI.amberSoft;
-  ctx.fillText(`${mine.name}  ·  score ${mine.score}  ·  aim best ${mine.training}`, BW / 2, 466);
-  buttonPlate(ctx, 156, 486, 200, 44, 'RENAME', UI.amber, hoverAction === 'rename');
+  ctx.fillText(
+    `${mine.name}  ·  ${mine.xp} XP  ·  ${mine.elo} ELO  ·  aim best ${mine.training}`,
+    BW / 2,
+    514,
+  );
 }
 
 function hitBoard(u: number, v: number): MenuAction | null {
   const x = u * BW;
   const y = (1 - v) * BH;
-  if (y >= 82 && y <= 138) return u < 0.5 ? 'lb-duel' : 'lb-training';
-  if (y >= 478 && y <= 534 && x >= 148 && x <= 364) return 'rename';
+  if (y >= 82 && y <= 138) return x < BW / 3 ? 'lb-ranked' : x < (2 * BW) / 3 ? 'lb-xp' : 'lb-training';
+  if (y >= 448 && y <= 498 && x >= BW - 192 && x <= BW - 40) return 'rename';
   return null;
 }
 
