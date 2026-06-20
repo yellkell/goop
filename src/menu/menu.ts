@@ -670,11 +670,16 @@ function drawProfile(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | nu
   ctx.fillStyle = UI.amberSoft;
   ctx.fillText(`${row.elo} ELO       ${row.xp} XP`, BW / 2, 386);
 
-  // Note plate.
+  // Note plate — clipped so a long note can never spill past the box.
   plate(ctx, 56, 408, BW - 112, 72, { cut: 10, fill: 'rgba(18,19,24,0.5)', stroke: UI.steelDim, rivets: false });
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(64, 412, BW - 128, 64);
+  ctx.clip();
   ctx.font = '600 21px system-ui, sans-serif';
   ctx.fillStyle = row.note ? UI.text : UI.steelDim;
-  wrapText(ctx, row.note || (own ? 'no note yet' : 'no note'), BW / 2, 436, BW - 144, 26);
+  drawNote(ctx, row.note || (own ? 'no note yet' : 'no note'), BW / 2, 434, BW - 152, 26);
+  ctx.restore();
 
   if (own) {
     buttonPlate(ctx, 56, 488, 180, 40, 'RENAME', UI.amber, hoverAction === 'rename');
@@ -685,6 +690,28 @@ function drawProfile(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | nu
   } else {
     buttonPlate(ctx, BW / 2 - 90, 494, 180, 42, 'BACK', UI.steel, hoverAction === 'profile-back');
   }
+}
+
+/** A profile note in at most two centred lines, ellipsised if it overflows. */
+function drawNote(ctx: CanvasRenderingContext2D, text: string, cx: number, y: number, maxW: number, lineH: number): void {
+  const words = text.split(' ');
+  const lines = [''];
+  for (const w of words) {
+    const i = lines.length - 1;
+    const test = lines[i] ? `${lines[i]} ${w}` : w;
+    if (ctx.measureText(test).width > maxW && lines[i]) {
+      if (lines.length === 2) {
+        let s = `${lines[1]}…`;
+        while (s.length > 1 && ctx.measureText(s).width > maxW) s = `${s.slice(0, -2)}…`;
+        lines[1] = s;
+        break;
+      }
+      lines.push(w);
+    } else {
+      lines[i] = test;
+    }
+  }
+  lines.slice(0, 2).forEach((l, i) => ctx.fillText(l, cx, y + i * lineH));
 }
 
 function hitBoard(u: number, v: number): MenuAction | null {
