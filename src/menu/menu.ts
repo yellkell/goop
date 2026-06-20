@@ -622,16 +622,21 @@ function drawBoard(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null
     x += BOARD_TAB_W + 16;
   }
   if (leaderboard.tab === 'profile') drawProfile(ctx, hoverAction);
-  else drawBoardRows(ctx);
+  else drawBoardRows(ctx, hoverAction);
 }
 
-function drawBoardRows(ctx: CanvasRenderingContext2D): void {
+function drawBoardRows(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
   const rows = leaderboardRows();
   const offset = boardScroll();
   rows.slice(offset, offset + LEADERBOARD_VISIBLE_ROWS).forEach((r, i) => {
     const y = BOARD_ROW_Y0 + i * BOARD_ROW_STEP;
+    const hot = hoverAction === `lb-row-${i}`;
+    if (hot) {
+      ctx.fillStyle = 'rgba(255,176,0,0.12)';
+      ctx.fillRect(38, y - 16, BW - 76, BOARD_ROW_STEP - 3);
+    }
     ctx.font = '600 22px system-ui, sans-serif';
-    ctx.fillStyle = r.me ? UI.emberBright : UI.textDim;
+    ctx.fillStyle = r.me ? UI.emberBright : hot ? UI.text : UI.textDim;
     ctx.textAlign = 'left';
     // Rank number, then a small rank emblem (its bottom sat on the text's
     // bottom — text is middle-baselined at y, so its bottom is ~8px below y),
