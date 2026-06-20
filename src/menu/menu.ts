@@ -638,7 +638,7 @@ function drawBoardRows(ctx: CanvasRenderingContext2D): void {
     // then the name.
     ctx.fillText(`${offset + i + 1}.`, 48, y);
     const badge = rankBadge(tierForXp(r.xp).index);
-    if (badge) ctx.drawImage(badge, 92, y + 8 - 26, 26, 26);
+    if (badge) ctx.drawImage(badge, 84, y + 8 - 30, 30, 30);
     ctx.fillText(r.name, 126, y);
     ctx.textAlign = 'right';
     ctx.fillText(String(r.value), BW - 56, y);
