@@ -630,12 +630,14 @@ function drawBoardRows(ctx: CanvasRenderingContext2D): void {
   const offset = boardScroll();
   rows.slice(offset, offset + LEADERBOARD_VISIBLE_ROWS).forEach((r, i) => {
     const y = BOARD_ROW_Y0 + i * BOARD_ROW_STEP;
-    const badge = rankBadge(tierForXp(r.xp).index);
-    if (badge) ctx.drawImage(badge, 48, y - 22, 34, 34);
     ctx.font = '600 22px system-ui, sans-serif';
     ctx.fillStyle = r.me ? UI.emberBright : UI.textDim;
     ctx.textAlign = 'left';
-    ctx.fillText(`${offset + i + 1}.  ${r.name}`, 92, y);
+    // Rank number, then a small rank emblem, then the name.
+    ctx.fillText(`${offset + i + 1}.`, 48, y);
+    const badge = rankBadge(tierForXp(r.xp).index);
+    if (badge) ctx.drawImage(badge, 92, y - 13, 26, 26);
+    ctx.fillText(r.name, 126, y);
     ctx.textAlign = 'right';
     ctx.fillText(String(r.value), BW - 56, y);
   });
