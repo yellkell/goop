@@ -31,9 +31,16 @@ export type PanelId = 'train' | 'duel' | 'info' | 'board' | 'custom' | 'loadout'
 export type MenuAction =
   | 'start-training'
   | 'toggle-shootback'
+  | 'ranked-match'
   | 'quick-match'
   | 'cancel-queue'
-  | 'vs-bot'
+  | 'private-open'
+  | 'private-create'
+  | 'private-enter'
+  | 'private-back'
+  | 'kp-del'
+  | 'kp-join'
+  | `kp-${number}`
   | 'toggle-environment'
   | 'lb-duel'
   | 'lb-training'
@@ -201,56 +208,77 @@ function hitTrain(_u: number, v: number): MenuAction | null {
   return null;
 }
 
-/** Left — 1V1: quick match (or cancel) + vs bot. */
+/** Left — 1V1. Mode list (Ranked / Quick / Private) or the private-match flow. */
 function drawDuel(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
   panelBg(ctx, false, UI.cool, '1 V 1');
+  switch (app.duelView) {
+    case 'private':
+      return drawPrivateMenu(ctx, hoverAction);
+    case 'hosting':
+      return drawHosting(ctx, hoverAction);
+    case 'keypad':
+      return drawKeypad(ctx, hoverAction);
+    default:
+      return drawDuelRoot(ctx, hoverAction);
+  }
+}
 
+function hitDuel(u: number, v: number): MenuAction | null {
+  switch (app.duelView) {
+    case 'private':
+      return hitPrivateMenu(v);
+    case 'hosting':
+      return hitHosting(v);
+    case 'keypad':
+      return hitKeypad(u, v);
+    default:
+      return hitDuelRoot(v);
+  }
+}
+
+function drawDuelRoot(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
   const queueing = app.state === 'queueing';
-  const queueAction = queueing ? 'cancel-queue' : 'quick-match';
+  const rankedAction = queueing ? 'cancel-queue' : 'ranked-match';
+
+  // RANKED — waits in the lobby for a real human (no bot).
   buttonPlate(
-    ctx, 70, 108, PW - 140, 84,
-    queueing ? 'CANCEL' : 'QUICK MATCH',
+    ctx, 70, 84, PW - 140, 66,
+    queueing ? 'CANCEL' : 'RANKED',
     queueing ? UI.amber : UI.cool,
-    hoverAction === queueAction,
+    hoverAction === rankedAction,
   );
 
-  // Live "N searching" badge riding the top-right of the QUICK MATCH plate, so
-  // you can see the queue filling before you commit. Hidden while you're the
-  // one queueing (the status line speaks for you) and when the count's unknown.
+  // Live "N searching" badge on the RANKED plate — the queue you'd join.
   if (!queueing && app.searching > 0) {
     const label = `${app.searching} SEARCHING`;
-    ctx.font = '800 18px system-ui, sans-serif';
-    const pillW = ctx.measureText(label).width + 38;
-    const pillH = 28;
-    const px = PW - 70 - pillW;
-    const py = 96;
-    plate(ctx, px, py, pillW, pillH, {
-      cut: 8,
-      fill: 'rgba(79,183,255,0.22)',
-      stroke: UI.cool,
-      rivets: false,
-    });
-    ctx.fillStyle = UI.coolBright; // a "live" dot
+    ctx.font = '800 16px system-ui, sans-serif';
+    const pillW = ctx.measureText(label).width + 34, pillH = 24;
+    const px = PW - 70 - pillW, py = 90;
+    plate(ctx, px, py, pillW, pillH, { cut: 8, fill: 'rgba(79,183,255,0.22)', stroke: UI.cool, rivets: false });
+    ctx.fillStyle = UI.coolBright;
     ctx.beginPath();
-    ctx.arc(px + 16, py + pillH / 2, 5, 0, Math.PI * 2);
+    ctx.arc(px + 14, py + pillH / 2, 4, 0, Math.PI * 2);
     ctx.fill();
     ctx.textAlign = 'left';
     ctx.fillStyle = UI.coolBright;
-    ctx.fillText(label, px + 28, py + pillH / 2 + 1);
+    ctx.fillText(label, px + 24, py + pillH / 2 + 1);
     ctx.textAlign = 'center';
   }
 
-  buttonPlate(ctx, 70, 200, PW - 140, 84, 'VS BOT', UI.ember, hoverAction === 'vs-bot');
+  // QUICK MATCH — drops you straight onto a bot, but keeps hunting; a human who
+  // turns up pulls you into the live bout.
+  buttonPlate(ctx, 70, 156, PW - 140, 66, 'QUICK MATCH', UI.ember, hoverAction === 'quick-match');
+  // PRIVATE — share a 5-digit code with a friend.
+  buttonPlate(ctx, 70, 228, PW - 140, 58, 'PRIVATE', UI.coolBright, hoverAction === 'private-open');
 
-  // Desert-arena breaker switch, right under VS BOT: flips the whole arena
-  // between the papercraft desert and bare AR passthrough, held across modes.
+  // Desert-arena breaker switch.
   const on = app.environment === 'desert';
   const environmentHot = hoverAction === 'toggle-environment';
-  ctx.font = '700 26px system-ui, sans-serif';
+  ctx.font = '700 24px system-ui, sans-serif';
   ctx.textAlign = 'left';
   ctx.fillStyle = environmentHot ? UI.amber : UI.textDim;
-  ctx.fillText('desert arena', 64, 322);
-  const sw = 120, sh = 48, sx = PW - 64 - sw, sy = 298;
+  ctx.fillText('desert arena', 64, 320);
+  const sw = 110, sh = 44, sx = PW - 64 - sw, sy = 298;
   plate(ctx, sx, sy, sw, sh, {
     cut: 10,
     fill: on ? 'rgba(255,176,0,0.22)' : environmentHot ? 'rgba(255,176,0,0.16)' : 'rgba(150,150,170,0.12)',
@@ -262,23 +290,119 @@ function drawDuel(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null)
   ctx.fillRect(on ? sx + sw - kw - 8 : sx + 8, sy + 8, kw, sh - 16);
 
   ctx.textAlign = 'center';
-  ctx.font = '600 22px system-ui, sans-serif';
+  ctx.font = '600 20px system-ui, sans-serif';
   ctx.fillStyle = 'rgba(159,226,255,0.85)';
-  const status = queueing
-    ? 'searching for an opponent…'
-    : app.searching > 0
-      ? `${app.searching} ${app.searching === 1 ? 'boxer' : 'boxers'} in the queue now`
-      : app.searching === 0
-        ? 'no one queued yet — be the first'
-        : app.netStatus;
-  ctx.fillText(status, PW / 2, 378);
+  ctx.fillText(
+    queueing ? 'searching for an opponent…' : 'ranked waits for a human · quick drops you on a bot',
+    PW / 2,
+    372,
+  );
 }
 
-function hitDuel(_u: number, v: number): MenuAction | null {
+function hitDuelRoot(v: number): MenuAction | null {
   const y = (1 - v) * PH;
-  if (y >= 100 && y <= 194) return app.state === 'queueing' ? 'cancel-queue' : 'quick-match';
-  if (y >= 196 && y <= 288) return 'vs-bot';
-  if (y >= 292 && y <= 354) return 'toggle-environment';
+  if (y >= 80 && y <= 152) return app.state === 'queueing' ? 'cancel-queue' : 'ranked-match';
+  if (y >= 154 && y <= 224) return 'quick-match';
+  if (y >= 226 && y <= 288) return 'private-open';
+  if (y >= 292 && y <= 344) return 'toggle-environment';
+  return null;
+}
+
+function drawPrivateMenu(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
+  ctx.font = '600 19px system-ui, sans-serif';
+  ctx.fillStyle = UI.textDim;
+  ctx.fillText('create a 5-digit code, or type a friend’s', PW / 2, 92);
+  buttonPlate(ctx, 64, 110, PW - 128, 86, 'CREATE MATCH', UI.cool, hoverAction === 'private-create');
+  buttonPlate(ctx, 64, 212, PW - 128, 86, 'ENTER CODE', UI.amber, hoverAction === 'private-enter');
+  buttonPlate(ctx, 150, 320, PW - 300, 50, 'BACK', UI.steel, hoverAction === 'private-back');
+}
+
+function hitPrivateMenu(v: number): MenuAction | null {
+  const y = (1 - v) * PH;
+  if (y >= 104 && y <= 202) return 'private-create';
+  if (y >= 206 && y <= 304) return 'private-enter';
+  if (y >= 312 && y <= 378) return 'private-back';
+  return null;
+}
+
+function drawHosting(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
+  ctx.font = '600 24px system-ui, sans-serif';
+  ctx.fillStyle = UI.textDim;
+  ctx.fillText('YOUR MATCH CODE', PW / 2, 116);
+  const code = app.privateCode || '·····';
+  ctx.font = stencilFont(72);
+  ctx.fillStyle = UI.coolBright;
+  ctx.fillText(code.split('').join(' '), PW / 2, 188);
+  ctx.font = '600 21px system-ui, sans-serif';
+  ctx.fillStyle = 'rgba(159,226,255,0.85)';
+  ctx.fillText(app.privateCode ? 'share it · waiting for them…' : 'allocating…', PW / 2, 250);
+  buttonPlate(ctx, 110, 296, PW - 220, 70, 'CANCEL', UI.amber, hoverAction === 'cancel-queue');
+}
+
+function hitHosting(v: number): MenuAction | null {
+  const y = (1 - v) * PH;
+  return y >= 290 && y <= 372 ? 'cancel-queue' : null;
+}
+
+// Keypad geometry, shared by draw + hit-test.
+const KP = { x: 56, y: 150, gap: 9, cols: 3, rows: 4, w: PW - 112, h: 218 };
+const KP_KEYS = [
+  ['1', '2', '3'],
+  ['4', '5', '6'],
+  ['7', '8', '9'],
+  ['DEL', '0', 'JOIN'],
+];
+
+function kpCell(r: number, c: number): { x: number; y: number; w: number; h: number } {
+  const cw = (KP.w - KP.gap * (KP.cols - 1)) / KP.cols;
+  const ch = (KP.h - KP.gap * (KP.rows - 1)) / KP.rows;
+  return { x: KP.x + c * (cw + KP.gap), y: KP.y + r * (ch + KP.gap), w: cw, h: ch };
+}
+
+function drawKeypad(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
+  if (app.state === 'queueing') {
+    buttonPlate(ctx, 70, 150, PW - 140, 92, 'CANCEL', UI.amber, hoverAction === 'cancel-queue');
+    ctx.font = '600 24px system-ui, sans-serif';
+    ctx.fillStyle = 'rgba(159,226,255,0.85)';
+    ctx.fillText(`joining ${app.codeEntry}…`, PW / 2, 300);
+    return;
+  }
+
+  buttonPlate(ctx, 36, 84, 96, 34, 'BACK', UI.steel, hoverAction === 'private-back');
+
+  const bad = app.netStatus.includes('not found') || app.netStatus.includes('expired') || app.netStatus.includes('already');
+  const slots = Array.from({ length: 5 }, (_, i) => app.codeEntry[i] ?? '·').join(' ');
+  ctx.font = stencilFont(40);
+  ctx.fillStyle = bad ? UI.danger : UI.coolBright;
+  ctx.fillText(slots, PW / 2 + 28, 104);
+
+  const ready = app.codeEntry.length === 5;
+  for (let r = 0; r < KP.rows; r++) {
+    for (let c = 0; c < KP.cols; c++) {
+      const key = KP_KEYS[r][c];
+      const cell = kpCell(r, c);
+      const accent = key === 'JOIN' ? (ready ? UI.cool : UI.steelDim) : key === 'DEL' ? UI.amber : UI.text;
+      buttonPlate(ctx, cell.x, cell.y, cell.w, cell.h, key, accent, false);
+    }
+  }
+}
+
+function hitKeypad(u: number, v: number): MenuAction | null {
+  const x = u * PW;
+  const y = (1 - v) * PH;
+  if (app.state === 'queueing') return y >= 140 && y <= 250 ? 'cancel-queue' : null;
+  if (y >= 80 && y <= 122 && x <= 140) return 'private-back';
+  for (let r = 0; r < KP.rows; r++) {
+    for (let c = 0; c < KP.cols; c++) {
+      const cell = kpCell(r, c);
+      if (x >= cell.x && x <= cell.x + cell.w && y >= cell.y && y <= cell.y + cell.h) {
+        const key = KP_KEYS[r][c];
+        if (key === 'DEL') return 'kp-del';
+        if (key === 'JOIN') return 'kp-join';
+        return `kp-${Number(key)}` as MenuAction;
+      }
+    }
+  }
   return null;
 }
 

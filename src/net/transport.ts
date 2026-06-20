@@ -26,6 +26,10 @@ export interface TransportEvents {
 export interface Transport {
   /** Begin matchmaking. Resolves once queued (NOT once matched). */
   queue(): Promise<void>;
+  /** Host a private match; resolves with the 5-digit code to share. P2P only. */
+  hostPrivate?(): Promise<string>;
+  /** Join a private match by its 5-digit code. P2P only. */
+  joinPrivate?(code: string): Promise<void>;
   send(d: PeerMessage): void;
   /** Cancel the queue or tear down a live bout. Safe to call twice. */
   close(): void;

@@ -25,6 +25,7 @@ import {
   addDoc,
   collection,
   deleteDoc,
+  doc,
   getDocs,
   getFirestore,
   limit,
@@ -50,6 +51,8 @@ const ICE_SERVERS: RTCConfiguration = {
 
 /** Lobbies older than this are abandoned tabs — ignore them. */
 const LOBBY_FRESH_MS = 2 * 60 * 1000;
+/** Private codes live longer — you share one and wait for a friend to type it. */
+const PRIVATE_FRESH_MS = 10 * 60 * 1000;
 /** Give P2P this long to come up before declaring failure. */
 const CONNECT_TIMEOUT_MS = 15_000;
 
@@ -81,11 +84,7 @@ export class WebRtcTransport implements Transport {
 
     const claimed = await this.tryClaimLobby(lobbies);
     if (this.closed) return;
-
-    this.pc = new RTCPeerConnection(ICE_SERVERS);
-    this.watchConnection();
-    await this.setupVoice();
-    if (this.closed) return;
+    if (!(await this.setupConnection())) return;
 
     if (claimed) {
       this.isCaller = false;
@@ -94,10 +93,82 @@ export class WebRtcTransport implements Transport {
       this.armConnectTimeout();
     } else {
       this.isCaller = true;
-      await this.runCaller(lobbies);
+      const ref = await addDoc(lobbies, { open: true, createdAt: serverTimestamp() });
+      if (this.closed) return;
       // Callers wait in the queue indefinitely; the clock starts when an
-      // answer arrives (see runCaller).
+      // answer arrives (see runCallerOn).
+      await this.runCallerOn(ref);
     }
+  }
+
+  /**
+   * Host a private match: reserve a free 5-digit code (its own doc id in
+   * `privateLobbies`), publish an offer there, and wait. Resolves with the code.
+   */
+  async hostPrivate(): Promise<string> {
+    this.events.onStatus('creating private match…');
+    if (!(await this.setupConnection())) throw new Error('cancelled');
+    this.isCaller = true;
+    const code = await this.allocateCode();
+    if (this.closed) throw new Error('cancelled');
+    await this.runCallerOn(this.lobbyRef!);
+    this.events.onStatus('waiting for your opponent…');
+    return code;
+  }
+
+  /** Join a private match by code: claim its lobby and answer the host's offer. */
+  async joinPrivate(code: string): Promise<void> {
+    this.events.onStatus('joining…');
+    const ref = doc(collection(db(), 'privateLobbies'), code);
+    // Claim it first (validates the code) so a bad code never prompts for mic.
+    await runTransaction(db(), async (txn) => {
+      const snap = await txn.get(ref);
+      if (!snap.exists()) throw new Error('code not found');
+      if (snap.data()?.open !== true) throw new Error('match already started');
+      const created = (snap.data()?.createdAt?.toMillis?.() as number | undefined) ?? 0;
+      if (Date.now() - created > PRIVATE_FRESH_MS) throw new Error('code expired');
+      txn.update(ref, { open: false, claimedAt: serverTimestamp() });
+    });
+    if (this.closed) return;
+    if (!(await this.setupConnection())) return;
+    this.isCaller = false;
+    await this.runCallee(ref);
+    this.armConnectTimeout();
+  }
+
+  /** Build the peer connection + voice. Returns false if cancelled meanwhile. */
+  private async setupConnection(): Promise<boolean> {
+    this.pc = new RTCPeerConnection(ICE_SERVERS);
+    this.watchConnection();
+    await this.setupVoice();
+    return !this.closed;
+  }
+
+  /** Reserve a free 5-digit code as a `privateLobbies` doc; sets `lobbyRef`. */
+  private async allocateCode(): Promise<string> {
+    const coll = collection(db(), 'privateLobbies');
+    for (let attempt = 0; attempt < 8 && !this.closed; attempt++) {
+      const code = String(Math.floor(Math.random() * 100000)).padStart(5, '0');
+      const ref = doc(coll, code);
+      try {
+        await runTransaction(db(), async (txn) => {
+          const snap = await txn.get(ref);
+          if (snap.exists()) {
+            const created = (snap.data()?.createdAt?.toMillis?.() as number | undefined) ?? 0;
+            // Only reuse a code whose lobby is dead; a live one is taken.
+            if (snap.data()?.open === true && Date.now() - created < PRIVATE_FRESH_MS) {
+              throw new Error('taken');
+            }
+          }
+          txn.set(ref, { open: true, createdAt: serverTimestamp() });
+        });
+        this.lobbyRef = ref;
+        return code;
+      } catch {
+        /* code collided or was taken — try another */
+      }
+    }
+    throw new Error('could not allocate a code');
   }
 
   send(d: PeerMessage): void {
@@ -193,18 +264,17 @@ export class WebRtcTransport implements Transport {
 
   // --- caller (host, side 0) ---------------------------------------------------
 
-  private async runCaller(lobbies: ReturnType<typeof collection>): Promise<void> {
+  private async runCallerOn(lobbyRef: DocumentReference): Promise<void> {
     const pc = this.pc!;
+    this.lobbyRef = lobbyRef;
     // The caller opens the channels; the callee receives them.
     this.adoptChannels(
       pc.createDataChannel('evt', { ordered: true }),
       pc.createDataChannel('pose', { ordered: false, maxRetransmits: 0 }),
     );
 
-    this.lobbyRef = await addDoc(lobbies, { open: true, createdAt: serverTimestamp() });
-    if (this.closed) return;
-    const callerCandidates = collection(this.lobbyRef, 'callerCandidates');
-    const calleeCandidates = collection(this.lobbyRef, 'calleeCandidates');
+    const callerCandidates = collection(lobbyRef, 'callerCandidates');
+    const calleeCandidates = collection(lobbyRef, 'calleeCandidates');
 
     pc.onicecandidate = (ev) => {
       if (ev.candidate) void addDoc(callerCandidates, ev.candidate.toJSON()).catch(() => {});
@@ -212,12 +282,12 @@ export class WebRtcTransport implements Transport {
 
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
-    await updateDoc(this.lobbyRef, { offer: { type: offer.type, sdp: offer.sdp } });
+    await updateDoc(lobbyRef, { offer: { type: offer.type, sdp: offer.sdp } });
     this.events.onStatus('waiting for an opponent…');
 
     // Wait for the answer, then drink the callee's candidates.
     this.unsubs.push(
-      onSnapshot(this.lobbyRef, (snap) => {
+      onSnapshot(lobbyRef, (snap) => {
         const answer = snap.data()?.answer as RTCSessionDescriptionInit | undefined;
         if (answer && !pc.currentRemoteDescription) {
           this.events.onStatus('opponent found — connecting…');

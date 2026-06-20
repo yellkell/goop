@@ -84,6 +84,48 @@ class NetClient {
     })();
   }
 
+  /** Host a private match (always P2P — the relay has no rooms). */
+  createPrivate(): void {
+    this.disconnect();
+    const events = this.makeEvents();
+    void (async () => {
+      try {
+        const { WebRtcTransport } = await import('./webrtcTransport.js');
+        const t = new WebRtcTransport(events);
+        this.transport = t;
+        app.privateCode = await t.hostPrivate();
+      } catch (err) {
+        app.netStatus = err instanceof Error ? err.message : 'could not create match';
+        this.disconnect();
+        if (app.state === 'queueing') {
+          app.state = 'menu';
+          app.duelView = 'root';
+        }
+      }
+    })();
+  }
+
+  /** Join a private match by its 5-digit code. */
+  joinPrivate(code: string): void {
+    this.disconnect();
+    const events = this.makeEvents();
+    void (async () => {
+      try {
+        const { WebRtcTransport } = await import('./webrtcTransport.js');
+        const t = new WebRtcTransport(events);
+        this.transport = t;
+        await t.joinPrivate(code);
+      } catch (err) {
+        app.netStatus = err instanceof Error ? err.message : 'could not join';
+        this.disconnect();
+        if (app.state === 'queueing') {
+          app.state = 'menu';
+          app.duelView = 'keypad'; // stay on the pad so they can fix the code
+        }
+      }
+    })();
+  }
+
   /** Leave the queue (or tear down a live bout). */
   cancel(): void {
     this.disconnect();
@@ -93,6 +135,7 @@ class NetClient {
   disconnect(): void {
     this.matched = false;
     this.inbox.length = 0;
+    app.privateCode = '';
     detachRemoteVoice();
     this.transport?.close();
     this.transport = null;
@@ -112,6 +155,8 @@ class NetClient {
         app.side = side;
         app.mode = 'net';
         app.state = 'playing';
+        app.duelView = 'root';
+        app.codeEntry = '';
         app.netStatus = `in a bout (${side === 0 ? 'host' : 'guest'})`;
       },
       onMessage: (d) => {
@@ -131,6 +176,7 @@ class NetClient {
         // lobby. (vs-bot keeps a search running in the background.)
         const inBotBout = app.state === 'playing' && app.mode === 'bot';
         if (app.state !== 'menu' && !inBotBout) app.state = 'menu';
+        if (app.duelView === 'hosting') app.duelView = 'root';
       },
     };
   }

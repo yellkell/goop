@@ -73,6 +73,12 @@ export const app: {
   accentHue: number;
   /** Ball attachment per fist: [left, right] (0 none/1 split/2 grow/3 shrink). */
   ballAttach: [number, number];
+  /** Which face the 1V1 panel shows: the mode list, or the private-match flow. */
+  duelView: 'root' | 'private' | 'hosting' | 'keypad';
+  /** The 5-digit code shown while hosting a private match. */
+  privateCode: string;
+  /** Digits typed on the join keypad (up to 5). */
+  codeEntry: string;
   stats: LifetimeStats;
 } = {
   state: 'menu',
@@ -86,6 +92,9 @@ export const app: {
   environment: localStorage.getItem('ff-env') === 'desert' ? 'desert' : 'ar',
   accentHue: loadAccentHue(),
   ballAttach: loadBallAttach(),
+  duelView: 'root',
+  privateCode: '',
+  codeEntry: '',
   stats: loadStats(),
 };
 

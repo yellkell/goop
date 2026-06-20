@@ -247,7 +247,7 @@ export class MenuSystem extends createSystem({}) {
     // once, prefilled with the auto name, and the pending action resumes after
     // OK. Saved forever after, shared by both boards.
     if (
-      (action === 'start-training' || action === 'quick-match' || action === 'vs-bot') &&
+      (action === 'start-training' || action === 'quick-match' || action === 'ranked-match') &&
       !hasCustomName()
     ) {
       this.kbPending = action;
@@ -262,20 +262,50 @@ export class MenuSystem extends createSystem({}) {
         app.shootBack = !app.shootBack;
         saveShootBack();
         break;
-      case 'quick-match':
+      case 'ranked-match':
+        // Wait in the lobby for a real human — no bot fallback.
         app.state = 'queueing';
+        net.queue();
+        break;
+      case 'quick-match':
+        // Drop straight onto a bot, but keep hunting in the background: if a
+        // human turns up mid-bout the bot is dropped and we swap to the live bout.
+        app.mode = 'bot';
+        app.state = 'playing';
         net.queue();
         break;
       case 'cancel-queue':
         net.cancel();
         app.state = 'menu';
+        app.duelView = 'root';
+        app.codeEntry = '';
         break;
-      case 'vs-bot':
-        app.mode = 'bot';
-        app.state = 'playing';
-        // Keep hunting for a real opponent in the background. If one turns up
-        // mid-bout the bot is dropped and we swap straight into the live bout.
-        net.queue();
+      case 'private-open':
+        app.duelView = 'private';
+        break;
+      case 'private-create':
+        app.duelView = 'hosting';
+        app.privateCode = '';
+        app.state = 'queueing';
+        net.createPrivate();
+        break;
+      case 'private-enter':
+        app.duelView = 'keypad';
+        app.codeEntry = '';
+        break;
+      case 'private-back':
+        net.cancel();
+        app.duelView = 'root';
+        app.codeEntry = '';
+        break;
+      case 'kp-del':
+        app.codeEntry = app.codeEntry.slice(0, -1);
+        break;
+      case 'kp-join':
+        if (app.codeEntry.length === 5) {
+          app.state = 'queueing';
+          net.joinPrivate(app.codeEntry);
+        }
         break;
       case 'toggle-environment':
         app.environment = app.environment === 'desert' ? 'ar' : 'desert';
@@ -327,6 +357,13 @@ export class MenuSystem extends createSystem({}) {
       case 'pf-1':
       case 'pf-2':
         setPlatformSkin(PLATFORM_SKINS[Number(action.slice(3))].id);
+        break;
+      default:
+        // kp-0 … kp-9: append a digit (max five) on the join keypad.
+        if (action.startsWith('kp-') && app.codeEntry.length < 5) {
+          const d = action.slice(3);
+          if (d >= '0' && d <= '9') app.codeEntry += d;
+        }
         break;
     }
     this.applyState();
