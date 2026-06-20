@@ -52,13 +52,18 @@ import { net } from '../net/client.js';
 import { startQueueWatch, stopQueueWatch } from '../net/queueWatch.js';
 import { startPubWatch, stopPubWatch } from '../net/pubWatch.js';
 import {
+  boardScroll,
   hasCustomName,
+  leaderboardRows,
+  myNote,
   myStats,
   refreshLeaderboard,
   rival,
   scrollLeaderboard,
   setLeaderboardTab,
   setPlayerName,
+  setPlayerNote,
+  setProfileView,
 } from '../net/leaderboard.js';
 import { hueToColor, pubUrl } from '../config.js';
 import * as sfx from '../audio/sfx.js';
@@ -94,6 +99,8 @@ export class MenuSystem extends createSystem({}) {
   private keyboard!: NameKeyboard;
   /** The action waiting behind the name keyboard. */
   private kbPending: MenuAction | null = null;
+  /** Whether the keyboard is editing your callsign or your profile note. */
+  private kbMode: 'name' | 'note' = 'name';
   private mirror?: { group: Group; rig: BoxerRig };
   private skinVersion = 0;
   private boardScrollCooldown = 0;
@@ -251,6 +258,7 @@ export class MenuSystem extends createSystem({}) {
       !hasCustomName()
     ) {
       this.kbPending = action;
+      this.kbMode = 'name';
       this.keyboard.open(myStats().name);
       return;
     }
@@ -320,8 +328,20 @@ export class MenuSystem extends createSystem({}) {
       case 'lb-training':
         setLeaderboardTab('training');
         break;
+      case 'lb-profile':
+        setProfileView(null); // your own profile
+        break;
+      case 'profile-back':
+        setLeaderboardTab('ranked');
+        break;
+      case 'edit-note':
+        this.kbPending = null;
+        this.kbMode = 'note';
+        this.keyboard.open(myNote());
+        return;
       case 'rename':
         this.kbPending = null;
+        this.kbMode = 'name';
         this.keyboard.open(myStats().name);
         return;
       case 'open-pub': {
@@ -366,6 +386,10 @@ export class MenuSystem extends createSystem({}) {
         if (action.startsWith('kp-') && app.codeEntry.length < 5) {
           const d = action.slice(3);
           if (d >= '0' && d <= '9') app.codeEntry += d;
+        } else if (action.startsWith('lb-row-')) {
+          // Open the clicked player's profile.
+          const row = leaderboardRows()[boardScroll() + Number(action.slice(7))];
+          if (row) setProfileView(row);
         }
         break;
     }
@@ -446,7 +470,9 @@ export class MenuSystem extends createSystem({}) {
         sfx.uiClick();
         const done = this.keyboard.press(id);
         if (done !== null) {
-          setPlayerName(done);
+          if (this.kbMode === 'note') setPlayerNote(done);
+          else setPlayerName(done);
+          this.kbMode = 'name';
           this.keyboard.close();
           const pending = this.kbPending;
           this.kbPending = null;

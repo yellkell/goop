@@ -24,7 +24,14 @@ import { rankBadge } from './rankBadges.js';
 import { tierForXp } from './progression.js';
 import { AVATAR_SKINS, PLATFORM_SKINS } from '../avatar/skins.js';
 import { ATTACH, GAME_TITLE, hueToColor } from '../config.js';
-import { LEADERBOARD_VISIBLE_ROWS, leaderboard, leaderboardRows, myStats, type LeaderboardTab } from '../net/leaderboard.js';
+import {
+  LEADERBOARD_VISIBLE_ROWS,
+  boardScroll,
+  leaderboard,
+  leaderboardRows,
+  myProfileRow,
+  type LeaderboardTab,
+} from '../net/leaderboard.js';
 import { PUB_MAX_PLAYERS } from '../pub/protocol.js';
 import { UI, buttonPlate, hazardStrip, plate, stencilFont } from '../ui/industrial.js';
 
@@ -47,6 +54,10 @@ export type MenuAction =
   | 'lb-ranked'
   | 'lb-xp'
   | 'lb-training'
+  | 'lb-profile'
+  | `lb-row-${number}`
+  | 'edit-note'
+  | 'profile-back'
   | 'rename'
   | 'open-pub'
   | 'open-custom'
@@ -583,37 +594,40 @@ function hitCustom(u: number, v: number): MenuAction | null {
 const BOARD_ROW_Y0 = 152;
 const BOARD_ROW_STEP = 30;
 
-/** Behind — the Firebase leaderboard: 1V1 score / aim training tabs. */
+const BOARD_TABS: Array<[LeaderboardTab, string, MenuAction]> = [
+  ['ranked', 'RANKED', 'lb-ranked'],
+  ['xp', 'XP', 'lb-xp'],
+  ['training', 'AIM', 'lb-training'],
+  ['profile', 'PROFILE', 'lb-profile'],
+];
+const BOARD_TAB_W = (BW - 96 - 48) / 4;
+
+/** Behind — the Firebase leaderboard: RANKED / XP / AIM boards + PROFILE face. */
 function drawBoard(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
   panelBg(ctx, false, UI.amber, 'LEADERBOARD', BW, BH);
-
-  // Tab plates: RANKED (ELO) | XP (rank ladder) | AIM TRAINING (best runs).
-  const tabs: Array<[LeaderboardTab, string, MenuAction]> = [
-    ['ranked', 'RANKED', 'lb-ranked'],
-    ['xp', 'XP', 'lb-xp'],
-    ['training', 'AIM', 'lb-training'],
-  ];
-  const tw = (BW - 96 - 32) / 3;
   let x = 48;
-  for (const [id, label, action] of tabs) {
+  for (const [id, label, action] of BOARD_TABS) {
     const active = leaderboard.tab === id;
     const hot = hoverAction === action;
-    plate(ctx, x, 88, tw, 44, {
+    plate(ctx, x, 88, BOARD_TAB_W, 44, {
       cut: 10,
       fill: active ? 'rgba(255,176,0,0.18)' : hot ? 'rgba(255,176,0,0.14)' : 'rgba(150,150,170,0.10)',
       stroke: active || hot ? UI.amber : UI.steelDim,
       rivets: false,
     });
-    ctx.font = '700 22px system-ui, sans-serif';
+    ctx.font = '700 19px system-ui, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillStyle = active || hot ? UI.amber : UI.textDim;
-    ctx.fillText(label, x + tw / 2, 110);
-    x += tw + 16;
+    ctx.fillText(label, x + BOARD_TAB_W / 2, 110);
+    x += BOARD_TAB_W + 16;
   }
+  if (leaderboard.tab === 'profile') drawProfile(ctx, hoverAction);
+  else drawBoardRows(ctx);
+}
 
-  // Rows: rank emblem, position + name, then the board value. Your row burns ember.
+function drawBoardRows(ctx: CanvasRenderingContext2D): void {
   const rows = leaderboardRows();
-  const offset = leaderboard.scroll[leaderboard.tab];
+  const offset = boardScroll();
   rows.slice(offset, offset + LEADERBOARD_VISIBLE_ROWS).forEach((r, i) => {
     const y = BOARD_ROW_Y0 + i * BOARD_ROW_STEP;
     const badge = rankBadge(tierForXp(r.xp).index);
@@ -625,39 +639,72 @@ function drawBoard(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null
     ctx.textAlign = 'right';
     ctx.fillText(String(r.value), BW - 56, y);
   });
+  ctx.textAlign = 'center';
   if (!rows.length) {
-    ctx.textAlign = 'center';
     ctx.fillStyle = UI.textDim;
     ctx.font = '600 22px system-ui, sans-serif';
     ctx.fillText(leaderboard.status || 'no entries yet', BW / 2, BOARD_ROW_Y0 + 4 * BOARD_ROW_STEP);
+  } else {
+    ctx.fillStyle = UI.steelDim;
+    ctx.font = '600 18px system-ui, sans-serif';
+    ctx.fillText('tap a name to open their profile', BW / 2, 514);
   }
+}
 
-  // Footer: your rank emblem + tier on the left, RENAME on the right, your
-  // numbers across the bottom.
-  const mine = myStats();
-  const tier = tierForXp(mine.xp);
-  const myBadge = rankBadge(tier.index);
-  if (myBadge) ctx.drawImage(myBadge, 48, 452, 38, 38);
-  ctx.textAlign = 'left';
-  ctx.font = stencilFont(24);
-  ctx.fillStyle = UI.emberBright;
-  ctx.fillText(tier.name, 94, 476);
-  buttonPlate(ctx, BW - 188, 452, 144, 42, 'RENAME', UI.amber, hoverAction === 'rename');
+/** The PROFILE face: a player's big emblem, tier, ELO/XP and their note. */
+function drawProfile(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
+  const row = leaderboard.viewRow ?? myProfileRow();
+  const own = row.me;
+  const tier = tierForXp(row.xp);
+  const badge = rankBadge(tier.index);
+  if (badge) ctx.drawImage(badge, BW / 2 - 64, 144, 128, 128);
+
   ctx.textAlign = 'center';
-  ctx.font = '700 17px system-ui, sans-serif';
+  ctx.font = stencilFont(40);
+  ctx.fillStyle = UI.emberBright;
+  ctx.fillText(row.name, BW / 2, 308);
+  ctx.font = stencilFont(26);
+  ctx.fillStyle = UI.amber;
+  ctx.fillText(tier.name, BW / 2, 346);
+  ctx.font = '700 24px system-ui, sans-serif';
   ctx.fillStyle = UI.amberSoft;
-  ctx.fillText(
-    `${mine.name}  ·  ${mine.xp} XP  ·  ${mine.elo} ELO  ·  aim best ${mine.training}`,
-    BW / 2,
-    514,
-  );
+  ctx.fillText(`${row.elo} ELO       ${row.xp} XP`, BW / 2, 386);
+
+  // Note plate.
+  plate(ctx, 56, 408, BW - 112, 72, { cut: 10, fill: 'rgba(18,19,24,0.5)', stroke: UI.steelDim, rivets: false });
+  ctx.font = '600 21px system-ui, sans-serif';
+  ctx.fillStyle = row.note ? UI.text : UI.steelDim;
+  wrapText(ctx, row.note || (own ? 'no note yet' : 'no note'), BW / 2, 436, BW - 144, 26);
+
+  if (own) {
+    buttonPlate(ctx, 56, 488, 180, 40, 'RENAME', UI.amber, hoverAction === 'rename');
+    buttonPlate(ctx, BW - 236, 488, 180, 40, 'WRITE NOTE', UI.cool, hoverAction === 'edit-note');
+    ctx.font = '600 14px system-ui, sans-serif';
+    ctx.fillStyle = UI.steelDim;
+    ctx.fillText('turn around to the keyboard to write your note', BW / 2, 540);
+  } else {
+    buttonPlate(ctx, BW / 2 - 90, 494, 180, 42, 'BACK', UI.steel, hoverAction === 'profile-back');
+  }
 }
 
 function hitBoard(u: number, v: number): MenuAction | null {
   const x = u * BW;
   const y = (1 - v) * BH;
-  if (y >= 82 && y <= 138) return x < BW / 3 ? 'lb-ranked' : x < (2 * BW) / 3 ? 'lb-xp' : 'lb-training';
-  if (y >= 448 && y <= 498 && x >= BW - 192 && x <= BW - 40) return 'rename';
+  if (y >= 82 && y <= 138) {
+    const i = Math.max(0, Math.min(3, Math.floor((x - 48) / (BOARD_TAB_W + 16))));
+    return BOARD_TABS[i][2];
+  }
+  if (leaderboard.tab === 'profile') {
+    if (y >= 482 && y <= 536) {
+      const own = !leaderboard.viewRow || leaderboard.viewRow.me;
+      return own ? (x < BW / 2 ? 'rename' : 'edit-note') : 'profile-back';
+    }
+    return null;
+  }
+  if (y >= BOARD_ROW_Y0 - 15 && y <= BOARD_ROW_Y0 + LEADERBOARD_VISIBLE_ROWS * BOARD_ROW_STEP) {
+    const n = Math.floor((y - (BOARD_ROW_Y0 - 15)) / BOARD_ROW_STEP);
+    if (n >= 0 && n < LEADERBOARD_VISIBLE_ROWS) return `lb-row-${n}` as MenuAction;
+  }
   return null;
 }
 

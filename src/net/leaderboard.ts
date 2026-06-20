@@ -19,15 +19,23 @@ import { FIREBASE_ENABLED, firebaseConfig } from './firebaseConfig.js';
 import { xpForBotWin, xpForMatch, xpForTraining } from '../menu/progression.js';
 
 export interface LbRow {
+  /** The player's doc id — identifies them when their row is clicked. */
+  uid: string;
   name: string;
   value: number;
   /** This row is YOU — the UI highlights it. */
   me: boolean;
-  /** This player's cumulative XP — drives their rank badge on every board. */
+  /** Cumulative XP — drives the rank badge on every board + the profile. */
   xp: number;
+  /** Skill rating, for the profile card. */
+  elo: number;
+  /** The player's self-written note, shown on their profile. */
+  note: string;
 }
 
-export type LeaderboardTab = 'ranked' | 'xp' | 'training';
+/** The three score boards, plus a synthetic PROFILE face (no rows). */
+export type LeaderboardTab = 'ranked' | 'xp' | 'training' | 'profile';
+type DataTab = 'ranked' | 'xp' | 'training';
 
 const LEADERBOARD_FETCH_LIMIT = 50;
 /** Rows the lobby board shows at once — the full top 10, no scrolling needed
@@ -41,8 +49,10 @@ export const leaderboard = {
   ranked: [] as LbRow[],
   xp: [] as LbRow[],
   training: [] as LbRow[],
-  scroll: { ranked: 0, xp: 0, training: 0 } as Record<LeaderboardTab, number>,
+  scroll: { ranked: 0, xp: 0, training: 0 } as Record<DataTab, number>,
   status: FIREBASE_ENABLED ? 'loading…' : 'leaderboard offline',
+  /** Whose profile the PROFILE face shows; null = your own. */
+  viewRow: null as LbRow | null,
 };
 
 /** The current rival's claim about themselves (peer `iam` message). */
@@ -55,27 +65,76 @@ const ELO_K = 32;
 const SCORE_WIN = 20;
 const SCORE_BOT_WIN = 2;
 
-const profile = { id: '', name: '', score: 0, elo: 1000, training: 0, xp: 0 };
+const profile = { id: '', name: '', score: 0, elo: 1000, training: 0, xp: 0, note: '' };
 
-export function leaderboardRows(tab: LeaderboardTab = leaderboard.tab): LbRow[] {
-  return tab === 'ranked' ? leaderboard.ranked : tab === 'xp' ? leaderboard.xp : leaderboard.training;
+/** Your own profile as a board row (for the PROFILE face when viewing self). */
+export function myProfileRow(): LbRow {
+  return {
+    uid: profile.id,
+    name: profile.name,
+    value: profile.elo,
+    me: true,
+    xp: profile.xp,
+    elo: profile.elo,
+    note: profile.note,
+  };
 }
 
-export function clampLeaderboardScroll(tab: LeaderboardTab = leaderboard.tab): void {
+export function myNote(): string {
+  return profile.note;
+}
+
+/** Save the typed profile note — sanitised to the keyboard alphabet, max 48. */
+export function setPlayerNote(raw: string): void {
+  const note = raw.replace(/[^A-Z0-9\- ]/gi, '').replace(/\s+/g, ' ').trim().slice(0, 48);
+  profile.note = note;
+  writeMine({ note });
+  if (leaderboard.viewRow?.me) leaderboard.viewRow.note = note;
+  void refreshLeaderboard(true);
+}
+
+function isDataTab(tab: LeaderboardTab): tab is DataTab {
+  return tab === 'ranked' || tab === 'xp' || tab === 'training';
+}
+
+export function leaderboardRows(tab: LeaderboardTab = leaderboard.tab): LbRow[] {
+  return tab === 'ranked'
+    ? leaderboard.ranked
+    : tab === 'xp'
+      ? leaderboard.xp
+      : tab === 'training'
+        ? leaderboard.training
+        : [];
+}
+
+/** Current scroll offset for the active board (0 on the profile face). */
+export function boardScroll(): number {
+  return isDataTab(leaderboard.tab) ? leaderboard.scroll[leaderboard.tab] : 0;
+}
+
+export function clampLeaderboardScroll(tab: DataTab): void {
   const max = Math.max(0, leaderboardRows(tab).length - LEADERBOARD_VISIBLE_ROWS);
   leaderboard.scroll[tab] = Math.max(0, Math.min(max, leaderboard.scroll[tab]));
 }
 
 export function setLeaderboardTab(tab: LeaderboardTab): void {
   leaderboard.tab = tab;
-  clampLeaderboardScroll(tab);
+  if (isDataTab(tab)) clampLeaderboardScroll(tab);
+}
+
+/** Open a player's profile face (null = your own). */
+export function setProfileView(row: LbRow | null): void {
+  leaderboard.viewRow = row;
+  leaderboard.tab = 'profile';
 }
 
 export function scrollLeaderboard(delta: number): boolean {
-  const before = leaderboard.scroll[leaderboard.tab];
-  leaderboard.scroll[leaderboard.tab] += delta;
-  clampLeaderboardScroll(leaderboard.tab);
-  return leaderboard.scroll[leaderboard.tab] !== before;
+  const tab = leaderboard.tab;
+  if (!isDataTab(tab)) return false;
+  const before = leaderboard.scroll[tab];
+  leaderboard.scroll[tab] += delta;
+  clampLeaderboardScroll(tab);
+  return leaderboard.scroll[tab] !== before;
 }
 
 export function myName(): string {
@@ -184,6 +243,7 @@ export function initLeaderboard(): void {
         profile.elo = (d.elo as number) ?? 1000;
         profile.training = (d.training as number) ?? 0;
         profile.xp = (d.xp as number) ?? 0;
+        profile.note = (d.note as string) ?? '';
         // A locally renamed player syncs the doc's stale callsign.
         if ((d.name as string) !== profile.name) writeMine({});
       } else {
@@ -193,6 +253,7 @@ export function initLeaderboard(): void {
           elo: 1000,
           training: 0,
           xp: 0,
+          note: '',
           updatedAt: h.fs.serverTimestamp(),
         });
       }
@@ -218,10 +279,13 @@ export async function refreshLeaderboard(force = false): Promise<void> {
       const snap = await fs.getDocs(fs.query(players, fs.orderBy(field, 'desc'), fs.limit(LEADERBOARD_FETCH_LIMIT)));
       return snap.docs
         .map((d) => ({
+          uid: d.id,
           name: (d.data().name as string) ?? '???',
           value: (d.data()[field] as number) ?? 0,
           me: d.id === profile.id,
           xp: (d.data().xp as number) ?? 0,
+          elo: (d.data().elo as number) ?? 1000,
+          note: (d.data().note as string) ?? '',
         }))
         // Ranked shows only players whose rating has actually moved (played a
         // real bout); XP/training boards show anyone who's earned anything.
