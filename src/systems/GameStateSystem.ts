@@ -16,6 +16,7 @@ import { Health } from '../components/Health.js';
 import { match } from '../combat/matchState.js';
 import { app, saveStats, training, type AppMode } from '../menu/appState.js';
 import * as sfx from '../audio/sfx.js';
+import { announce, preloadAnnouncer } from '../audio/announcer.js';
 import { MATCH } from '../config.js';
 import { createScoreboard, type Scoreboard } from '../ui/scoreboard.js';
 import { net } from '../net/client.js';
@@ -38,10 +39,13 @@ export class GameStateSystem extends createSystem({
    *  real opponent just replaced the bot, so the match restarts clean. */
   private lastMode: AppMode = 'bot';
   private stateEchoTimer = 0;
+  /** The countdown beat we last spoke, so the announcer fires once per beat. */
+  private lastAnnounced = '';
 
   init(): void {
     this.scoreboard = createScoreboard(this.scene);
     this.scoreboard.setVisible(false);
+    preloadAnnouncer(); // decode the 3/2/1/FIGHT clips ahead of the first bout
   }
 
   update(delta: number): void {
@@ -91,6 +95,20 @@ export class GameStateSystem extends createSystem({
     // Guests: NetworkSystem writes `match` from host echoes; nothing to run.
 
     this.scoreboard?.updateMatch(match, pHp, pMax, oHp, oMax);
+
+    // Ring announcer: speak each countdown beat as the HUD message ticks over
+    // (3 → 2 → 1 → FIGHT). Runs on every client — the host computes the message,
+    // the guest receives it via echo — so both hear the count.
+    this.maybeAnnounce();
+  }
+
+  /** Fire the announcer once per countdown beat as `match.message` changes. */
+  private maybeAnnounce(): void {
+    const m = match.message;
+    if (m === this.lastAnnounced) return;
+    this.lastAnnounced = m;
+    if (m === '1' || m === '2' || m === '3') announce(m);
+    else if (m === 'FIGHT') announce('fight');
   }
 
   // --- authoritative match logic (bot bouts + online host) ----------------
@@ -98,7 +116,11 @@ export class GameStateSystem extends createSystem({
   private runAuthority(c: Boxers, pHp: number, oHp: number, delta: number): void {
     if (match.phase === 'countdown') {
       match.roundTimer = Math.max(0, match.roundTimer - delta);
+      const prevMsg = match.message;
       match.message = match.roundTimer <= 3 && match.roundTimer > 0 ? String(Math.ceil(match.roundTimer)) : '';
+      // Push each new count to the guest the instant it changes so their
+      // announcer stays in step (the 0.5 s cadence echo alone could lag a beat).
+      if (app.mode === 'net' && match.message && match.message !== prevMsg) this.echoState();
       if (match.roundTimer <= 0) this.beginRound(c);
     } else if (match.phase === 'playing') {
       match.roundTimer = Math.max(0, match.roundTimer - delta);
@@ -184,6 +206,7 @@ export class GameStateSystem extends createSystem({
   }
 
   private startMatch(c: Boxers): void {
+    this.lastAnnounced = ''; // a fresh bout re-announces its countdown
     match.myScore = 0;
     match.oppScore = 0;
     match.round = 1;
