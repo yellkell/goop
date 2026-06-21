@@ -15,12 +15,14 @@ import { Object3D } from 'three';
 import { buildBoxer, setAvatarAccent, setGloveLit, solveTorso, type BoxerRig } from '../avatar/boxer.js';
 import { HAND_ADDUCTION, setHandCurl } from '../avatar/hands.js';
 import {
+  AVATAR_SKINS,
   OPPONENT_DEFAULT_AVATAR,
   OPPONENT_DEFAULT_PLATFORM,
   applyAvatarSkin,
   applyPlatformSkin,
   platformSkin,
   resolveAvatarSkin,
+  type AvatarSkin,
 } from '../avatar/skins.js';
 import { platformName } from '../arena/arena.js';
 import { Combatant } from '../components/Combatant.js';
@@ -42,6 +44,8 @@ interface OppRig {
   built: boolean;
   appliedSkins: string;
   accentColor: number;
+  /** Random skin an arcade bot wears for this bout (re-rolled each bout). */
+  botSkin?: AvatarSkin;
 }
 
 export class OpponentSystem extends createSystem({
@@ -78,6 +82,9 @@ export class OpponentSystem extends createSystem({
       pose.active = active;
       for (const piece of r.rig.all) piece.visible = active;
       if (!active || !seat) {
+        // Idle: forget this rig's bout skin so the next bout re-rolls it.
+        r.botSkin = undefined;
+        r.appliedSkins = '';
         this.parkHitboxes(i);
         continue;
       }
@@ -127,7 +134,15 @@ export class OpponentSystem extends createSystem({
    */
   private applySkins(r: OppRig, slot: number): void {
     const net = app.mode === 'net' && slot === 1;
-    const av = net && rival.avatarSkin ? resolveAvatarSkin(rival.avatarSkin, rival.avColor) : OPPONENT_DEFAULT_AVATAR;
+    // Arcade bots wear a random head/chassis skin (team-colour accent still
+    // applied below, so teams stay readable); the rival wears their own; 1v1
+    // and the default keep the house look.
+    let av: AvatarSkin;
+    if (net && rival.avatarSkin) av = resolveAvatarSkin(rival.avatarSkin, rival.avColor);
+    else if (app.mode !== 'net' && app.arcade !== '1v1') {
+      r.botSkin ??= AVATAR_SKINS[Math.floor(Math.random() * AVATAR_SKINS.length)];
+      av = r.botSkin;
+    } else av = OPPONENT_DEFAULT_AVATAR;
     // Only a genuine online rival overrides their platform skin; allies and
     // bots keep the team tint applyArenaLayout painted (so FFA pads stay
     // colour-coded), so the skin key folds the platform in only for the rival.

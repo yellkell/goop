@@ -25,9 +25,10 @@ import { BallState, Fireball } from '../components/Fireball.js';
 import { ballCommands, opponents, MAX_OPPONENTS } from '../combat/opponentBus.js';
 import { localIndexOf, localLayout, peerPos, peerQuat, peerVel } from '../combat/layout.js';
 import { match } from '../combat/matchState.js';
-import { app } from '../menu/appState.js';
+import { app, saveStats } from '../menu/appState.js';
 import { mesh } from '../net/mesh.js';
 import { packPose } from '../net/client.js';
+import { reportArcade } from '../net/leaderboard.js';
 import type { PeerMessage, PoseTuple } from '../net/protocol.js';
 import { spawnDamagePopup, spawnFireImpact } from '../fx/effects.js';
 import * as sfx from '../audio/sfx.js';
@@ -254,6 +255,10 @@ export class MeshSystem extends createSystem({
       if (msg.phase === 'playing') sfx.roundBell();
       else if (msg.phase === 'matchOver') {
         const win = msg.win === myCanonTeam;
+        if (win) app.stats.wins += 1;
+        else app.stats.losses += 1;
+        saveStats();
+        reportArcade(app.arcade, win); // guests bank their own +25 / win board
         sfx.matchEnd(win);
         this.guestOverTimer = 6;
       }

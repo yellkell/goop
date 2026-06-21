@@ -57,6 +57,7 @@ import { PUB_REGIONS } from '../pub/config.js';
 import {
   boardScroll,
   hasCustomName,
+  leaderboard,
   leaderboardRows,
   myNote,
   myStats,
@@ -349,8 +350,21 @@ export class MenuSystem extends createSystem({}) {
       case 'lb-xp':
         setLeaderboardTab('xp');
         break;
+      case 'lb-arcade':
+        // The ARCADE tab opens onto its first board (AIM) unless one of the
+        // brawl boards is already showing.
+        setLeaderboardTab(
+          leaderboard.tab === 'duo' || leaderboard.tab === 'ffa' ? leaderboard.tab : 'training',
+        );
+        break;
       case 'lb-training':
         setLeaderboardTab('training');
+        break;
+      case 'lb-duo':
+        setLeaderboardTab('duo');
+        break;
+      case 'lb-ffa':
+        setLeaderboardTab('ffa');
         break;
       case 'lb-profile':
         setProfileView(null); // your own profile

@@ -44,3 +44,8 @@ export function xpForMatch(won: boolean): number {
 export function xpForBot(): number {
   return PROGRESSION.quickMatch;
 }
+
+/** Flat XP for taking part in an arcade 2v2 / FFA brawl — win or lose. */
+export function xpForArcade(): number {
+  return PROGRESSION.arcade;
+}

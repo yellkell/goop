@@ -47,6 +47,8 @@ export const PROGRESSION = {
   trainingRun: 25,
   // Quick match vs the bot: a flat 25, win or lose.
   quickMatch: 25,
+  // Arcade 2v2 / FFA: a flat 25 for taking part, win or lose.
+  arcade: 25,
 };
 
 /**

@@ -27,7 +27,7 @@ import { MATCH, modeTeams, teamColor, type ArcadeMode } from '../config.js';
 import { createScoreboard, type FighterHud, type Scoreboard } from '../ui/scoreboard.js';
 import { UI } from '../ui/industrial.js';
 import { net } from '../net/client.js';
-import { reportBotResult, reportResult, rival, myName } from '../net/leaderboard.js';
+import { reportArcade, reportBotResult, reportResult, rival, myName } from '../net/leaderboard.js';
 
 interface Boxers {
   me: Entity;
@@ -229,7 +229,7 @@ export class GameStateSystem extends createSystem({
     if (win) app.stats.wins += 1;
     else app.stats.losses += 1;
     saveStats();
-    reportBotResult(win);
+    reportArcade(app.arcade, win); // +25 XP for taking part, win → mode board
     sfx.matchEnd(win);
   }
 
