@@ -707,12 +707,11 @@ function drawBoardRows(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | 
     ctx.font = '600 22px system-ui, sans-serif';
     ctx.fillStyle = r.me ? UI.emberBright : hot ? UI.text : UI.textDim;
     ctx.textAlign = 'left';
-    // Rank number, then a small rank emblem (its bottom sat on the text's
-    // bottom — text is middle-baselined at y, so its bottom is ~8px below y),
-    // then the name.
+    // Rank number, then a small rank emblem (nudged down so its bottom lines
+    // up with the row text — text is middle-baselined at y), then the name.
     ctx.fillText(`${offset + i + 1}.`, 48, y);
     const badge = rankBadge(tierForXp(r.xp).index);
-    if (badge) ctx.drawImage(badge, 84, y + 8 - 30, 30, 30);
+    if (badge) ctx.drawImage(badge, 84, y + 12 - 30, 30, 30);
     ctx.fillText(r.name, 126, y);
     ctx.textAlign = 'right';
     ctx.fillText(String(r.value), BW - 56, y);
