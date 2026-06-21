@@ -28,6 +28,7 @@ import { app, training } from '../menu/appState.js';
 import { myName, rival } from '../net/leaderboard.js';
 import { UI, fitStencilText, hazardStrip, metalText, plate, segmentBar, stencilFont } from './industrial.js';
 import { countdownArt } from './countdownArt.js';
+import { verdictArt } from './verdictArt.js';
 
 const W = 880;
 const H = 420;
@@ -273,30 +274,43 @@ export function createScoreboard(scene: Scene): Scoreboard {
   };
 
   const drawCentre = (message: string, sub: string): void => {
-    // The countdown plates (3/2/1/FIGHT) are real art; everything else is
-    // stencilled. Fold "is the art decoded yet" into the key so the first
-    // frame after a cold load swaps the text fallback out for the image.
-    const art = countdownArt(message);
-    const key = `c|${message}|${sub}|${art ? 'img' : 'txt'}`;
+    // Two flavours of art: the countdown plates (3/2/1/FIGHT) and the verdict
+    // plates (KO/KO'D/WIN). Everything else is stencilled. "Is the art decoded
+    // yet" folds into the key so the first frame after a cold load swaps the
+    // text fallback out for the image.
+    const cd = countdownArt(message);
+    const vd = cd ? null : verdictArt(message);
+    const key = `c|${message}|${sub}|${cd ? 'cd' : vd ? 'vd' : 'txt'}`;
     if (centre.key === key) return;
     centre.key = key;
     const { ctx, tex } = centre;
     ctx.clearRect(0, 0, W, H);
-    if (art) {
-      // Hand-made neon-metal plate, centred and undistorted. Numbers are sized
-      // to a tall glyph; the wide FIGHT bar is sized to fill the board's WIDTH
-      // so it reads big (its transparent top/bottom padding overruns the canvas
-      // harmlessly). The mesh's slam-in spring still animates the whole board,
-      // so the plate pops in like the old text did.
+    if (cd) {
+      // Countdown plate, centred and undistorted. Numbers are sized to a tall
+      // glyph; the wide FIGHT bar is sized to fill the board's WIDTH so it
+      // reads big (its transparent top/bottom padding overruns the canvas
+      // harmlessly). The mesh's slam-in spring still animates the whole board.
       let w: number, h: number;
       if (message === 'FIGHT') {
         w = W - 90;
-        h = art.naturalHeight * (w / art.naturalWidth);
+        h = cd.naturalHeight * (w / cd.naturalWidth);
       } else {
         h = 360;
-        w = art.naturalWidth * (h / art.naturalHeight);
+        w = cd.naturalWidth * (h / cd.naturalHeight);
       }
-      ctx.drawImage(art, (W - w) / 2, (H - h) / 2, w, h);
+      ctx.drawImage(cd, (W - w) / 2, (H - h) / 2, w, h);
+    } else if (vd) {
+      // Verdict plate (KO/KO'D/WIN): a smaller neon-metal word, centred. Capped
+      // on width too so a wide verdict never overruns the board.
+      const targetH = 150;
+      let h = targetH;
+      let w = vd.naturalWidth * (h / vd.naturalHeight);
+      const maxW = W - 140;
+      if (w > maxW) {
+        h *= maxW / w;
+        w = maxW;
+      }
+      ctx.drawImage(vd, (W - w) / 2, (H - h) / 2, w, h);
     } else if (message) {
       // No backing plate: just the short chromed verdict floating over the gap.
       ctx.textAlign = 'center';
@@ -325,8 +339,12 @@ export function createScoreboard(scene: Scene): Scoreboard {
       drawTimer(fmtTime(state.roundTimer));
       drawSide(left, app.mode === 'net' ? displayName(myName(), 'YOU') : 'YOU', UI.emberBright, pHp / pMax, state.myScore);
       drawSide(right, app.mode === 'net' ? displayName(rival.name, 'RIVAL') : 'BOT', UI.cool, oHp / oMax, state.oppScore);
-      drawCentre(state.message, '');
-      animateVerdict(state.message);
+      // The loser gets no verdict popup — a plain LOSS / YOU LOSE shows nothing
+      // (the winner still sees WIN). A knockout still flashes KO'D, since that's
+      // the dramatic beat and it has its own plate.
+      const verdict = state.message === 'LOSS' || state.message === 'YOU LOSE' ? '' : state.message;
+      drawCentre(verdict, '');
+      animateVerdict(verdict);
     },
 
     updateTraining(hp, hpMax) {
