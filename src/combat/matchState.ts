@@ -11,6 +11,12 @@ export interface MatchState {
   round: number;
   myScore: number;
   oppScore: number;
+  /**
+   * Round wins per team (index = team id) for the arcade brawls, where the
+   * survival rule scores whole teams. The classic duel ignores this and uses
+   * myScore/oppScore (and its host echo) unchanged.
+   */
+  teamScores: number[];
   roundTimer: number; // seconds left in the round, or pre-fight countdown
   resultTimer: number; // countdown shown during roundOver / matchOver
   message: string; // headline status for the HUD
@@ -27,6 +33,7 @@ export const match: MatchState = {
   round: 1,
   myScore: 0,
   oppScore: 0,
+  teamScores: [0, 0, 0, 0],
   roundTimer: 0,
   resultTimer: 0,
   message: '',

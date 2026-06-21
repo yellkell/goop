@@ -166,10 +166,11 @@ export class BoundarySystem extends createSystem({
     return t > -0.2 && t < 1.2;
   }
 
-  /** Drain only during live play (not round-over pauses / passive training). */
+  /** Drain the LOCAL player only (slot 0) — the rim barrier is driven by your
+   *  own head crossing your own platform, so a 2v2 ally is never docked here. */
   private drain(amount: number): void {
     for (const e of this.queries.combatants.entities) {
-      if ((e.getValue(Combatant, 'team') ?? 0) !== 0) continue;
+      if ((e.getValue(Combatant, 'slot') ?? 0) !== 0) continue;
       const next = Math.max(0, (e.getValue(Health, 'current') ?? 0) - amount);
       e.setValue(Health, 'current', next);
     }

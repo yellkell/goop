@@ -25,7 +25,6 @@ import {
 import { ARENA_GAP, MATCH } from '../config.js';
 import type { MatchState } from '../combat/matchState.js';
 import { app, training } from '../menu/appState.js';
-import { myName, rival } from '../net/leaderboard.js';
 import { UI, fitStencilText, hazardStrip, metalText, plate, segmentBar, stencilFont } from './industrial.js';
 import { countdownArt } from './countdownArt.js';
 import { verdictArt } from './verdictArt.js';
@@ -46,9 +45,26 @@ interface Board {
   key?: string;
 }
 
+/** One fighter's HUD readout — a stacked health bar with a name + round pips. */
+export interface FighterHud {
+  name: string;
+  /** CSS colour for the bar/name (team tint). */
+  neon: string;
+  /** current / max health, 0..1. */
+  hpFrac: number;
+  /** round wins to light as pips. */
+  pips: number;
+  /** Team id (0 = your team) — your team stacks left, the rest stack right. */
+  team: number;
+}
+
 export interface Scoreboard {
-  /** Redraw match boards. pHp/oHp are current health, *Max the pools. */
-  updateMatch(state: MatchState, pHp: number, pMax: number, oHp: number, oMax: number): void;
+  /**
+   * Redraw the match boards. `fighters[0]` is always you; your team stacks up
+   * the left column, every other fighter stacks up the right — so 1v1 reads as
+   * the classic two boards and 2v2 / FFA add bars on top.
+   */
+  updateMatch(state: MatchState, fighters: FighterHud[]): void;
   /** Redraw boards in Aim Training mode. */
   updateTraining(hp: number, hpMax: number): void;
   setVisible(v: boolean): void;
@@ -130,11 +146,6 @@ function verdictAccent(message: string): string {
   return UI.emberBright;
 }
 
-function displayName(name: string, fallback: string): string {
-  const clean = name.trim();
-  return clean ? clean.toUpperCase() : fallback;
-}
-
 /** Soft additive aura that sits behind the verdict and pulses with it. A
  *  radial-gradient sprite — animated purely by transform/opacity/colour, so it
  *  never costs a canvas redraw. */
@@ -176,9 +187,23 @@ export function createScoreboard(scene: Scene): Scoreboard {
   const left = makeBoard(1.5, 0.72); // YOU — ember
   left.mesh.position.set(-1.0, 2.0, -ARENA_GAP - 1.1);
   left.mesh.rotation.y = 0.18;
-  const right = makeBoard(1.5, 0.72); // THEM — blue
+  const right = makeBoard(1.5, 0.72); // primary opponent — blue
   right.mesh.position.set(1.0, 2.0, -ARENA_GAP - 1.1);
   right.mesh.rotation.y = -0.18;
+
+  // Arcade stacks: a teammate above your bar, extra opponents above theirs.
+  // Hidden in 1v1 / training, so the classic two-board layout is unchanged.
+  const extraLeft = makeBoard(1.5, 0.72);
+  extraLeft.mesh.position.set(-1.0, 2.86, -ARENA_GAP - 1.1);
+  extraLeft.mesh.rotation.y = 0.18;
+  const extraRightA = makeBoard(1.5, 0.72);
+  extraRightA.mesh.position.set(1.0, 2.86, -ARENA_GAP - 1.1);
+  extraRightA.mesh.rotation.y = -0.18;
+  const extraRightB = makeBoard(1.5, 0.72);
+  extraRightB.mesh.position.set(1.0, 3.72, -ARENA_GAP - 1.1);
+  extraRightB.mesh.rotation.y = -0.18;
+  const extras = [extraLeft, extraRightA, extraRightB];
+  for (const e of extras) e.mesh.visible = false;
 
   // ONE shared round clock, big, in the slot between the two boards.
   const timer = makeBoard(0.46, 0.29, 256, 160);
@@ -198,7 +223,7 @@ export function createScoreboard(scene: Scene): Scoreboard {
   glow.renderOrder = 11;
   const glowColor = new Color();
 
-  group.add(left.mesh, right.mesh, timer.mesh, glow, centre.mesh);
+  group.add(left.mesh, right.mesh, extraLeft.mesh, extraRightA.mesh, extraRightB.mesh, timer.mesh, glow, centre.mesh);
   scene.add(group);
 
   // --- verdict animation (transform/opacity only — no canvas redraws) -------
@@ -334,11 +359,29 @@ export function createScoreboard(scene: Scene): Scoreboard {
     tex.needsUpdate = true;
   };
 
+  /** Draw a fighter onto a board (or hide it when there's no fighter). */
+  const setBoard = (board: Board, hud: FighterHud | undefined): void => {
+    if (!hud) {
+      board.mesh.visible = false;
+      return;
+    }
+    board.mesh.visible = true;
+    drawSide(board, hud.name, hud.neon, hud.hpFrac, hud.pips);
+  };
+
   return {
-    updateMatch(state, pHp, pMax, oHp, oMax) {
+    updateMatch(state, fighters) {
       drawTimer(fmtTime(state.roundTimer));
-      drawSide(left, app.mode === 'net' ? displayName(myName(), 'YOU') : 'YOU', UI.emberBright, pHp / pMax, state.myScore);
-      drawSide(right, app.mode === 'net' ? displayName(rival.name, 'RIVAL') : 'BOT', UI.cool, oHp / oMax, state.oppScore);
+      const you = fighters[0];
+      setBoard(left, you);
+      // Your team (the ally in 2v2) stacks above your bar; everyone else
+      // (the opponents) stacks up the right column.
+      const allies = fighters.filter((f, i) => i > 0 && f.team === 0);
+      const enemies = fighters.filter((f) => f.team !== 0);
+      setBoard(extraLeft, allies[0]);
+      setBoard(right, enemies[0]);
+      setBoard(extraRightA, enemies[1]);
+      setBoard(extraRightB, enemies[2]);
       // The loser gets no verdict popup — a plain LOSS / YOU LOSE shows nothing
       // (the winner still sees WIN). A knockout still flashes KO'D, since that's
       // the dramatic beat and it has its own plate.
@@ -348,6 +391,10 @@ export function createScoreboard(scene: Scene): Scoreboard {
     },
 
     updateTraining(hp, hpMax) {
+      // Aim Training uses just the two classic boards.
+      left.mesh.visible = true;
+      right.mesh.visible = true;
+      for (const e of extras) e.mesh.visible = false;
       drawTimer(fmtTime(training.timeLeft));
       // Left board: score + streak.
       const best = Math.max(app.stats.trainingBest, training.score);

@@ -21,6 +21,8 @@ import { createSystem, Vector3, type Entity } from '@iwsdk/core';
 import { BallState, Fireball } from '../components/Fireball.js';
 import { Hitbox, HitboxKind } from '../components/Hitbox.js';
 import { Health } from '../components/Health.js';
+import { Combatant } from '../components/Combatant.js';
+import { fighterTeam } from '../combat/fighters.js';
 import { TargetState, TrainingTarget } from '../components/TrainingTarget.js';
 import { spawnDamagePopup, spawnFireImpact } from '../fx/effects.js';
 import { emberBurst } from '../fx/fire.js';
@@ -86,24 +88,31 @@ export class CollisionSystem extends createSystem({
       seen.set(ball, _ballPos.clone());
 
       const owner = ball.getValue(Fireball, 'owner') ?? 0;
+      const ownerTeam = fighterTeam(owner);
       const radius = ball.getValue(Fireball, 'radius') ?? FIREBALL.radius;
       const damage = ball.getValue(Fireball, 'damage') ?? FIREBALL.damage;
 
-      if (owner === 1) {
-        // Parry first: your roaring orbit is also your shield — and you can
-        // slap a ball out of the air even on its RETURN leg, so a recall-through
-        // aimed past you can be blocked if you spin round in time.
+      // Defence: any incoming ball that could hurt MY team (someone else's, on
+      // a different team) can be parried by your roaring orbit/return — even on
+      // its return leg — or cancelled by a mid-air clash with your thrown ball.
+      if (owner !== 0 && ownerTeam !== 0) {
         if (this.tryParry(ball, balls, radius)) continue;
-        // Mid-air block: two thrown balls meeting cancel each other out.
         if (!returning && this.tryClash(ball, balls, radius)) continue;
-        this.enemyBallVsMe(ball, hitboxes, radius, damage, returning);
-      } else if (inMatch && app.mode === 'bot') {
-        this.myBallVsOpponent(ball, hitboxes, radius, damage, returning);
-      } else if (inTraining) {
-        this.myBallVsTargets(ball, radius, returning);
       }
-      // Online (`mode === 'net'`): hits on the rival are ruled by THEIR
-      // client and arrive as a `hit` message — see NetworkSystem.
+
+      if (inTraining) {
+        // Your balls score targets; the targets' return fire (owner 1) hits you.
+        if (owner === 0) this.myBallVsTargets(ball, radius, returning);
+        else this.enemyBallVsMe(ball, hitboxes, radius, damage, returning);
+      } else if (app.mode === 'net') {
+        // Online 1v1: you rule hits against YOURSELF only; your hits on the
+        // rival are ruled by THEIR client and arrive as a `hit` message.
+        if (owner === 1) this.enemyBallVsMe(ball, hitboxes, radius, damage, returning);
+      } else {
+        // Bot bouts (incl. arcade 2v2/FFA): one local sim is authoritative for
+        // every fighter — resolve this ball against any enemy-team body.
+        this.resolveLocalHit(ball, owner, ownerTeam, hitboxes, radius, damage, returning);
+      }
     }
 
     this.prevPos = seen; // remember this frame's positions for next frame's sweep
@@ -153,10 +162,23 @@ export class CollisionSystem extends createSystem({
     }
   }
 
-  /** My ball (flying or recalled through them) connecting with the bot. */
-  private myBallVsOpponent(ball: Entity, hitboxes: Entity[], radius: number, damage: number, returning: boolean): void {
+  /**
+   * Local-authority hit (bot bouts, every mode): this ball connects with the
+   * first body on a different team. If that body is YOU, it's a hit taken
+   * (vignette + buzz); anyone else, it's a hit dealt (popup), and it counts
+   * toward your stats only when the ball is yours.
+   */
+  private resolveLocalHit(
+    ball: Entity,
+    owner: number,
+    ownerTeam: number,
+    hitboxes: Entity[],
+    radius: number,
+    damage: number,
+    returning: boolean,
+  ): void {
     for (const hitbox of hitboxes) {
-      if ((hitbox.getValue(Hitbox, 'team') ?? 0) !== 1) continue;
+      if ((hitbox.getValue(Hitbox, 'team') ?? 0) === ownerTeam) continue; // same team — no friendly fire
       const hbObj = hitbox.object3D;
       if (!hbObj) continue;
       hbObj.getWorldPosition(_otherPos);
@@ -164,12 +186,29 @@ export class CollisionSystem extends createSystem({
       if (_ballPos.distanceToSquared(_otherPos) > reach * reach) continue;
 
       const actualDamage = this.damageFor(hitbox, damage);
-      const them = (hitbox.getValue(Hitbox, 'owner') as Entity | null) ?? hitbox;
-      this.applyDamage(them, actualDamage);
-      spawnFireImpact(this.world, _ballPos, 0);
-      spawnDamagePopup(this.world, _ballPos, actualDamage);
-      sfx.hitDealt();
-      app.stats.hitsLanded += 1;
+      const victim = (hitbox.getValue(Hitbox, 'owner') as Entity | null) ?? hitbox;
+      this.applyDamage(victim, actualDamage);
+
+      const victimIsMe = (victim.getValue(Combatant, 'slot') ?? -1) === 0;
+      if (victimIsMe) {
+        spawnFireImpact(this.world, _ballPos, 1, 1.7);
+        emberBurst(_ballPos, 18, true);
+        sfx.hitTaken();
+        feedback.playerHitFlash = 1;
+        const v = ball.getVectorView(Fireball, 'velocity');
+        const len = Math.hypot(v[0], v[1], v[2]) || 1;
+        feedback.srcX = -v[0] / len;
+        feedback.srcY = -v[1] / len;
+        feedback.srcZ = -v[2] / len;
+        pulseHand(this.world.session, 'left', 1.0, 160);
+        pulseHand(this.world.session, 'right', 1.0, 160);
+      } else {
+        spawnFireImpact(this.world, _ballPos, 0);
+        spawnDamagePopup(this.world, _ballPos, actualDamage);
+        sfx.hitDealt();
+        if (owner === 0) app.stats.hitsLanded += 1;
+      }
+
       if (returning) ball.setValue(Fireball, 'returnHit', 1);
       else this.spendBall(ball);
       return;

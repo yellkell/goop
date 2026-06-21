@@ -40,6 +40,8 @@ export type PanelId = 'train' | 'duel' | 'info' | 'board' | 'custom' | 'loadout'
 
 export type MenuAction =
   | 'start-training'
+  | 'arcade-2v2'
+  | 'arcade-ffa'
   | 'toggle-shootback'
   | 'ranked-match'
   | 'quick-match'
@@ -187,20 +189,23 @@ function makePanel(
   return { id, mesh, redraw, hitTest, drag, click };
 }
 
-/** Centre — AIM TRAINING: the big start plate + the shoot-back toggle. */
+/** Centre — ARCADE: aim training plus the 2v2 and FFA brawls, and the
+ *  shoot-back toggle (which only flavours aim training). */
 function drawTrain(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
-  panelBg(ctx, false, UI.emberBright, 'AIM TRAINING');
+  panelBg(ctx, false, UI.emberBright, 'ARCADE');
 
-  buttonPlate(ctx, 70, 120, PW - 140, 110, 'START', UI.ember, hoverAction === 'start-training');
+  buttonPlate(ctx, 70, 96, PW - 140, 70, 'AIM TRAINING', UI.ember, hoverAction === 'start-training');
+  buttonPlate(ctx, 70, 174, PW - 140, 70, '2V2', UI.cool, hoverAction === 'arcade-2v2');
+  buttonPlate(ctx, 70, 252, PW - 140, 70, 'FFA', UI.amber, hoverAction === 'arcade-ffa');
 
-  // Shoot-back toggle row: an industrial breaker switch.
+  // Shoot-back toggle row: an industrial breaker switch (aim training only).
   const on = app.shootBack;
   const toggleHot = hoverAction === 'toggle-shootback';
-  ctx.font = '700 28px system-ui, sans-serif';
+  ctx.font = '700 24px system-ui, sans-serif';
   ctx.textAlign = 'left';
   ctx.fillStyle = toggleHot ? UI.emberBright : UI.textDim;
-  ctx.fillText('targets shoot back', 64, 300);
-  const pw = 120, ph = 56, px = PW - 64 - pw, py = 272;
+  ctx.fillText('targets shoot back', 64, 356);
+  const pw = 104, ph = 44, px = PW - 64 - pw, py = 334;
   plate(ctx, px, py, pw, ph, {
     cut: 10,
     fill: on ? 'rgba(79,183,255,0.25)' : toggleHot ? 'rgba(255,176,0,0.16)' : 'rgba(150,150,170,0.12)',
@@ -208,20 +213,17 @@ function drawTrain(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null
     rivets: false,
   });
   ctx.fillStyle = on ? UI.cool : UI.steelDim;
-  const kw = pw / 2 - 12;
-  ctx.fillRect(on ? px + pw - kw - 8 : px + 8, py + 8, kw, ph - 16);
-
-  ctx.textAlign = 'center';
-  ctx.font = '600 24px system-ui, sans-serif';
-  ctx.fillStyle = UI.amberSoft;
-  ctx.fillText(`best score  ${app.stats.trainingBest}`, PW / 2, 360);
+  const kw = pw / 2 - 10;
+  ctx.fillRect(on ? px + pw - kw - 6 : px + 6, py + 6, kw, ph - 12);
 }
 
 function hitTrain(_u: number, v: number): MenuAction | null {
   // v: 0 bottom → 1 top (canvas y = (1-v)*PH).
   const y = (1 - v) * PH;
-  if (y >= 110 && y <= 245) return 'start-training';
-  if (y >= 262 && y <= 340) return 'toggle-shootback';
+  if (y >= 96 && y <= 166) return 'start-training';
+  if (y >= 174 && y <= 244) return 'arcade-2v2';
+  if (y >= 252 && y <= 322) return 'arcade-ffa';
+  if (y >= 328 && y <= 382) return 'toggle-shootback';
   return null;
 }
 
