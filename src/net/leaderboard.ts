@@ -16,7 +16,7 @@
  */
 
 import { FIREBASE_ENABLED, firebaseConfig } from './firebaseConfig.js';
-import { xpForBotWin, xpForMatch, xpForTraining } from '../menu/progression.js';
+import { xpForBot, xpForMatch, xpForTraining } from '../menu/progression.js';
 
 export interface LbRow {
   /** The player's doc id — identifies them when their row is clicked. */
@@ -336,13 +336,13 @@ export function reportResult(win: boolean, oppElo: number): void {
 }
 
 /**
- * A finished BOT bout: a win banks a token +2 (no ELO movement — the bot has
- * no rating). Losing costs nothing.
+ * A finished quick match vs the BOT: banks XP either way (win 15 / loss 5) so
+ * the mode always rewards, plus a token score on a win. No ELO movement — the
+ * bot has no rating.
  */
 export function reportBotResult(win: boolean): void {
-  if (!win) return;
-  profile.score += SCORE_BOT_WIN;
-  profile.xp += xpForBotWin();
+  if (win) profile.score += SCORE_BOT_WIN;
+  profile.xp += xpForBot();
   writeMine({ score: profile.score, xp: profile.xp });
   void refreshLeaderboard(true);
 }
@@ -350,7 +350,7 @@ export function reportBotResult(win: boolean): void {
 /** An Aim Training run ended — bank XP (every run) and a new personal best. */
 export function reportTraining(score: number): void {
   const newBest = score > profile.training;
-  profile.xp += xpForTraining(score, newBest);
+  profile.xp += xpForTraining();
   if (newBest) profile.training = score;
   writeMine({ training: profile.training, xp: profile.xp });
   void refreshLeaderboard(true);

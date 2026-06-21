@@ -22,27 +22,31 @@ export const GAME_TITLE = 'FIRE FIGHT';
  * 2000+. Skill rating (ELO) is separate and lives in the leaderboard.
  */
 export const PROGRESSION = {
+  // Tiers are paced in GAMES, not flat XP: an average real bout banks ~25 XP
+  // (win 35 / loss 15), so the thresholds below land each rank at roughly —
+  //   Silver 4 · Gold 15 · Plat 30 · Diamond 50 · Master 80
+  //   Grandmaster 120 · Legendary 170 · Overlord 270   (games played)
+  // Early ranks come quick; the climb stretches toward Overlord.
   tiers: [
     { name: 'BRONZE', xp: 0 },
-    { name: 'SILVER', xp: 250 },
-    { name: 'GOLD', xp: 500 },
+    { name: 'SILVER', xp: 100 },
+    { name: 'GOLD', xp: 375 },
     { name: 'PLATINUM', xp: 750 },
-    { name: 'DIAMOND', xp: 1000 },
-    { name: 'MASTER', xp: 1250 },
-    { name: 'GRANDMASTER', xp: 1500 },
-    { name: 'LEGENDARY', xp: 1750 },
-    { name: 'OVERLORD', xp: 2000 },
+    { name: 'DIAMOND', xp: 1250 },
+    { name: 'MASTER', xp: 2000 },
+    { name: 'GRANDMASTER', xp: 3000 },
+    { name: 'LEGENDARY', xp: 4250 },
+    { name: 'OVERLORD', xp: 6750 },
   ],
 
-  // Aim Training pays a fraction of the run score (capped), + a best bonus.
-  trainingPerScore: 0.01,
-  trainingMax: 40,
-  trainingBestBonus: 15,
-  // A real 1v1: participation + win bonus (loss still banks participation).
-  matchPlay: 12,
-  matchWin: 20,
-  // A bot win banks a token amount (bot losses report nothing).
-  botWin: 8,
+  // A real 1v1: 25 to show up, +25 to win → 25 on a loss, 50 on a win.
+  matchPlay: 25,
+  matchWin: 25,
+  // A completed Aim Training run banks a flat 25 (the run score still sets your
+  // training-board best; it just doesn't scale the XP).
+  trainingRun: 25,
+  // Quick match vs the bot: a flat 25, win or lose.
+  quickMatch: 25,
 };
 
 /**
