@@ -29,10 +29,10 @@ export function tierForXp(xp: number): TierInfo {
   return { name: tiers[index].name, index, floor, next, progress };
 }
 
-/** XP for an Aim Training run of `score`, capped; `newBest` adds a bonus. */
-export function xpForTraining(score: number, newBest: boolean): number {
-  const base = Math.min(PROGRESSION.trainingMax, Math.floor(Math.max(0, score) * PROGRESSION.trainingPerScore));
-  return base + (newBest ? PROGRESSION.trainingBestBonus : 0);
+/** Flat XP for completing an Aim Training run (the score sets the board best,
+ *  not the XP). */
+export function xpForTraining(): number {
+  return PROGRESSION.trainingRun;
 }
 
 /** XP for a finished real 1v1 (participation always, win bonus on a win). */
@@ -40,8 +40,7 @@ export function xpForMatch(won: boolean): number {
   return PROGRESSION.matchPlay + (won ? PROGRESSION.matchWin : 0);
 }
 
-/** XP for a finished quick match vs the bot: participation always, win bonus
- *  on a win — so even a loss banks a little. */
-export function xpForBot(won: boolean): number {
-  return PROGRESSION.botPlay + (won ? PROGRESSION.botWin : 0);
+/** Flat XP for a quick match vs the bot — win or lose. */
+export function xpForBot(): number {
+  return PROGRESSION.quickMatch;
 }

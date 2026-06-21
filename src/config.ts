@@ -39,19 +39,14 @@ export const PROGRESSION = {
     { name: 'OVERLORD', xp: 6750 },
   ],
 
-  // Aim Training pays a fraction of the run score (capped), + a best bonus.
-  trainingPerScore: 0.012,
-  trainingMax: 50,
-  trainingBestBonus: 20,
-  // A real 1v1: participation + win bonus (loss still banks participation).
-  // Average ~25/game, the basis the tier thresholds above are paced against.
-  matchPlay: 15,
-  matchWin: 20,
-  // Quick match vs the bot: a steady participation trickle + a win bonus, so
-  // every quick match banks something (win 15 / loss 5) — less than a ranked
-  // bout, since the bot's the easy road.
-  botPlay: 5,
-  botWin: 10,
+  // A real 1v1: 25 to show up, +25 to win → 25 on a loss, 50 on a win.
+  matchPlay: 25,
+  matchWin: 25,
+  // A completed Aim Training run banks a flat 25 (the run score still sets your
+  // training-board best; it just doesn't scale the XP).
+  trainingRun: 25,
+  // Quick match vs the bot: a flat 25, win or lose.
+  quickMatch: 25,
 };
 
 /**

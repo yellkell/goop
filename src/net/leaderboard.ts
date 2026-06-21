@@ -342,7 +342,7 @@ export function reportResult(win: boolean, oppElo: number): void {
  */
 export function reportBotResult(win: boolean): void {
   if (win) profile.score += SCORE_BOT_WIN;
-  profile.xp += xpForBot(win);
+  profile.xp += xpForBot();
   writeMine({ score: profile.score, xp: profile.xp });
   void refreshLeaderboard(true);
 }
@@ -350,7 +350,7 @@ export function reportBotResult(win: boolean): void {
 /** An Aim Training run ended — bank XP (every run) and a new personal best. */
 export function reportTraining(score: number): void {
   const newBest = score > profile.training;
-  profile.xp += xpForTraining(score, newBest);
+  profile.xp += xpForTraining();
   if (newBest) profile.training = score;
   writeMine({ training: profile.training, xp: profile.xp });
   void refreshLeaderboard(true);
