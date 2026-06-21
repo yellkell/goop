@@ -18,6 +18,8 @@ import { Combatant } from '../components/Combatant.js';
 import { BodyPart, PlayerBodyPart } from '../components/PlayerBodyPart.js';
 import { MAX_OPPONENTS } from '../combat/opponentBus.js';
 import { localLayout } from '../combat/layout.js';
+import { app } from '../menu/appState.js';
+import { mesh } from '../net/mesh.js';
 import { BODY_IK, COMBAT } from '../config.js';
 
 /** One combatant entity per fighter slot (index === slot; 0 is the local player). */
@@ -63,13 +65,18 @@ export function setupCombatants(world: World): void {
  */
 export function applyRoster(): void {
   const roster = localLayout();
+  // In a LIVE mesh bout the other fighters are humans only: a seat with no
+  // occupant (a short-handed FFA's empty pad) sits this bout out. Bot bouts and
+  // the duel keep every roster slot.
+  const liveNet = app.mode === 'net' && app.arcade !== '1v1';
   for (let slot = 0; slot < fighters.length; slot++) {
     const e = fighters[slot];
     if (!e) continue;
-    const inRoster = slot < roster.length;
-    e.setValue(Combatant, 'active', inRoster ? 1 : 0);
-    e.setValue(Combatant, 'team', inRoster ? roster[slot].team : 1);
-    if (inRoster) e.setValue(Health, 'current', e.getValue(Health, 'max') ?? COMBAT.playerHealth);
+    let active = slot < roster.length;
+    if (active && liveNet && slot !== 0) active = !!mesh.occupants[roster[slot].canonical];
+    e.setValue(Combatant, 'active', active ? 1 : 0);
+    e.setValue(Combatant, 'team', slot < roster.length ? roster[slot].team : 1);
+    if (active) e.setValue(Health, 'current', e.getValue(Health, 'max') ?? COMBAT.playerHealth);
   }
 }
 

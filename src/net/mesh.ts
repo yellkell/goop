@@ -23,6 +23,7 @@ export interface MeshInbox {
 interface MeshImplApi {
   queue(mode: ArcadeMode): Promise<void>;
   send(msg: PeerMessage): void;
+  lock(): void;
   close(): void;
 }
 
@@ -37,6 +38,8 @@ class Mesh {
   occupants: string[] = [];
   /** True once every seat is filled by a human. */
   full = false;
+  /** Room closed to new joiners — full, or the host locked a short-handed FFA. */
+  locked = false;
   joined = false;
   /** Status sink for the lobby panel. */
   onStatus: (s: string) => void = () => {};
@@ -62,6 +65,11 @@ class Mesh {
     this.impl?.send(msg);
   }
 
+  /** Host: close the room so it goes live short-handed (FFA after the grace). */
+  lock(): void {
+    this.impl?.lock();
+  }
+
   cancel(): void {
     this.close();
   }
@@ -71,6 +79,7 @@ class Mesh {
     this.impl = null;
     this.joined = false;
     this.full = false;
+    this.locked = false;
     this.inbox.length = 0;
     this.mySeat = 0;
     this.occupants = [];

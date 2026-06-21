@@ -97,6 +97,11 @@ export class MeshImpl {
     }
   }
 
+  /** Host: close the room to new joiners so a short-handed FFA can start. */
+  lock(): void {
+    if (this.roomRef) void updateDoc(this.roomRef, { open: false }).catch(() => {});
+  }
+
   close(): void {
     if (this.closed) return;
     this.closed = true;
@@ -173,6 +178,7 @@ export class MeshImpl {
       const seats = (snap.data().seats as string[]) ?? [];
       this.state.occupants = seats;
       this.state.full = seats.length > 0 && seats.every((s) => s);
+      this.state.locked = snap.data().open === false;
       if (this.state.full) this.state.onStatus('all players in — fight!');
       for (let seat = 0; seat < seats.length; seat++) {
         if (seat === this.state.mySeat || !seats[seat] || this.peers.has(seat)) continue;

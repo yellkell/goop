@@ -66,6 +66,8 @@ export class MeshSystem extends createSystem({
   private stateTimer = 0;
   private lastReset = -1;
   private guestOverTimer = 0;
+  /** Host: seconds a short-handed FFA (3 players) has waited for a 4th. */
+  private ffaGraceTimer = 0;
 
   update(delta: number): void {
     // The duel is NetworkSystem's job; the mesh only ever runs the brawls.
@@ -78,13 +80,27 @@ export class MeshSystem extends createSystem({
 
     if (app.mode === 'bot') {
       // Still playing the local bot bout while the room fills. Drop any chatter
-      // so it can't pile up, and flip to the live bout once everyone's in.
+      // so it can't pile up, and flip to the live bout once it's ready:
+      //  - 2v2 waits for a FULL room (4 humans) — until then you fight bots;
+      //  - FFA starts at FULL, or the host locks it 10 s after a 3rd arrives,
+      //    leaving that window for a 4th. The live bout is all-humans; any
+      //    unfilled FFA seat just sits empty (see applyRoster).
       if (mesh.inbox.length) mesh.inbox.length = 0;
-      if (mesh.joined && mesh.full) {
-        app.mode = 'net';
-        app.side = mesh.isHost() ? 0 : 1;
-        app.mySlot = mesh.mySeat;
-        this.lastReset = -1;
+      if (mesh.joined) {
+        const humans = mesh.occupants.filter(Boolean).length;
+        if (mesh.isHost() && app.arcade === 'ffa' && !mesh.locked && humans >= 3 && humans < mesh.capacity) {
+          this.ffaGraceTimer += delta;
+          if (this.ffaGraceTimer >= 10) mesh.lock();
+        } else {
+          this.ffaGraceTimer = 0;
+        }
+        const enough = app.arcade === '2v2' ? humans >= mesh.capacity : humans >= 3;
+        if (mesh.locked && enough) {
+          app.mode = 'net';
+          app.side = mesh.isHost() ? 0 : 1;
+          app.mySlot = mesh.mySeat;
+          this.lastReset = -1;
+        }
       }
       return;
     }
