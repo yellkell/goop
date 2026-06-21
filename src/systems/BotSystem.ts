@@ -14,9 +14,10 @@ import { createSystem, Quaternion, Vector3 } from '@iwsdk/core';
 import { Fireball, BallState } from '../components/Fireball.js';
 import { ballCommands, opponents } from '../combat/opponentBus.js';
 import { fighterTeam } from '../combat/fighters.js';
+import { localLayout } from '../combat/layout.js';
 import { match } from '../combat/matchState.js';
 import { app } from '../menu/appState.js';
-import { BOT, FIREBALL, MODE_LAYOUT } from '../config.js';
+import { BOT, FIREBALL } from '../config.js';
 
 const _head = new Vector3(); // local player's head
 const _ballPos = new Vector3();
@@ -63,7 +64,7 @@ export class BotSystem extends createSystem({
     if (!headObj) return;
     headObj.getWorldPosition(_head);
 
-    const roster = MODE_LAYOUT[app.arcade];
+    const roster = localLayout();
     for (let slot = 1; slot < roster.length; slot++) {
       const i = slot - 1;
       const pose = opponents[i];
@@ -99,7 +100,7 @@ export class BotSystem extends createSystem({
       }
     };
     if (myTeam !== fighterTeam(0)) consider(_head); // the local player
-    const roster = MODE_LAYOUT[app.arcade];
+    const roster = localLayout();
     for (let slot = 1; slot < roster.length; slot++) {
       if (slot === bot.slot) continue;
       const other = opponents[slot - 1];

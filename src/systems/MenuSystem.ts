@@ -742,7 +742,8 @@ export class MenuSystem extends createSystem({}) {
     // and Aim Training show one opponent pad, not a leftover arcade cross.
     if (app.state !== 'playing') {
       app.arcade = '1v1';
-      applyArenaLayout(this.scene, '1v1');
+      app.mySlot = 0;
+      applyArenaLayout(this.scene);
     }
     // The opponent's platform reads as "occupied" only when fighting.
     const oppPlatform = this.scene.getObjectByName('opponent-platform');

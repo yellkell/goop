@@ -28,9 +28,10 @@ import { BallState, Fireball } from '../components/Fireball.js';
 import { Health } from '../components/Health.js';
 import { Hitbox, HitboxKind } from '../components/Hitbox.js';
 import { MAX_OPPONENTS, opponents } from '../combat/opponentBus.js';
+import { localLayout } from '../combat/layout.js';
 import { app } from '../menu/appState.js';
 import { rival } from '../net/leaderboard.js';
-import { BODY_IK, MODE_LAYOUT, hueToColor, teamColor } from '../config.js';
+import { BODY_IK, hueToColor, teamColor } from '../config.js';
 
 const _chest = new Vector3();
 const _pelvis = new Vector3();
@@ -62,7 +63,7 @@ export class OpponentSystem extends createSystem({
 
   update(delta: number): void {
     const playing = app.state === 'playing';
-    const roster = MODE_LAYOUT[app.arcade];
+    const roster = localLayout();
 
     for (let i = 0; i < MAX_OPPONENTS; i++) {
       const slot = i + 1;

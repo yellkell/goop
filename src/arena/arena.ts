@@ -28,8 +28,9 @@ import {
   type Object3D,
 } from 'three';
 import type { World } from '@iwsdk/core';
-import { ARENA_GAP, MODE_LAYOUT, OCTAGON_VERTICES, PALETTE, PLATFORM, teamColor, type ArcadeMode } from '../config.js';
+import { ARENA_GAP, OCTAGON_VERTICES, PALETTE, PLATFORM, teamColor } from '../config.js';
 import { MAX_OPPONENTS } from '../combat/opponentBus.js';
+import { localLayout } from '../combat/layout.js';
 import { hazardTexture } from '../materials/hazard.js';
 import { diamondPlateTextures, type DiamondPlateMaps } from '../materials/diamondPlate.js';
 import { octagonSlab } from './octagon.js';
@@ -205,12 +206,12 @@ export function platformName(slot: number): string {
 }
 
 /**
- * Lay the platforms out for a mode: the player pedestal stays at the origin,
- * each other-fighter pedestal moves to its roster slot (position + facing yaw),
- * recolours to its team tint and shows only if the mode uses that slot.
+ * Lay the platforms out for the current bout's LOCAL roster: the player pedestal
+ * stays at the origin, each other-fighter pedestal moves to its slot (position +
+ * facing yaw), recolours to its team tint and shows only if the bout uses it.
  */
-export function applyArenaLayout(scene: Object3D, mode: ArcadeMode): void {
-  const roster = MODE_LAYOUT[mode];
+export function applyArenaLayout(scene: Object3D): void {
+  const roster = localLayout();
   for (let slot = 1; slot <= MAX_OPPONENTS; slot++) {
     const pad = scene.getObjectByName(platformName(slot));
     if (!pad) continue;
@@ -258,6 +259,6 @@ export function buildArena(world: World): Object3D {
 
   scene.add(arena);
   // Start in the classic duel layout (slot 1 across the gap, the rest hidden).
-  applyArenaLayout(scene, '1v1');
+  applyArenaLayout(scene);
   return arena;
 }

@@ -94,8 +94,8 @@ export class GameStateSystem extends createSystem({
     // roster + platforms, wipe the slate and (re)start clean.
     const entering = !this.wasPlaying || app.mode !== this.lastMode || app.arcade !== this.lastArcade;
     if (entering) {
-      applyRoster(app.arcade);
-      applyArenaLayout(this.scene, app.arcade);
+      applyRoster();
+      applyArenaLayout(this.scene);
     }
 
     const actives = this.activeCombatants();

@@ -17,7 +17,8 @@ import { Hitbox, HitboxKind } from '../components/Hitbox.js';
 import { Combatant } from '../components/Combatant.js';
 import { BodyPart, PlayerBodyPart } from '../components/PlayerBodyPart.js';
 import { MAX_OPPONENTS } from '../combat/opponentBus.js';
-import { BODY_IK, COMBAT, MODE_LAYOUT, type ArcadeMode } from '../config.js';
+import { localLayout } from '../combat/layout.js';
+import { BODY_IK, COMBAT } from '../config.js';
 
 /** One combatant entity per fighter slot (index === slot; 0 is the local player). */
 const fighters: Entity[] = [];
@@ -52,16 +53,16 @@ export function setupCombatants(world: World): void {
     fighters[slot] = other;
   }
 
-  applyRoster('1v1');
+  applyRoster();
 }
 
 /**
- * Stamp every fighter's team / active flag for the given mode and refill the
- * health of those in the roster. Slots beyond the roster go inactive (parked by
- * the systems that read `Combatant.active`).
+ * Stamp every fighter's team / active flag for the current bout's LOCAL roster
+ * (me at slot 0) and refill the health of those in it. Slots beyond the roster
+ * go inactive (parked by the systems that read `Combatant.active`).
  */
-export function applyRoster(mode: ArcadeMode): void {
-  const roster = MODE_LAYOUT[mode];
+export function applyRoster(): void {
+  const roster = localLayout();
   for (let slot = 0; slot < fighters.length; slot++) {
     const e = fighters[slot];
     if (!e) continue;

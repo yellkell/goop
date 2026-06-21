@@ -65,6 +65,14 @@ export const app: {
    * platform roster, combatant count and HUD.
    */
   arcade: ArcadeMode;
+  /**
+   * My CANONICAL seat in a networked arcade bout (0..N-1 in the shared
+   * MODE_LAYOUT). 0 for bot bouts, the classic duel and the mesh host; a mesh
+   * guest gets the seat matchmaking assigned. The local view is always rebuilt
+   * with me at index 0 (see combat/layout.ts), so gameplay never sees this
+   * directly — only the netcode's coordinate transforms do.
+   */
+  mySlot: number;
   /** Human-readable connection status for the lobby info panel. */
   netStatus: string;
   /** Aim Training option: targets shoot back so you can train dodging. */
@@ -97,6 +105,7 @@ export const app: {
   mode: 'bot',
   side: 0,
   arcade: '1v1',
+  mySlot: 0,
   netStatus: 'not connected',
   // Off unless the player has explicitly switched it on.
   shootBack: localStorage.getItem('ff-shootback') === '1',
