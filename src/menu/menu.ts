@@ -33,6 +33,7 @@ import {
   type LeaderboardTab,
 } from '../net/leaderboard.js';
 import { PUB_MAX_PLAYERS } from '../pub/protocol.js';
+import { PUB_REGIONS } from '../pub/config.js';
 import { UI, buttonPlate, hazardStrip, plate, segmentBar, stencilFont } from '../ui/industrial.js';
 
 export type PanelId = 'train' | 'duel' | 'info' | 'board' | 'custom' | 'loadout' | 'balls';
@@ -60,6 +61,8 @@ export type MenuAction =
   | 'profile-back'
   | 'rename'
   | 'open-pub'
+  | 'pub-back'
+  | `pub-go-${string}`
   | 'open-custom'
   | 'custom-close'
   | 'av-0' | 'av-1' | 'av-2' | 'av-3'
@@ -420,14 +423,24 @@ function hitKeypad(u: number, v: number): MenuAction | null {
 
 /** Right — doors out of the lobby: the PUB social area + customisation. */
 function drawInfo(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
+  if (app.infoView === 'pubpick') return drawPubPicker(ctx, hoverAction);
+  return drawInfoRoot(ctx, hoverAction);
+}
+
+function hitInfo(_u: number, v: number): MenuAction | null {
+  if (app.infoView === 'pubpick') return hitPubPicker(v);
+  return hitInfoRoot(v);
+}
+
+function drawInfoRoot(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
   panelBg(ctx, false, UI.text, GAME_TITLE);
 
   buttonPlate(ctx, 70, 104, PW - 140, 96, 'IRON BALLS PUB', UI.cool, hoverAction === 'open-pub');
 
   // Live headcount riding the top-right of the PUB plate — the mirror of the
-  // 1V1 panel's searcher badge, but the room's `X/12` occupancy.
+  // 1V1 panel's searcher badge, but the total occupancy across pub regions.
   if (app.pubCount > 0) {
-    const label = `${app.pubCount}/${PUB_MAX_PLAYERS}`;
+    const label = `${app.pubCount}/${PUB_MAX_PLAYERS * PUB_REGIONS.length}`;
     ctx.font = '800 18px system-ui, sans-serif';
     const pillW = ctx.measureText(label).width + 38;
     const pillH = 28;
@@ -456,10 +469,66 @@ function drawInfo(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null)
   ctx.fillText(`aim best ${app.stats.trainingBest}  ·  scores behind you`, PW / 2, 366);
 }
 
-function hitInfo(_u: number, v: number): MenuAction | null {
+function hitInfoRoot(v: number): MenuAction | null {
   const y = (1 - v) * PH;
   if (y >= 96 && y <= 208) return 'open-pub';
   if (y >= 218 && y <= 330) return 'open-custom';
+  return null;
+}
+
+/** The pub-region picker — pick EU or USA, each with its live `X/12` headcount,
+ *  shown when you tap IRON BALLS PUB. One plate per region, then BACK. */
+function drawPubPicker(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
+  panelBg(ctx, false, UI.text, 'PICK A PUB');
+
+  const accents = [UI.cool, UI.ember, UI.amber, UI.coolBright];
+  const top = 96;
+  const gap = 12;
+  const h = Math.min(96, (260 - gap * (PUB_REGIONS.length - 1)) / PUB_REGIONS.length);
+  PUB_REGIONS.forEach((region, i) => {
+    const y = top + i * (h + gap);
+    const action = `pub-go-${region.id}` as MenuAction;
+    buttonPlate(ctx, 70, y, PW - 140, h, region.label, accents[i % accents.length], hoverAction === action);
+
+    // Live `X/12` headcount pill on the right of each region plate.
+    const count = app.pubRegionCounts[region.id];
+    if (typeof count === 'number' && count >= 0) {
+      const label = `${count}/${PUB_MAX_PLAYERS}`;
+      ctx.font = '800 18px system-ui, sans-serif';
+      const pillW = ctx.measureText(label).width + 38;
+      const pillH = 28;
+      const px = PW - 86 - pillW;
+      const py = y + h / 2 - pillH / 2 - 14;
+      plate(ctx, px, py, pillW, pillH, {
+        cut: 8,
+        fill: 'rgba(79,183,255,0.22)',
+        stroke: UI.cool,
+        rivets: false,
+      });
+      ctx.fillStyle = UI.coolBright;
+      ctx.beginPath();
+      ctx.arc(px + 16, py + pillH / 2, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.textAlign = 'left';
+      ctx.fillStyle = UI.coolBright;
+      ctx.fillText(label, px + 28, py + pillH / 2 + 1);
+      ctx.textAlign = 'center';
+    }
+  });
+
+  buttonPlate(ctx, 150, 320, PW - 300, 50, 'BACK', UI.steel, hoverAction === 'pub-back');
+}
+
+function hitPubPicker(v: number): MenuAction | null {
+  const y = (1 - v) * PH;
+  const top = 96;
+  const gap = 12;
+  const h = Math.min(96, (260 - gap * (PUB_REGIONS.length - 1)) / PUB_REGIONS.length);
+  for (let i = 0; i < PUB_REGIONS.length; i++) {
+    const ry = top + i * (h + gap);
+    if (y >= ry - 8 && y <= ry + h + 4) return `pub-go-${PUB_REGIONS[i].id}` as MenuAction;
+  }
+  if (y >= 312 && y <= 378) return 'pub-back';
   return null;
 }
 

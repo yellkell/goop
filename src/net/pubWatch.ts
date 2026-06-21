@@ -8,48 +8,56 @@
  * screen and stop the moment we leave. Unreachable → −1 (badge hides).
  */
 
-import { pubServerUrl } from '../pub/config.js';
+import { PUB_REGIONS } from '../pub/config.js';
 
 const POLL_MS = 8000;
 const TIMEOUT_MS = 5000;
 
-type CountListener = (count: number) => void;
+/** Per-region punter counts, keyed by region id (−1 = that region unreachable). */
+type CountsListener = (counts: Record<string, number>) => void;
 
 let timer: ReturnType<typeof setInterval> | null = null;
 let inFlight = false;
 
-/** The pub server's HTTP origin (ws→http, wss→https); its root returns status. */
-function statusUrl(): string {
-  return pubServerUrl().replace(/^ws/, 'http');
+/** One region's HTTP origin (ws→http, wss→https); its root returns status. */
+function statusUrl(wsUrl: string): string {
+  return wsUrl.replace(/^ws/, 'http');
 }
 
-async function poll(onCount: CountListener): Promise<void> {
-  if (inFlight) return;
-  inFlight = true;
+async function pollRegion(wsUrl: string): Promise<number> {
   const ctrl = new AbortController();
   const to = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   try {
-    const res = await fetch(statusUrl(), { cache: 'no-store', signal: ctrl.signal });
-    if (!res.ok) {
-      onCount(-1);
-      return;
-    }
+    const res = await fetch(statusUrl(wsUrl), { cache: 'no-store', signal: ctrl.signal });
+    if (!res.ok) return -1;
     const data = (await res.json()) as { punters?: number };
-    onCount(typeof data.punters === 'number' ? data.punters : -1);
+    return typeof data.punters === 'number' ? data.punters : -1;
   } catch {
-    onCount(-1); // server unreachable — leave the count unknown
+    return -1; // region unreachable — leave its count unknown
   } finally {
     clearTimeout(to);
+  }
+}
+
+async function pollAll(onCounts: CountsListener): Promise<void> {
+  if (inFlight) return;
+  inFlight = true;
+  try {
+    const entries = await Promise.all(
+      PUB_REGIONS.map(async (r) => [r.id, await pollRegion(r.url)] as const),
+    );
+    onCounts(Object.fromEntries(entries));
+  } finally {
     inFlight = false;
   }
 }
 
-/** Begin polling the pub headcount, reporting it to `onCount`. No-op if already
- *  watching. An immediate read fires so the badge isn't blank for the first poll. */
-export function startPubWatch(onCount: CountListener): void {
+/** Begin polling every region's headcount, reporting them to `onCounts`. No-op
+ *  if already watching. An immediate read fires so the door isn't blank first. */
+export function startPubWatch(onCounts: CountsListener): void {
   if (timer) return;
-  void poll(onCount);
-  timer = setInterval(() => void poll(onCount), POLL_MS);
+  void pollAll(onCounts);
+  timer = setInterval(() => void pollAll(onCounts), POLL_MS);
 }
 
 /** Stop polling (leaving the lobby). Safe to call when not watching. */

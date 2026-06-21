@@ -51,6 +51,7 @@ import { UI } from '../ui/industrial.js';
 import { net } from '../net/client.js';
 import { startQueueWatch, stopQueueWatch } from '../net/queueWatch.js';
 import { startPubWatch, stopPubWatch } from '../net/pubWatch.js';
+import { PUB_REGIONS } from '../pub/config.js';
 import {
   boardScroll,
   hasCustomName,
@@ -344,18 +345,13 @@ export class MenuSystem extends createSystem({}) {
         this.kbMode = 'name';
         this.keyboard.open(myStats().name);
         return;
-      case 'open-pub': {
-        // Navigating WHILE an immersive session is live hangs the browser —
-        // end the XR session first, then hop pages.
-        const go = (): void => window.location.assign(pubUrl());
-        const session = this.world.session as XRSession | undefined;
-        if (session) {
-          void Promise.resolve(session.end()).then(go, go);
-        } else {
-          go();
-        }
+      case 'open-pub':
+        // Don't navigate yet — open the EU/USA region picker first.
+        app.infoView = 'pubpick';
         break;
-      }
+      case 'pub-back':
+        app.infoView = 'root';
+        break;
       case 'open-custom':
         customization.open = true;
         this.ensureMirror();
@@ -390,10 +386,31 @@ export class MenuSystem extends createSystem({}) {
           // Open the clicked player's profile.
           const row = leaderboardRows()[boardScroll() + Number(action.slice(7))];
           if (row) setProfileView(row);
+        } else if (action.startsWith('pub-go-')) {
+          // Pick a pub region, remember it, then hop to the pub page.
+          const id = action.slice(7);
+          const region = PUB_REGIONS.find((r) => r.id === id);
+          if (region) {
+            localStorage.setItem('ibb-pub-server', region.url);
+            app.infoView = 'root';
+            this.gotoPub();
+          }
         }
         break;
     }
     this.applyState();
+  }
+
+  /** Leave for the pub page. Navigating WHILE an immersive session is live
+   *  hangs the browser, so end the XR session first, then hop pages. */
+  private gotoPub(): void {
+    const go = (): void => window.location.assign(pubUrl());
+    const session = this.world.session as XRSession | undefined;
+    if (session) {
+      void Promise.resolve(session.end()).then(go, go);
+    } else {
+      go();
+    }
   }
 
   // --- customisation: the avatar mirror + live skin application ---------------
@@ -667,14 +684,19 @@ export class MenuSystem extends createSystem({}) {
       startQueueWatch((n) => {
         app.searching = n;
       });
-      startPubWatch((n) => {
-        app.pubCount = n;
+      startPubWatch((counts) => {
+        app.pubRegionCounts = counts;
+        // Door badge shows the total across all reachable regions.
+        const known = Object.values(counts).filter((c) => c >= 0);
+        app.pubCount = known.length ? known.reduce((a, b) => a + b, 0) : -1;
       });
     } else {
       stopQueueWatch();
       app.searching = -1;
       stopPubWatch();
       app.pubCount = -1;
+      app.pubRegionCounts = {};
+      app.infoView = 'root';
     }
 
     // The action panel only lives inside training runs and bouts; the
