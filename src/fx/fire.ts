@@ -122,6 +122,9 @@ export interface FireVisual {
   group: Group;
   /** time = seconds, heat = 0..1.7, cameraQuat billboards the corona. */
   update(time: number, heat: number, cameraQuat: Quaternion): void;
+  /** Recolour warm (0, orange) ↔ cool (1, blue) — a ball's team can change
+   *  between bouts (a 2v2 ally is on YOUR team, the 1v1 rival is not). */
+  setCool(cool: number): void;
   dispose(): void;
 }
 
@@ -164,6 +167,10 @@ export function createFireVisual(team: 0 | 1): FireVisual {
       coronaMat.uniforms.uTime.value = time;
       coronaMat.uniforms.uHeat.value = heat;
       corona.quaternion.copy(group.quaternion).invert().multiply(cameraQuat);
+    },
+    setCool(c) {
+      coreMat.uniforms.uCool.value = c;
+      coronaMat.uniforms.uCool.value = c;
     },
     dispose() {
       coreMat.dispose();

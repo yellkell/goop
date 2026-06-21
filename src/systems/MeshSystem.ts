@@ -28,6 +28,7 @@ import { match } from '../combat/matchState.js';
 import { app, saveStats } from '../menu/appState.js';
 import { mesh } from '../net/mesh.js';
 import { packPose } from '../net/client.js';
+import { attachMeshVoice, detachAllMeshVoice, detachMeshVoice, setMeshSpeaker, updateListener } from '../net/voice.js';
 import { reportArcade } from '../net/leaderboard.js';
 import type { PeerMessage, PoseTuple } from '../net/protocol.js';
 import { spawnDamagePopup, spawnFireImpact } from '../fx/effects.js';
@@ -68,13 +69,19 @@ export class MeshSystem extends createSystem({
   private guestOverTimer = 0;
   /** Host: seconds a short-handed FFA (3 players) has waited for a 4th. */
   private ffaGraceTimer = 0;
+  /** Seats whose spatial voice we've hooked up this bout. */
+  private voiced = new Set<number>();
 
   update(delta: number): void {
     // The duel is NetworkSystem's job; the mesh only ever runs the brawls.
-    if (app.arcade === '1v1') return;
+    if (app.arcade === '1v1') {
+      this.clearVoice();
+      return;
+    }
 
     if (app.state !== 'playing') {
       if (mesh.inbox.length) mesh.inbox.length = 0;
+      this.clearVoice();
       return;
     }
 
@@ -86,6 +93,7 @@ export class MeshSystem extends createSystem({
       //    leaving that window for a 4th. The live bout is all-humans; any
       //    unfilled FFA seat just sits empty (see applyRoster).
       if (mesh.inbox.length) mesh.inbox.length = 0;
+      this.clearVoice(); // voice only plays in the live bout, not while filling
       if (mesh.joined) {
         const humans = mesh.occupants.filter(Boolean).length;
         if (mesh.isHost() && app.arcade === 'ffa' && !mesh.locked && humans >= 3 && humans < mesh.capacity) {
@@ -111,6 +119,7 @@ export class MeshSystem extends createSystem({
       app.mode = 'bot';
       app.side = 0;
       app.mySlot = 0;
+      this.clearVoice();
       return;
     }
     app.side = mesh.isHost() ? 0 : 1;
@@ -118,8 +127,36 @@ export class MeshSystem extends createSystem({
     this.receive();
     this.smooth(delta);
     this.sendPose(delta);
+    this.updateVoice();
     if (mesh.isHost()) this.echoState(delta);
     else this.guestTimers(delta);
+  }
+
+  /** Spatial voice: listener on the camera, each peer pinned to their head. */
+  private updateVoice(): void {
+    this.world.camera.getWorldPosition(_p);
+    this.world.camera.getWorldQuaternion(_q);
+    updateListener(_p, _q);
+    for (const [seat, stream] of mesh.voice) {
+      if (!this.voiced.has(seat)) {
+        attachMeshVoice(seat, stream);
+        this.voiced.add(seat);
+      }
+      const li = localIndexOf(seat);
+      if (li > 0) setMeshSpeaker(seat, opponents[li - 1].headPos);
+    }
+    for (const seat of [...this.voiced]) {
+      if (!mesh.voice.has(seat)) {
+        detachMeshVoice(seat);
+        this.voiced.delete(seat);
+      }
+    }
+  }
+
+  private clearVoice(): void {
+    if (this.voiced.size === 0) return;
+    detachAllMeshVoice();
+    this.voiced.clear();
   }
 
   // --- outgoing ------------------------------------------------------------

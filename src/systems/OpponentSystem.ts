@@ -11,8 +11,9 @@
  */
 
 import { createSystem, Vector3, type Entity } from '@iwsdk/core';
-import { Object3D } from 'three';
+import { CylinderGeometry, Mesh, MeshBasicMaterial, Object3D } from 'three';
 import { buildBoxer, setAvatarAccent, setGloveLit, solveTorso, type BoxerRig } from '../avatar/boxer.js';
+import { spawnPopup } from '../fx/effects.js';
 import { HAND_ADDUCTION, setHandCurl } from '../avatar/hands.js';
 import {
   AVATAR_SKINS,
@@ -37,6 +38,10 @@ import { BODY_IK, hueToColor, teamColor } from '../config.js';
 
 const _chest = new Vector3();
 const _pelvis = new Vector3();
+const _localHead = new Vector3();
+const _xPos = new Vector3();
+/** A knocked-out fighter washes out to this grey. */
+const DEAD_GREY = 0x8a8f99;
 
 interface OppRig {
   rig: BoxerRig;
@@ -53,6 +58,10 @@ export class OpponentSystem extends createSystem({
   balls: { required: [Fireball] },
 }) {
   private rigs: OppRig[] = [];
+  /** Grey "you're out" spotlight per fighter slot (index 0 = the local player). */
+  private spotlights: Mesh[] = [];
+  /** Was each fighter slot alive last frame, so a death fires the red X once. */
+  private wasAlive: boolean[] = [];
 
   init(): void {
     for (let i = 0; i < MAX_OPPONENTS; i++) {
@@ -62,6 +71,17 @@ export class OpponentSystem extends createSystem({
         this.scene.add(piece);
       }
       this.rigs[i] = { rig, hitboxes: {}, built: false, appliedSkins: '', accentColor: teamColor(1) };
+    }
+    // A dim grey light-cone over each platform a downed fighter is stuck under.
+    const cone = new CylinderGeometry(0.16, 0.82, 2.4, 20, 1, true);
+    for (let slot = 0; slot <= MAX_OPPONENTS; slot++) {
+      const mat = new MeshBasicMaterial({ color: DEAD_GREY, transparent: true, opacity: 0.16, depthWrite: false });
+      const spot = new Mesh(cone, mat);
+      spot.position.y = 1.2;
+      spot.visible = false;
+      this.spotlights[slot] = spot;
+      this.scene.add(spot);
+      this.wasAlive[slot] = true;
     }
   }
 
@@ -85,9 +105,14 @@ export class OpponentSystem extends createSystem({
         // Idle: forget this rig's bout skin so the next bout re-rolls it.
         r.botSkin = undefined;
         r.appliedSkins = '';
+        this.deathFx(slot, false, pose.headPos);
         this.parkHitboxes(i);
         continue;
       }
+
+      // Knocked out: wash the avatar grey, dim its gloves, light the spotlight.
+      const dead = (combatant?.getValue(Health, 'current') ?? 1) <= 0;
+      this.deathFx(slot, dead, pose.headPos);
 
       // Keep the hitboxes' team in step with the combatant (it shifts per mode).
       const team = combatant?.getValue(Combatant, 'team') ?? seat.team;
@@ -97,10 +122,14 @@ export class OpponentSystem extends createSystem({
 
       this.applySkins(r, slot);
 
-      // Neon: an online rival wears their own synced accent; everyone else (the
-      // ally, the bots) wears their team tint. Recolour only on a real change.
-      const want =
-        app.mode === 'net' && slot === 1 && pose.accentHue >= 0 ? hueToColor(pose.accentHue) : teamColor(team);
+      // Neon: a downed fighter greys out; otherwise an online rival wears their
+      // own synced accent and everyone else their team tint. Recolour only on
+      // a real change.
+      const want = dead
+        ? DEAD_GREY
+        : app.mode === 'net' && slot === 1 && pose.accentHue >= 0
+          ? hueToColor(pose.accentHue)
+          : teamColor(team);
       if (want !== r.accentColor) {
         r.accentColor = want;
         for (const piece of r.rig.all) setAvatarAccent(piece, want);
@@ -111,8 +140,8 @@ export class OpponentSystem extends createSystem({
       for (const hand of [0, 1] as const) {
         r.rig.gloves[hand].position.copy(pose.handPos[hand]);
         r.rig.gloves[hand].quaternion.copy(pose.handQuat[hand]).multiply(HAND_ADDUCTION[hand]);
-        const lit = pose.orbiting[hand] || this.ballReturning(slot, hand);
-        const fisting = pose.fisting[hand];
+        const lit = !dead && (pose.orbiting[hand] || this.ballReturning(slot, hand));
+        const fisting = !dead && pose.fisting[hand];
         setGloveLit(r.rig.gloves[hand], lit, delta);
         setHandCurl(
           r.rig.gloves[hand],
@@ -126,6 +155,34 @@ export class OpponentSystem extends createSystem({
       r.hitboxes.chest?.object3D?.position.copy(_chest);
       r.hitboxes.pelvis?.object3D?.position.copy(_pelvis);
     }
+
+    // The local player has no avatar to grey, but still gets the spotlight +
+    // red X when they're knocked out of a brawl.
+    const me = this.findCombatant(0);
+    const head = this.playerHeadEntity?.object3D;
+    if (head) head.getWorldPosition(_localHead);
+    else _localHead.set(0, 1.5, 0);
+    const meDead = playing && (me?.getValue(Health, 'current') ?? 1) <= 0;
+    this.deathFx(0, meDead, _localHead);
+  }
+
+  /** Light a fighter's grey spotlight while down and pop a red X the moment
+   *  they're knocked out. `slot` 0 is the local player. */
+  private deathFx(slot: number, dead: boolean, headPos: Vector3): void {
+    const spot = this.spotlights[slot];
+    if (spot) {
+      spot.visible = dead;
+      if (dead) {
+        const seat = localLayout()[slot];
+        if (seat) spot.position.set(seat.pos[0], spot.position.y, seat.pos[2]);
+      }
+    }
+    if ((this.wasAlive[slot] ?? true) && dead) {
+      _xPos.copy(headPos);
+      _xPos.y += 0.05;
+      spawnPopup(this.world, _xPos, 'X', '#ff2a2a', 'rgba(255,40,30,1)', 1.9);
+    }
+    this.wasAlive[slot] = !dead;
   }
 
   /**
