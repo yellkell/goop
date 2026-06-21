@@ -78,6 +78,7 @@ const PH = 400;
 // scaled to match, so the text keeps the lobby's pixel density (no stretch).
 const BW = 512;
 const BH = 548;
+const PROFILE_KEYBOARD_HINT_MS = 4500;
 // The customisation plate: room for the avatar/platform chips AND the armour-
 // colour picker beneath them. (The CLOSE button now lives on the AVATAR ACCENT
 // panel, so this plate ends just under the colour picker.)
@@ -89,6 +90,16 @@ const COLOR_BAR = { x: 40, y: 322, w: CW - 80, h: 44 };
 /** Map a customisation-panel hit u (0..1) to a hue (0..1), clamped to the bar. */
 export function colorBarHue(u: number): number {
   return Math.max(0, Math.min(1, (u * CW - COLOR_BAR.x) / COLOR_BAR.w));
+}
+
+let profileKeyboardHintUntil = 0;
+
+export function flashProfileKeyboardHint(): void {
+  profileKeyboardHintUntil = performance.now() + PROFILE_KEYBOARD_HINT_MS;
+}
+
+export function clearProfileKeyboardHint(): void {
+  profileKeyboardHintUntil = 0;
 }
 
 export interface MenuPanel {
@@ -453,7 +464,7 @@ function drawInfo(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null)
 
   ctx.font = '600 24px system-ui, sans-serif';
   ctx.fillStyle = UI.textDim;
-  ctx.fillText(`aim best ${app.stats.trainingBest}  ·  scores behind you`, PW / 2, 366);
+  ctx.fillText('Check out the leaderboard behind you', PW / 2, 366);
 }
 
 function hitInfo(_u: number, v: number): MenuAction | null {
@@ -703,9 +714,17 @@ function drawProfile(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | nu
   if (own) {
     buttonPlate(ctx, 56, 488, 180, 40, 'RENAME', UI.amber, hoverAction === 'rename');
     buttonPlate(ctx, BW - 236, 488, 180, 40, 'WRITE NOTE', UI.cool, hoverAction === 'edit-note');
-    ctx.font = '600 14px system-ui, sans-serif';
-    ctx.fillStyle = UI.steelDim;
-    ctx.fillText('turn around to the keyboard to write your note', BW / 2, 540);
+    if (performance.now() < profileKeyboardHintUntil) {
+      plate(ctx, 70, 529, BW - 140, 18, {
+        cut: 5,
+        fill: 'rgba(22,30,38,0.88)',
+        stroke: UI.cool,
+        rivets: false,
+      });
+      ctx.font = '700 12px system-ui, sans-serif';
+      ctx.fillStyle = UI.coolBright;
+      ctx.fillText('turn around to the keyboard to write your note', BW / 2, 539);
+    }
   } else {
     buttonPlate(ctx, BW / 2 - 90, 494, 180, 42, 'BACK', UI.steel, hoverAction === 'profile-back');
   }

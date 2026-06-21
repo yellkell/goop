@@ -27,9 +27,11 @@ import {
 } from 'three';
 import { app, DEFAULT_ACCENT_HUE, saveAccentHue, saveEnvironment, saveShootBack, type AppState } from '../menu/appState.js';
 import {
+  clearProfileKeyboardHint,
   colorBarHue,
   createActionPanel,
   createMenu,
+  flashProfileKeyboardHint,
   type ActionButton,
   type ActionPanel,
   type Menu,
@@ -337,6 +339,8 @@ export class MenuSystem extends createSystem({}) {
       case 'edit-note':
         this.kbPending = null;
         this.kbMode = 'note';
+        flashProfileKeyboardHint();
+        this.menu.redrawAll(this.hovered, this.hoveredAction);
         this.keyboard.open(myNote());
         return;
       case 'rename':
@@ -470,8 +474,12 @@ export class MenuSystem extends createSystem({}) {
         sfx.uiClick();
         const done = this.keyboard.press(id);
         if (done !== null) {
-          if (this.kbMode === 'note') setPlayerNote(done);
-          else setPlayerName(done);
+          if (this.kbMode === 'note') {
+            setPlayerNote(done);
+            clearProfileKeyboardHint();
+          } else {
+            setPlayerName(done);
+          }
           this.kbMode = 'name';
           this.keyboard.close();
           const pending = this.kbPending;
