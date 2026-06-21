@@ -27,6 +27,7 @@ import type { MatchState } from '../combat/matchState.js';
 import { app, training } from '../menu/appState.js';
 import { myName, rival } from '../net/leaderboard.js';
 import { UI, fitStencilText, hazardStrip, metalText, plate, segmentBar, stencilFont } from './industrial.js';
+import { countdownArt } from './countdownArt.js';
 
 const W = 880;
 const H = 420;
@@ -119,7 +120,9 @@ function fmtTime(seconds: number): string {
 
 function verdictAccent(message: string): string {
   if (message.includes('LOSE') || message === 'LOSS' || message === "KO'D") return UI.coolBright;
-  if (/^[123]$/.test(message)) return UI.cool; // 3-2-1 countdown in neon blue
+  // Match the countdown art: 3 & 2 glow blue, 1 glows red (like FIGHT).
+  if (message === '3' || message === '2') return UI.cool;
+  if (message === '1') return UI.danger;
   if (message === 'DRAW') return UI.amber;
   if (message === 'FIGHT' || message === 'TIME') return UI.danger;
   if (message === 'WIN') return UI.amber;
@@ -270,12 +273,31 @@ export function createScoreboard(scene: Scene): Scoreboard {
   };
 
   const drawCentre = (message: string, sub: string): void => {
-    const key = `c|${message}|${sub}`;
+    // The countdown plates (3/2/1/FIGHT) are real art; everything else is
+    // stencilled. Fold "is the art decoded yet" into the key so the first
+    // frame after a cold load swaps the text fallback out for the image.
+    const art = countdownArt(message);
+    const key = `c|${message}|${sub}|${art ? 'img' : 'txt'}`;
     if (centre.key === key) return;
     centre.key = key;
     const { ctx, tex } = centre;
     ctx.clearRect(0, 0, W, H);
-    if (message) {
+    if (art) {
+      // Hand-made neon-metal plate, centred and undistorted. Numbers are sized
+      // to a tall glyph; the wide FIGHT bar is sized to fill the board's WIDTH
+      // so it reads big (its transparent top/bottom padding overruns the canvas
+      // harmlessly). The mesh's slam-in spring still animates the whole board,
+      // so the plate pops in like the old text did.
+      let w: number, h: number;
+      if (message === 'FIGHT') {
+        w = W - 90;
+        h = art.naturalHeight * (w / art.naturalWidth);
+      } else {
+        h = 360;
+        w = art.naturalWidth * (h / art.naturalHeight);
+      }
+      ctx.drawImage(art, (W - w) / 2, (H - h) / 2, w, h);
+    } else if (message) {
       // No backing plate: just the short chromed verdict floating over the gap.
       ctx.textAlign = 'center';
       const accent = verdictAccent(message);
