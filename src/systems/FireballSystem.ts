@@ -24,6 +24,8 @@ import { fighterTeam } from '../combat/fighters.js';
 import { match } from '../combat/matchState.js';
 import { app, training } from '../menu/appState.js';
 import { net } from '../net/client.js';
+import { mesh } from '../net/mesh.js';
+import type { PeerMessage } from '../net/protocol.js';
 import { pulseHand } from '../input/haptics.js';
 import * as sfx from '../audio/sfx.js';
 import { ARENA_BOUNDS, ARENA_GAP, ATTACH, FIREBALL, NET } from '../config.js';
@@ -96,6 +98,13 @@ export class FireballSystem extends createSystem({
    * second so the launch never pops (see drainCommands / integrate Flying).
    */
   private netBlend = new Map<Entity, Vector3>();
+
+  /** Route an outgoing net event: the classic duel uses the 1v1 client; arcade
+   *  bouts broadcast over the mesh. Both no-op outside a live net bout. */
+  private sendNet(msg: PeerMessage): void {
+    if (app.arcade === '1v1') net.send(msg);
+    else if (app.mode === 'net') mesh.send(msg);
+  }
 
   init(): void {
     // Your pair (orange) and every other fighter's pair (cool), one per fist.
@@ -298,7 +307,7 @@ export class FireballSystem extends createSystem({
         // leg connect again read as an awful instant double hit.
         ball.setValue(Fireball, 'returnHit', state === BallState.Dead ? 1 : 0);
         sfx.recall();
-        net.send(
+        this.sendNet(
           eff.att
             ? { k: 'recall', hand, att: eff.att, dmg: eff.dmg, scl: eff.scl }
             : { k: 'recall', hand },
@@ -362,7 +371,7 @@ export class FireballSystem extends createSystem({
     app.stats.ballsThrown += 1;
     if (app.state === 'training') training.thrown += 1;
 
-    net.send({
+    this.sendNet({
       k: 'throw',
       hand,
       pos: [obj.position.x, obj.position.y, obj.position.z],

@@ -19,6 +19,7 @@ import { PlayerBodySystem } from './systems/PlayerBodySystem.js';
 import { OpponentSystem } from './systems/OpponentSystem.js';
 import { BotSystem } from './systems/BotSystem.js';
 import { NetworkSystem } from './systems/NetworkSystem.js';
+import { MeshSystem } from './systems/MeshSystem.js';
 import { TrainingSystem } from './systems/TrainingSystem.js';
 import { FireballSystem } from './systems/FireballSystem.js';
 import { CollisionSystem } from './systems/CollisionSystem.js';
@@ -80,6 +81,7 @@ World.create(container, {
   // Opponent drivers: exactly one of these writes the bus per bout.
   world.registerSystem(BotSystem);
   world.registerSystem(NetworkSystem);
+  world.registerSystem(MeshSystem);
   world.registerSystem(OpponentSystem);
   // Aim Training: targets, scoring, return fire.
   world.registerSystem(TrainingSystem);

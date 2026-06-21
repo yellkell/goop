@@ -39,9 +39,24 @@ export type PeerMessage =
   /**
    * Your `hand` ball HIT me (victim-authoritative) for `dmg`. `ret` means it
    * connected mid-RETURN (you recalled it through me) — the ball is not
-   * spent and keeps homing back to your fist.
+   * spent and keeps homing back to your fist. `by` (arcade mesh only) is the
+   * attacker's canonical seat, so in a brawl only that attacker acts on it.
    */
-  | { k: 'hit'; hand: 0 | 1; dmg: number; ret?: boolean }
+  | { k: 'hit'; hand: 0 | 1; dmg: number; ret?: boolean; by?: number }
+  /**
+   * Arcade mesh only — the HOST's authoritative match-state echo. `scores` is
+   * indexed by CANONICAL team; `win` is the canonical team that just took the
+   * round/match (-1 = none yet) so each guest can localise its own verdict.
+   */
+  | {
+      k: 'astate';
+      phase: 'countdown' | 'playing' | 'roundOver' | 'matchOver';
+      round: number;
+      scores: number[];
+      win: number;
+      timer: number;
+      reset: number;
+    }
   /** I parried your `hand` ball out of the air. */
   | { k: 'deflect'; hand: 0 | 1 }
   /**

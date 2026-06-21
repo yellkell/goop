@@ -205,6 +205,7 @@ export class GameStateSystem extends createSystem({
   }
 
   private endRoundArcade(winnerTeam: number | undefined, result: RoundResult): void {
+    match.roundWinnerTeam = winnerTeam ?? -1;
     if (winnerTeam !== undefined) match.teamScores[winnerTeam] = (match.teamScores[winnerTeam] ?? 0) + 1;
     if (modeTeams(app.arcade).some((t) => (match.teamScores[t] ?? 0) >= MATCH.winTarget)) {
       this.toMatchOverArcade(modeTeams(app.arcade));
@@ -222,6 +223,7 @@ export class GameStateSystem extends createSystem({
     match.phase = 'matchOver';
     match.resultTimer = MATCH.matchOverDelay;
     const winner = this.topTeam(teams, (t) => match.teamScores[t] ?? 0);
+    match.roundWinnerTeam = winner ?? -1;
     const win = winner === 0;
     match.message = win ? 'YOU WIN' : 'YOU LOSE';
     if (win) app.stats.wins += 1;
@@ -257,6 +259,7 @@ export class GameStateSystem extends createSystem({
     match.myScore = 0;
     match.oppScore = 0;
     match.teamScores = [0, 0, 0, 0];
+    match.roundWinnerTeam = -1;
     match.round = 1;
     match.rematchMine = false;
     match.rematchTheirs = false;

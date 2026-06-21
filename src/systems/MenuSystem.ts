@@ -48,6 +48,7 @@ import {
 } from '../avatar/skins.js';
 import { match } from '../combat/matchState.js';
 import { applyArenaLayout } from '../arena/arena.js';
+import { mesh } from '../net/mesh.js';
 import { UI } from '../ui/industrial.js';
 import { net } from '../net/client.js';
 import { startQueueWatch, stopQueueWatch } from '../net/queueWatch.js';
@@ -274,15 +275,18 @@ export class MenuSystem extends createSystem({}) {
         app.state = 'training';
         break;
       case 'arcade-2v2':
-        // Arcade brawl vs bots — its own layout, like quick match but 2v2.
+        // Arcade brawl: drop onto bots now, hunt humans on the mesh in the
+        // background, and flip to the live bout once the room fills.
         app.arcade = '2v2';
         app.mode = 'bot';
         app.state = 'playing';
+        void mesh.queue('2v2', (s) => (app.netStatus = s));
         break;
       case 'arcade-ffa':
         app.arcade = 'ffa';
         app.mode = 'bot';
         app.state = 'playing';
+        void mesh.queue('ffa', (s) => (app.netStatus = s));
         break;
       case 'toggle-shootback':
         app.shootBack = !app.shootBack;
@@ -739,8 +743,10 @@ export class MenuSystem extends createSystem({}) {
     const banner = this.scene.getObjectByName('title-banner');
     if (banner) banner.visible = inLobby;
     // Outside a live bout, fall back to the classic duel layout so the lobby
-    // and Aim Training show one opponent pad, not a leftover arcade cross.
+    // and Aim Training show one opponent pad, not a leftover arcade cross,
+    // and leave any arcade mesh room we were in.
     if (app.state !== 'playing') {
+      mesh.cancel();
       app.arcade = '1v1';
       app.mySlot = 0;
       applyArenaLayout(this.scene);

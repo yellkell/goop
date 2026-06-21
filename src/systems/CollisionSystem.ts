@@ -23,6 +23,8 @@ import { Hitbox, HitboxKind } from '../components/Hitbox.js';
 import { Health } from '../components/Health.js';
 import { Combatant } from '../components/Combatant.js';
 import { fighterTeam } from '../combat/fighters.js';
+import { localLayout } from '../combat/layout.js';
+import { mesh } from '../net/mesh.js';
 import { TargetState, TrainingTarget } from '../components/TrainingTarget.js';
 import { spawnDamagePopup, spawnFireImpact } from '../fx/effects.js';
 import { emberBurst } from '../fx/fire.js';
@@ -103,11 +105,15 @@ export class CollisionSystem extends createSystem({
       if (inTraining) {
         // Your balls score targets; the targets' return fire (owner 1) hits you.
         if (owner === 0) this.myBallVsTargets(ball, radius, returning);
-        else this.enemyBallVsMe(ball, hitboxes, radius, damage, returning);
-      } else if (app.mode === 'net') {
+        else this.enemyBallVsMe(ball, owner, hitboxes, radius, damage, returning);
+      } else if (app.mode === 'net' && app.arcade === '1v1') {
         // Online 1v1: you rule hits against YOURSELF only; your hits on the
         // rival are ruled by THEIR client and arrive as a `hit` message.
-        if (owner === 1) this.enemyBallVsMe(ball, hitboxes, radius, damage, returning);
+        if (owner === 1) this.enemyBallVsMe(ball, owner, hitboxes, radius, damage, returning);
+      } else if (app.mode === 'net') {
+        // Arcade mesh: same victim authority for any enemy ball; the report
+        // names the attacker's seat so only they spend their ball.
+        if (owner !== 0 && ownerTeam !== 0) this.enemyBallVsMe(ball, owner, hitboxes, radius, damage, returning);
       } else {
         // Bot bouts (incl. arcade 2v2/FFA): one local sim is authoritative for
         // every fighter — resolve this ball against any enemy-team body.
@@ -119,7 +125,7 @@ export class CollisionSystem extends createSystem({
   }
 
   /** An enemy ball (flying, or recalled through me) connecting with my body. */
-  private enemyBallVsMe(ball: Entity, hitboxes: Entity[], radius: number, damage: number, returning: boolean): void {
+  private enemyBallVsMe(ball: Entity, owner: number, hitboxes: Entity[], radius: number, damage: number, returning: boolean): void {
     for (const hitbox of hitboxes) {
       if ((hitbox.getValue(Hitbox, 'team') ?? 0) !== 0) continue;
       const hbObj = hitbox.object3D;
@@ -151,12 +157,15 @@ export class CollisionSystem extends createSystem({
       if (returning) ball.setValue(Fireball, 'returnHit', 1);
       else this.spendBall(ball);
       if (app.mode === 'net' && app.state === 'playing') {
-        net.send({
-          k: 'hit',
-          hand: (ball.getValue(Fireball, 'hand') ?? 0) as 0 | 1,
-          dmg: actualDamage,
-          ...(returning ? { ret: true } : {}),
-        });
+        const hand = (ball.getValue(Fireball, 'hand') ?? 0) as 0 | 1;
+        const ret = returning ? { ret: true } : {};
+        if (app.arcade === '1v1') {
+          net.send({ k: 'hit', hand, dmg: actualDamage, ...ret });
+        } else {
+          // Arcade mesh: tag the attacker's canonical seat so only they act.
+          const by = localLayout()[owner]?.canonical ?? owner;
+          mesh.send({ k: 'hit', hand, dmg: actualDamage, by, ...ret });
+        }
       }
       return;
     }
