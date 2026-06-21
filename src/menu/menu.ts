@@ -602,7 +602,7 @@ function hitCustom(u: number, v: number): MenuAction | null {
 }
 
 // Leaderboard row band: the full top 10 laid out at once, then the footer.
-const BOARD_ROW_Y0 = 152;
+const BOARD_ROW_Y0 = 164;
 const BOARD_ROW_STEP = 30;
 
 const BOARD_TABS: Array<[LeaderboardTab, string, MenuAction]> = [
