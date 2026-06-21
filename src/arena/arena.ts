@@ -28,7 +28,9 @@ import {
   type Object3D,
 } from 'three';
 import type { World } from '@iwsdk/core';
-import { ARENA_GAP, OCTAGON_VERTICES, PALETTE, PLATFORM } from '../config.js';
+import { ARENA_GAP, OCTAGON_VERTICES, PALETTE, PLATFORM, teamColor } from '../config.js';
+import { MAX_OPPONENTS } from '../combat/opponentBus.js';
+import { localLayout } from '../combat/layout.js';
 import { hazardTexture } from '../materials/hazard.js';
 import { diamondPlateTextures, type DiamondPlateMaps } from '../materials/diamondPlate.js';
 import { octagonSlab } from './octagon.js';
@@ -181,6 +183,50 @@ function makePlatform(color: number): Group {
   return group;
 }
 
+/** Recolour a platform's neon rim + slab emissive to a team tint. */
+function tintPlatform(group: Object3D, color: number): void {
+  const core = new Color(color).lerp(new Color(0xffffff), 0.45);
+  const tint = new Color(color);
+  group.traverse((o) => {
+    const mesh = o as Mesh;
+    if (!mesh.isMesh) return;
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    for (const mat of mats) {
+      const role = (mat as MeshBasicMaterial).userData?.role;
+      if (role === 'neon-core') (mat as MeshBasicMaterial).color.copy(core);
+      else if (role === 'neon-halo') (mat as MeshBasicMaterial).color.copy(tint);
+      else if (role === 'slab') (mat as MeshStandardMaterial).emissive.copy(tint);
+    }
+  });
+}
+
+/** Name of the platform mesh for an other-fighter slot (1 keeps the legacy id). */
+export function platformName(slot: number): string {
+  return slot === 1 ? 'opponent-platform' : `opponent-platform-${slot}`;
+}
+
+/**
+ * Lay the platforms out for the current bout's LOCAL roster: the player pedestal
+ * stays at the origin, each other-fighter pedestal moves to its slot (position +
+ * facing yaw), recolours to its team tint and shows only if the bout uses it.
+ */
+export function applyArenaLayout(scene: Object3D): void {
+  const roster = localLayout();
+  for (let slot = 1; slot <= MAX_OPPONENTS; slot++) {
+    const pad = scene.getObjectByName(platformName(slot));
+    if (!pad) continue;
+    const seat = roster[slot];
+    if (seat) {
+      pad.visible = true;
+      pad.position.set(seat.pos[0], seat.pos[1], seat.pos[2]);
+      pad.rotation.y = seat.yaw;
+      tintPlatform(pad, teamColor(seat.team));
+    } else {
+      pad.visible = false;
+    }
+  }
+}
+
 export function buildArena(world: World): Object3D {
   const scene = world.scene;
 
@@ -192,11 +238,15 @@ export function buildArena(world: World): Object3D {
   mine.name = 'player-platform';
   arena.add(mine);
 
-  // The opponent's pedestal across the gap — same shape, blue rim.
-  const theirs = makePlatform(PALETTE.coolFlame);
-  theirs.position.set(0, 0, -ARENA_GAP);
-  theirs.name = 'opponent-platform';
-  arena.add(theirs);
+  // The other fighters' pedestals — same shape, recoloured/placed per layout by
+  // applyArenaLayout. Built once at the MAX roster size; spare slots stay hidden.
+  for (let slot = 1; slot <= MAX_OPPONENTS; slot++) {
+    const pad = makePlatform(PALETTE.coolFlame);
+    pad.name = platformName(slot);
+    pad.position.set(0, 0, -ARENA_GAP);
+    pad.visible = false;
+    arena.add(pad);
+  }
 
   // "FIRE FIGHT" signage hung high behind the opponent.
   createTitleBanner(scene);
@@ -208,5 +258,7 @@ export function buildArena(world: World): Object3D {
   arena.add(key);
 
   scene.add(arena);
+  // Start in the classic duel layout (slot 1 across the gap, the rest hidden).
+  applyArenaLayout(scene);
   return arena;
 }

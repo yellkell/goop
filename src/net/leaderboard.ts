@@ -16,7 +16,8 @@
  */
 
 import { FIREBASE_ENABLED, firebaseConfig } from './firebaseConfig.js';
-import { xpForBot, xpForMatch, xpForTraining } from '../menu/progression.js';
+import { xpForArcade, xpForBot, xpForMatch, xpForTraining } from '../menu/progression.js';
+import type { ArcadeMode } from '../config.js';
 
 export interface LbRow {
   /** The player's doc id — identifies them when their row is clicked. */
@@ -33,9 +34,10 @@ export interface LbRow {
   note: string;
 }
 
-/** The three score boards, plus a synthetic PROFILE face (no rows). */
-export type LeaderboardTab = 'ranked' | 'xp' | 'training' | 'profile';
-type DataTab = 'ranked' | 'xp' | 'training';
+/** The score boards (RANKED / XP / the three ARCADE boards), plus a synthetic
+ *  PROFILE face (no rows). The ARCADE tab fronts AIM (training) / 2v2 / FFA. */
+export type LeaderboardTab = 'ranked' | 'xp' | 'training' | 'duo' | 'ffa' | 'profile';
+type DataTab = 'ranked' | 'xp' | 'training' | 'duo' | 'ffa';
 
 const LEADERBOARD_FETCH_LIMIT = 50;
 /** Rows the lobby board shows at once — the full top 10, no scrolling needed
@@ -49,7 +51,9 @@ export const leaderboard = {
   ranked: [] as LbRow[],
   xp: [] as LbRow[],
   training: [] as LbRow[],
-  scroll: { ranked: 0, xp: 0, training: 0 } as Record<DataTab, number>,
+  duo: [] as LbRow[],
+  ffa: [] as LbRow[],
+  scroll: { ranked: 0, xp: 0, training: 0, duo: 0, ffa: 0 } as Record<DataTab, number>,
   status: FIREBASE_ENABLED ? 'loading…' : 'leaderboard offline',
   /** Whose profile the PROFILE face shows; null = your own. */
   viewRow: null as LbRow | null,
@@ -65,7 +69,7 @@ const ELO_K = 32;
 const SCORE_WIN = 20;
 const SCORE_BOT_WIN = 2;
 
-const profile = { id: '', name: '', score: 0, elo: 1000, training: 0, xp: 0, note: '' };
+const profile = { id: '', name: '', score: 0, elo: 1000, training: 0, duo: 0, ffa: 0, xp: 0, note: '' };
 
 /** Your own profile as a board row (for the PROFILE face when viewing self). */
 export function myProfileRow(): LbRow {
@@ -94,17 +98,11 @@ export function setPlayerNote(raw: string): void {
 }
 
 function isDataTab(tab: LeaderboardTab): tab is DataTab {
-  return tab === 'ranked' || tab === 'xp' || tab === 'training';
+  return tab === 'ranked' || tab === 'xp' || tab === 'training' || tab === 'duo' || tab === 'ffa';
 }
 
 export function leaderboardRows(tab: LeaderboardTab = leaderboard.tab): LbRow[] {
-  return tab === 'ranked'
-    ? leaderboard.ranked
-    : tab === 'xp'
-      ? leaderboard.xp
-      : tab === 'training'
-        ? leaderboard.training
-        : [];
+  return isDataTab(tab) ? leaderboard[tab] : [];
 }
 
 /** Current scroll offset for the active board (0 on the profile face). */
@@ -242,6 +240,8 @@ export function initLeaderboard(): void {
         profile.score = (d.score as number) ?? 0;
         profile.elo = (d.elo as number) ?? 1000;
         profile.training = (d.training as number) ?? 0;
+        profile.duo = (d.duo as number) ?? 0;
+        profile.ffa = (d.ffa as number) ?? 0;
         profile.xp = (d.xp as number) ?? 0;
         profile.note = (d.note as string) ?? '';
         // A locally renamed player syncs the doc's stale callsign.
@@ -252,6 +252,8 @@ export function initLeaderboard(): void {
           score: 0,
           elo: 1000,
           training: 0,
+          duo: 0,
+          ffa: 0,
           xp: 0,
           note: '',
           updatedAt: h.fs.serverTimestamp(),
@@ -275,7 +277,7 @@ export async function refreshLeaderboard(force = false): Promise<void> {
   const { fs, db } = h;
   try {
     const players = fs.collection(db, 'players');
-    const pull = async (field: 'elo' | 'xp' | 'training'): Promise<LbRow[]> => {
+    const pull = async (field: 'elo' | 'xp' | 'training' | 'duo' | 'ffa'): Promise<LbRow[]> => {
       const snap = await fs.getDocs(fs.query(players, fs.orderBy(field, 'desc'), fs.limit(LEADERBOARD_FETCH_LIMIT)));
       return snap.docs
         .map((d) => ({
@@ -291,14 +293,14 @@ export async function refreshLeaderboard(force = false): Promise<void> {
         // real bout); XP/training boards show anyone who's earned anything.
         .filter((r) => (field === 'elo' ? r.value !== 1000 : r.value > 0));
     };
-    [leaderboard.ranked, leaderboard.xp, leaderboard.training] = await Promise.all([
+    [leaderboard.ranked, leaderboard.xp, leaderboard.training, leaderboard.duo, leaderboard.ffa] = await Promise.all([
       pull('elo'),
       pull('xp'),
       pull('training'),
+      pull('duo'),
+      pull('ffa'),
     ]);
-    clampLeaderboardScroll('ranked');
-    clampLeaderboardScroll('xp');
-    clampLeaderboardScroll('training');
+    (['ranked', 'xp', 'training', 'duo', 'ffa'] as const).forEach(clampLeaderboardScroll);
     leaderboard.status = '';
   } catch {
     leaderboard.status = 'leaderboard unreachable';
@@ -344,6 +346,19 @@ export function reportBotResult(win: boolean): void {
   if (win) profile.score += SCORE_BOT_WIN;
   profile.xp += xpForBot();
   writeMine({ score: profile.score, xp: profile.xp });
+  void refreshLeaderboard(true);
+}
+
+/**
+ * A finished arcade brawl (2v2 / FFA): bank a flat participation XP either way,
+ * and on a win tick that mode's own win board. No 1v1 score / ELO movement.
+ */
+export function reportArcade(mode: ArcadeMode, win: boolean): void {
+  profile.xp += xpForArcade();
+  const fields: Record<string, unknown> = { xp: profile.xp };
+  if (win && mode === '2v2') fields.duo = ++profile.duo;
+  else if (win && mode === 'ffa') fields.ffa = ++profile.ffa;
+  writeMine(fields);
   void refreshLeaderboard(true);
 }
 

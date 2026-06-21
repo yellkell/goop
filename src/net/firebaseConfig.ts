@@ -12,6 +12,14 @@
  *     match /{candidates}/{doc} { allow read, write: if true; }
  *   }
  *
+ * The arcade 2v2/FFA mesh (net/meshImpl.ts) adds one more collection —
+ * `arcadeRooms` — with per-pair signalling + ICE candidate subcollections:
+ *
+ *   match /arcadeRooms/{room} {
+ *     allow read, create, update, delete: if true;
+ *     match /{document=**} { allow read, write: if true; }   // sig + c{seat}
+ *   }
+ *
  * (Tighten with App Check / auth before a big public release.)
  *
  * Set `FIREBASE_ENABLED = false` to force the WebSocket relay everywhere.

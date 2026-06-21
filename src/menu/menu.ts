@@ -40,6 +40,8 @@ export type PanelId = 'train' | 'duel' | 'info' | 'board' | 'custom' | 'loadout'
 
 export type MenuAction =
   | 'start-training'
+  | 'arcade-2v2'
+  | 'arcade-ffa'
   | 'toggle-shootback'
   | 'ranked-match'
   | 'quick-match'
@@ -54,7 +56,10 @@ export type MenuAction =
   | 'toggle-environment'
   | 'lb-ranked'
   | 'lb-xp'
+  | 'lb-arcade'
   | 'lb-training'
+  | 'lb-duo'
+  | 'lb-ffa'
   | 'lb-profile'
   | `lb-row-${number}`
   | 'edit-note'
@@ -198,20 +203,23 @@ function makePanel(
   return { id, mesh, redraw, hitTest, drag, click };
 }
 
-/** Centre — AIM TRAINING: the big start plate + the shoot-back toggle. */
+/** Centre — ARCADE: aim training plus the 2v2 and FFA brawls, and the
+ *  shoot-back toggle (which only flavours aim training). */
 function drawTrain(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
-  panelBg(ctx, false, UI.emberBright, 'AIM TRAINING');
+  panelBg(ctx, false, UI.emberBright, 'ARCADE');
 
-  buttonPlate(ctx, 70, 120, PW - 140, 110, 'START', UI.ember, hoverAction === 'start-training');
+  buttonPlate(ctx, 70, 96, PW - 140, 70, 'AIM TRAINING', UI.ember, hoverAction === 'start-training');
+  buttonPlate(ctx, 70, 174, PW - 140, 70, '2V2', UI.cool, hoverAction === 'arcade-2v2');
+  buttonPlate(ctx, 70, 252, PW - 140, 70, 'FFA', UI.amber, hoverAction === 'arcade-ffa');
 
-  // Shoot-back toggle row: an industrial breaker switch.
+  // Shoot-back toggle row: an industrial breaker switch (aim training only).
   const on = app.shootBack;
   const toggleHot = hoverAction === 'toggle-shootback';
-  ctx.font = '700 28px system-ui, sans-serif';
+  ctx.font = '700 24px system-ui, sans-serif';
   ctx.textAlign = 'left';
   ctx.fillStyle = toggleHot ? UI.emberBright : UI.textDim;
-  ctx.fillText('targets shoot back', 64, 300);
-  const pw = 120, ph = 56, px = PW - 64 - pw, py = 272;
+  ctx.fillText('targets shoot back', 64, 356);
+  const pw = 104, ph = 44, px = PW - 64 - pw, py = 334;
   plate(ctx, px, py, pw, ph, {
     cut: 10,
     fill: on ? 'rgba(79,183,255,0.25)' : toggleHot ? 'rgba(255,176,0,0.16)' : 'rgba(150,150,170,0.12)',
@@ -219,20 +227,17 @@ function drawTrain(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null
     rivets: false,
   });
   ctx.fillStyle = on ? UI.cool : UI.steelDim;
-  const kw = pw / 2 - 12;
-  ctx.fillRect(on ? px + pw - kw - 8 : px + 8, py + 8, kw, ph - 16);
-
-  ctx.textAlign = 'center';
-  ctx.font = '600 24px system-ui, sans-serif';
-  ctx.fillStyle = UI.amberSoft;
-  ctx.fillText(`best score  ${app.stats.trainingBest}`, PW / 2, 360);
+  const kw = pw / 2 - 10;
+  ctx.fillRect(on ? px + pw - kw - 6 : px + 6, py + 6, kw, ph - 12);
 }
 
 function hitTrain(_u: number, v: number): MenuAction | null {
   // v: 0 bottom → 1 top (canvas y = (1-v)*PH).
   const y = (1 - v) * PH;
-  if (y >= 110 && y <= 245) return 'start-training';
-  if (y >= 262 && y <= 340) return 'toggle-shootback';
+  if (y >= 96 && y <= 166) return 'start-training';
+  if (y >= 174 && y <= 244) return 'arcade-2v2';
+  if (y >= 252 && y <= 322) return 'arcade-ffa';
+  if (y >= 328 && y <= 382) return 'toggle-shootback';
   return null;
 }
 
@@ -674,20 +679,36 @@ function hitCustom(u: number, v: number): MenuAction | null {
 const BOARD_ROW_Y0 = 164;
 const BOARD_ROW_STEP = 30;
 
-const BOARD_TABS: Array<[LeaderboardTab, string, MenuAction]> = [
-  ['ranked', 'RANKED', 'lb-ranked'],
-  ['xp', 'XP', 'lb-xp'],
-  ['training', 'AIM', 'lb-training'],
-  ['profile', 'PROFILE', 'lb-profile'],
+/** Top row: RANKED / XP / ARCADE / PROFILE. ARCADE fronts the three brawl
+ *  boards, so it lights for any of training/duo/ffa. */
+const BOARD_TABS: Array<[string, MenuAction, (t: LeaderboardTab) => boolean]> = [
+  ['RANKED', 'lb-ranked', (t) => t === 'ranked'],
+  ['XP', 'lb-xp', (t) => t === 'xp'],
+  ['ARCADE', 'lb-arcade', (t) => t === 'training' || t === 'duo' || t === 'ffa'],
+  ['PROFILE', 'lb-profile', (t) => t === 'profile'],
 ];
 const BOARD_TAB_W = (BW - 96 - 48) / 4;
 
-/** Behind — the Firebase leaderboard: RANKED / XP / AIM boards + PROFILE face. */
+/** ARCADE sub-tabs: the three brawl boards. */
+const ARCADE_SUBS: Array<[LeaderboardTab, string, MenuAction]> = [
+  ['training', 'AIM', 'lb-training'],
+  ['duo', '2V2', 'lb-duo'],
+  ['ffa', 'FFA', 'lb-ffa'],
+];
+const ARCADE_SUB_Y = 140;
+const ARCADE_SUB_H = 38;
+const ARCADE_SUB_W = (BW - 96 - 32) / 3;
+
+function arcadeActive(): boolean {
+  return leaderboard.tab === 'training' || leaderboard.tab === 'duo' || leaderboard.tab === 'ffa';
+}
+
+/** Behind — the Firebase leaderboard: RANKED / XP / ARCADE boards + PROFILE. */
 function drawBoard(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
   panelBg(ctx, false, UI.amber, 'LEADERBOARD', BW, BH);
   let x = 48;
-  for (const [id, label, action] of BOARD_TABS) {
-    const active = leaderboard.tab === id;
+  for (const [label, action, isActive] of BOARD_TABS) {
+    const active = isActive(leaderboard.tab);
     const hot = hoverAction === action;
     plate(ctx, x, 88, BOARD_TAB_W, 44, {
       cut: 10,
@@ -701,15 +722,42 @@ function drawBoard(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null
     ctx.fillText(label, x + BOARD_TAB_W / 2, 110);
     x += BOARD_TAB_W + 16;
   }
+
+  // ARCADE sub-tabs (AIM / 2V2 / FFA) appear only under the ARCADE tab.
+  if (arcadeActive()) {
+    let sx = 48;
+    for (const [id, label, action] of ARCADE_SUBS) {
+      const active = leaderboard.tab === id;
+      const hot = hoverAction === action;
+      plate(ctx, sx, ARCADE_SUB_Y, ARCADE_SUB_W, ARCADE_SUB_H, {
+        cut: 8,
+        fill: active ? 'rgba(79,183,255,0.18)' : hot ? 'rgba(255,176,0,0.12)' : 'rgba(150,150,170,0.08)',
+        stroke: active ? UI.cool : hot ? UI.amber : UI.steelDim,
+        rivets: false,
+      });
+      ctx.font = '700 17px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = active ? UI.cool : hot ? UI.amber : UI.textDim;
+      ctx.fillText(label, sx + ARCADE_SUB_W / 2, ARCADE_SUB_Y + ARCADE_SUB_H / 2 + 6);
+      sx += ARCADE_SUB_W + 16;
+    }
+  }
+
   if (leaderboard.tab === 'profile') drawProfile(ctx, hoverAction);
   else drawBoardRows(ctx, hoverAction);
+}
+
+/** Row column origin — pushed down when the ARCADE sub-tab row is showing. */
+function boardRowY0(): number {
+  return arcadeActive() ? BOARD_ROW_Y0 + ARCADE_SUB_H + 8 : BOARD_ROW_Y0;
 }
 
 function drawBoardRows(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
   const rows = leaderboardRows();
   const offset = boardScroll();
+  const rowY0 = boardRowY0();
   rows.slice(offset, offset + LEADERBOARD_VISIBLE_ROWS).forEach((r, i) => {
-    const y = BOARD_ROW_Y0 + i * BOARD_ROW_STEP;
+    const y = rowY0 + i * BOARD_ROW_STEP;
     const hot = hoverAction === `lb-row-${i}`;
     if (hot) {
       ctx.fillStyle = 'rgba(255,176,0,0.12)';
@@ -731,7 +779,7 @@ function drawBoardRows(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | 
   if (!rows.length) {
     ctx.fillStyle = UI.textDim;
     ctx.font = '600 22px system-ui, sans-serif';
-    ctx.fillText(leaderboard.status || 'no entries yet', BW / 2, BOARD_ROW_Y0 + 4 * BOARD_ROW_STEP);
+    ctx.fillText(leaderboard.status || 'no entries yet', BW / 2, rowY0 + 4 * BOARD_ROW_STEP);
   } else {
     ctx.fillStyle = UI.steelDim;
     ctx.font = '600 18px system-ui, sans-serif';
@@ -825,7 +873,12 @@ function hitBoard(u: number, v: number): MenuAction | null {
   const y = (1 - v) * BH;
   if (y >= 82 && y <= 138) {
     const i = Math.max(0, Math.min(3, Math.floor((x - 48) / (BOARD_TAB_W + 16))));
-    return BOARD_TABS[i][2];
+    return BOARD_TABS[i][1];
+  }
+  // ARCADE sub-tabs.
+  if (arcadeActive() && y >= ARCADE_SUB_Y - 4 && y <= ARCADE_SUB_Y + ARCADE_SUB_H + 4) {
+    const i = Math.max(0, Math.min(2, Math.floor((x - 48) / (ARCADE_SUB_W + 16))));
+    return ARCADE_SUBS[i][2];
   }
   if (leaderboard.tab === 'profile') {
     if (y >= 482 && y <= 536) {
@@ -834,8 +887,9 @@ function hitBoard(u: number, v: number): MenuAction | null {
     }
     return null;
   }
-  if (y >= BOARD_ROW_Y0 - 15 && y <= BOARD_ROW_Y0 + LEADERBOARD_VISIBLE_ROWS * BOARD_ROW_STEP) {
-    const n = Math.floor((y - (BOARD_ROW_Y0 - 15)) / BOARD_ROW_STEP);
+  const rowY0 = boardRowY0();
+  if (y >= rowY0 - 15 && y <= rowY0 + LEADERBOARD_VISIBLE_ROWS * BOARD_ROW_STEP) {
+    const n = Math.floor((y - (rowY0 - 15)) / BOARD_ROW_STEP);
     if (n >= 0 && n < LEADERBOARD_VISIBLE_ROWS) return `lb-row-${n}` as MenuAction;
   }
   return null;

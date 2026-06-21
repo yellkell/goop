@@ -49,6 +49,8 @@ import {
   platformSkin,
 } from '../avatar/skins.js';
 import { match } from '../combat/matchState.js';
+import { applyArenaLayout } from '../arena/arena.js';
+import { mesh } from '../net/mesh.js';
 import { UI } from '../ui/industrial.js';
 import { net } from '../net/client.js';
 import { startQueueWatch, stopQueueWatch } from '../net/queueWatch.js';
@@ -57,6 +59,7 @@ import { PUB_REGIONS } from '../pub/config.js';
 import {
   boardScroll,
   hasCustomName,
+  leaderboard,
   leaderboardRows,
   myNote,
   myStats,
@@ -257,7 +260,11 @@ export class MenuSystem extends createSystem({}) {
     // once, prefilled with the auto name, and the pending action resumes after
     // OK. Saved forever after, shared by both boards.
     if (
-      (action === 'start-training' || action === 'quick-match' || action === 'ranked-match') &&
+      (action === 'start-training' ||
+        action === 'quick-match' ||
+        action === 'ranked-match' ||
+        action === 'arcade-2v2' ||
+        action === 'arcade-ffa') &&
       !hasCustomName()
     ) {
       this.kbPending = action;
@@ -267,7 +274,22 @@ export class MenuSystem extends createSystem({}) {
     }
     switch (action) {
       case 'start-training':
+        app.arcade = '1v1';
         app.state = 'training';
+        break;
+      case 'arcade-2v2':
+        // Arcade brawl: drop onto bots now, hunt humans on the mesh in the
+        // background, and flip to the live bout once the room fills.
+        app.arcade = '2v2';
+        app.mode = 'bot';
+        app.state = 'playing';
+        void mesh.queue('2v2', (s) => (app.netStatus = s));
+        break;
+      case 'arcade-ffa':
+        app.arcade = 'ffa';
+        app.mode = 'bot';
+        app.state = 'playing';
+        void mesh.queue('ffa', (s) => (app.netStatus = s));
         break;
       case 'toggle-shootback':
         app.shootBack = !app.shootBack;
@@ -275,12 +297,14 @@ export class MenuSystem extends createSystem({}) {
         break;
       case 'ranked-match':
         // Wait in the lobby for a real human — no bot fallback.
+        app.arcade = '1v1';
         app.state = 'queueing';
         net.queue();
         break;
       case 'quick-match':
         // Drop straight onto a bot, but keep hunting in the background: if a
         // human turns up mid-bout the bot is dropped and we swap to the live bout.
+        app.arcade = '1v1';
         app.mode = 'bot';
         app.state = 'playing';
         net.queue();
@@ -328,8 +352,21 @@ export class MenuSystem extends createSystem({}) {
       case 'lb-xp':
         setLeaderboardTab('xp');
         break;
+      case 'lb-arcade':
+        // The ARCADE tab opens onto its first board (AIM) unless one of the
+        // brawl boards is already showing.
+        setLeaderboardTab(
+          leaderboard.tab === 'duo' || leaderboard.tab === 'ffa' ? leaderboard.tab : 'training',
+        );
+        break;
       case 'lb-training':
         setLeaderboardTab('training');
+        break;
+      case 'lb-duo':
+        setLeaderboardTab('duo');
+        break;
+      case 'lb-ffa':
+        setLeaderboardTab('ffa');
         break;
       case 'lb-profile':
         setProfileView(null); // your own profile
@@ -727,6 +764,15 @@ export class MenuSystem extends createSystem({}) {
     // The title banner shows only in the lobby.
     const banner = this.scene.getObjectByName('title-banner');
     if (banner) banner.visible = inLobby;
+    // Outside a live bout, fall back to the classic duel layout so the lobby
+    // and Aim Training show one opponent pad, not a leftover arcade cross,
+    // and leave any arcade mesh room we were in.
+    if (app.state !== 'playing') {
+      mesh.cancel();
+      app.arcade = '1v1';
+      app.mySlot = 0;
+      applyArenaLayout(this.scene);
+    }
     // The opponent's platform reads as "occupied" only when fighting.
     const oppPlatform = this.scene.getObjectByName('opponent-platform');
     if (oppPlatform) oppPlatform.visible = app.state !== 'training';

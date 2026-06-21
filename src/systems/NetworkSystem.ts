@@ -68,7 +68,9 @@ export class NetworkSystem extends createSystem({
   private sentIam = false;
 
   update(delta: number): void {
-    if (app.mode !== 'net' || app.state !== 'playing') {
+    // The duel only. Arcade 2v2/FFA online bouts are MeshSystem's job; this
+    // path stays exactly as it was for 1v1.
+    if (app.mode !== 'net' || app.state !== 'playing' || app.arcade !== '1v1') {
       // Still drain so stale packets never leak into the next bout.
       if (net.inbox.length) net.inbox.length = 0;
       this.sentIam = false;

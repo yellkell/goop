@@ -19,10 +19,13 @@
 import { createSystem, InputComponent, Quaternion, Vector3, type Entity } from '@iwsdk/core';
 import { BallState, Fireball } from '../components/Fireball.js';
 import { createFireVisual, emberBurst, spawnEmber, stampTrail, type FireVisual } from '../fx/fire.js';
-import { ballCommands, opponent } from '../combat/opponentBus.js';
+import { ballCommands, opponents, MAX_OPPONENTS } from '../combat/opponentBus.js';
+import { fighterTeam } from '../combat/fighters.js';
 import { match } from '../combat/matchState.js';
 import { app, training } from '../menu/appState.js';
 import { net } from '../net/client.js';
+import { mesh } from '../net/mesh.js';
+import type { PeerMessage } from '../net/protocol.js';
 import { pulseHand } from '../input/haptics.js';
 import * as sfx from '../audio/sfx.js';
 import { ARENA_BOUNDS, ARENA_GAP, ATTACH, FIREBALL, NET } from '../config.js';
@@ -96,9 +99,17 @@ export class FireballSystem extends createSystem({
    */
   private netBlend = new Map<Entity, Vector3>();
 
+  /** Route an outgoing net event: the classic duel uses the 1v1 client; arcade
+   *  bouts broadcast over the mesh. Both no-op outside a live net bout. */
+  private sendNet(msg: PeerMessage): void {
+    if (app.arcade === '1v1') net.send(msg);
+    else if (app.mode === 'net') mesh.send(msg);
+  }
+
   init(): void {
-    // Your pair (orange) and the opponent's pair (blue), one per fist each.
-    for (const owner of [0, 1] as const) {
+    // Your pair (orange) and every other fighter's pair (cool), one per fist.
+    // Spare slots' balls simply stay hidden until that fighter is in a bout.
+    for (let owner = 0; owner <= MAX_OPPONENTS; owner++) {
       for (const hand of [0, 1] as const) {
         this.createBall(owner, hand);
       }
@@ -122,7 +133,7 @@ export class FireballSystem extends createSystem({
 
   /** Apply the rival's broadcast attachment onto our copy of their ball. */
   private applyAttachmentRemote(ball: Entity, hand: Hand, att: number, dmg: number, scl: number): void {
-    this.equip(ball, 1, hand, { att, dmg, scl });
+    this.equip(ball, (ball.getValue(Fireball, 'owner') ?? 1) as number, hand, { att, dmg, scl });
   }
 
   /** Damage/size for an attachment given the recall distance. */
@@ -138,7 +149,7 @@ export class FireballSystem extends createSystem({
   }
 
   /** Stamp an effect onto a main ball and spawn the extra balls for a split. */
-  private equip(ball: Entity, owner: 0 | 1, hand: Hand, eff: AttachEffect): void {
+  private equip(ball: Entity, owner: number, hand: Hand, eff: AttachEffect): void {
     ball.setValue(Fireball, 'attach', eff.att);
     ball.setValue(Fireball, 'damage', eff.dmg);
     ball.setValue(Fireball, 'radius', FIREBALL.radius * eff.scl);
@@ -152,7 +163,7 @@ export class FireballSystem extends createSystem({
   }
 
   /** One extra split ball, born mid-air already homing for the fist. */
-  private spawnShard(owner: 0 | 1, hand: Hand, index: number, pos: Vector3, damage: number, radius: number): void {
+  private spawnShard(owner: number, hand: Hand, index: number, pos: Vector3, damage: number, radius: number): void {
     const e = this.createBall(owner, hand);
     e.setValue(Fireball, 'shard', 1);
     e.setValue(Fireball, 'shardIndex', index);
@@ -220,8 +231,9 @@ export class FireballSystem extends createSystem({
       const transient = (ball.getValue(Fireball, 'transient') ?? 0) === 1;
       const shard = (ball.getValue(Fireball, 'shard') ?? 0) === 1;
 
-      // The opponent's bound pair only exists while an opponent does.
-      const visible = live && (owner === 0 || transient || (app.state === 'playing' && opponent.active));
+      // Another fighter's bound pair only exists while that fighter does.
+      const visible =
+        live && (owner === 0 || transient || (app.state === 'playing' && (opponents[owner - 1]?.active ?? false)));
       obj.visible = visible;
       if (!visible) {
         if (transient || shard) this.destroyBall(ball);
@@ -295,7 +307,7 @@ export class FireballSystem extends createSystem({
         // leg connect again read as an awful instant double hit.
         ball.setValue(Fireball, 'returnHit', state === BallState.Dead ? 1 : 0);
         sfx.recall();
-        net.send(
+        this.sendNet(
           eff.att
             ? { k: 'recall', hand, att: eff.att, dmg: eff.dmg, scl: eff.scl }
             : { k: 'recall', hand },
@@ -335,8 +347,11 @@ export class FireballSystem extends createSystem({
     const obj = ball.object3D!;
     _dir.copy(_vel).normalize();
 
-    // Aim assist: blend the swing toward the opponent's chest.
-    _aim.set(0, 1.25, -ARENA_GAP).sub(obj.position).normalize();
+    // Aim assist: blend the swing toward an enemy's chest. The classic duel
+    // keeps its fixed aim point (across the gap); arcade brawls steer toward
+    // the nearest enemy so a swing in their direction finds them.
+    this.aimTarget(obj.position, _aim);
+    _aim.sub(obj.position).normalize();
     _dir.lerp(_aim, FIREBALL.aimAssist).normalize();
 
     const speed = Math.min(
@@ -356,12 +371,34 @@ export class FireballSystem extends createSystem({
     app.stats.ballsThrown += 1;
     if (app.state === 'training') training.thrown += 1;
 
-    net.send({
+    this.sendNet({
       k: 'throw',
       hand,
       pos: [obj.position.x, obj.position.y, obj.position.z],
       vel: [v[0], v[1], v[2]],
     });
+  }
+
+  /** Aim point for YOUR throw's assist: the nearest enemy chest, or — in the
+   *  classic duel — the fixed point across the gap (preserves 1v1 feel). */
+  private aimTarget(from: Vector3, out: Vector3): void {
+    if (app.arcade === '1v1') {
+      out.set(0, 1.25, -ARENA_GAP);
+      return;
+    }
+    let best: Vector3 | null = null;
+    let bestD = Infinity;
+    for (let i = 0; i < MAX_OPPONENTS; i++) {
+      const o = opponents[i];
+      if (!o.active || fighterTeam(i + 1) === 0) continue;
+      const d = o.headPos.distanceToSquared(from);
+      if (d < bestD) {
+        bestD = d;
+        best = o.headPos;
+      }
+    }
+    if (best) out.copy(best);
+    else out.set(0, 1.25, -ARENA_GAP);
   }
 
   // --- shared physics ----------------------------------------------------
@@ -409,7 +446,7 @@ export class FireballSystem extends createSystem({
         // The invisible cage ~10 yards out from the platforms: a ball that
         // reaches it bursts against the wall and dies right there.
         if (this.clampToCage(obj.position)) {
-          emberBurst(obj.position, 14, owner === 1);
+          emberBurst(obj.position, 14, owner !== 0);
           sfx.wallThud();
           if (transient) {
             this.destroyBall(ball);
@@ -517,8 +554,9 @@ export class FireballSystem extends createSystem({
         (ray ?? grip).getWorldQuaternion(_gripQ);
       }
     } else {
-      _grip.copy(opponent.handPos[hand]);
-      _gripQ.copy(opponent.handQuat[hand]);
+      const pose = opponents[owner - 1];
+      _grip.copy(pose.handPos[hand]);
+      _gripQ.copy(pose.handQuat[hand]);
     }
   }
 
@@ -532,7 +570,8 @@ export class FireballSystem extends createSystem({
         continue;
       }
       if (!roundLive && (cmd.type === 'throw' || cmd.type === 'recall')) continue;
-      const ball = this.findBall(1, cmd.hand);
+      const owner = (cmd.slot ?? 0) + 1; // command slot is the opponent index
+      const ball = this.findBall(owner, cmd.hand);
       if (!ball) continue;
       switch (cmd.type) {
         case 'throw': {
@@ -579,23 +618,26 @@ export class FireballSystem extends createSystem({
           break;
       }
     }
-    // Orbit flags from the bus drive their bound pair's hover/orbit look.
-    for (const hand of [0, 1] as const) {
-      const ball = this.findBall(1, hand);
-      if (!ball) continue;
-      const st = ball.getValue(Fireball, 'state') ?? 0;
-      if (!roundLive) {
-        if (st === BallState.Orbit) ball.setValue(Fireball, 'state', BallState.Hover);
-        continue;
-      }
-      if (opponent.orbiting[hand] && st === BallState.Hover) {
-        ball.setValue(Fireball, 'state', BallState.Orbit);
-        ball.setValue(Fireball, 'spin', 0);
-      } else if (!opponent.orbiting[hand] && st === BallState.Orbit) {
-        ball.setValue(Fireball, 'state', BallState.Hover);
-      }
-      if (st === BallState.Orbit) {
-        ball.setValue(Fireball, 'spin', (ball.getValue(Fireball, 'spin') ?? 0) + 0.016);
+    // Orbit flags from the bus drive each fighter's bound pair hover/orbit look.
+    for (let i = 0; i < MAX_OPPONENTS; i++) {
+      const pose = opponents[i];
+      for (const hand of [0, 1] as const) {
+        const ball = this.findBall(i + 1, hand);
+        if (!ball) continue;
+        const st = ball.getValue(Fireball, 'state') ?? 0;
+        if (!roundLive || !pose.active) {
+          if (st === BallState.Orbit) ball.setValue(Fireball, 'state', BallState.Hover);
+          continue;
+        }
+        if (pose.orbiting[hand] && st === BallState.Hover) {
+          ball.setValue(Fireball, 'state', BallState.Orbit);
+          ball.setValue(Fireball, 'spin', 0);
+        } else if (!pose.orbiting[hand] && st === BallState.Orbit) {
+          ball.setValue(Fireball, 'state', BallState.Hover);
+        }
+        if (st === BallState.Orbit) {
+          ball.setValue(Fireball, 'spin', (ball.getValue(Fireball, 'spin') ?? 0) + 0.016);
+        }
       }
     }
   }
@@ -621,7 +663,7 @@ export class FireballSystem extends createSystem({
     ball.setValue(Fireball, 'heat', heat);
     visual.update(this.time, heat, _camQ);
 
-    const cool = (ball.getValue(Fireball, 'owner') ?? 0) === 1;
+    const cool = (ball.getValue(Fireball, 'owner') ?? 0) !== 0;
 
     // Comet trail while moving fast — stamped densely so the fat core
     // particles overlap into one thick molten rope (see fx/fire.ts).
@@ -647,8 +689,8 @@ export class FireballSystem extends createSystem({
 
   // --- lifecycle helpers ----------------------------------------------------
 
-  private createBall(owner: 0 | 1, hand: 0 | 1): Entity {
-    const visual = createFireVisual(owner);
+  private createBall(owner: number, hand: 0 | 1): Entity {
+    const visual = createFireVisual(owner === 0 ? 0 : 1);
     const e = this.world.createTransformEntity(visual.group, { persistent: true });
     e.addComponent(Fireball, { owner, hand, damage: FIREBALL.damage, radius: FIREBALL.radius });
     e.object3D!.visible = false;

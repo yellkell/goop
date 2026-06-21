@@ -14,6 +14,8 @@
 
 export type AppState = 'menu' | 'queueing' | 'playing' | 'training';
 export type AppMode = 'bot' | 'net';
+export type { ArcadeMode } from '../config.js';
+import type { ArcadeMode } from '../config.js';
 /** The arena backdrop: bare AR passthrough, or the papercraft desert. */
 export type AppEnvironment = 'ar' | 'desert';
 
@@ -57,6 +59,20 @@ export const app: {
   mode: AppMode;
   /** Network side: 0 = host (match authority), 1 = guest. */
   side: 0 | 1;
+  /**
+   * Active arena layout for the current bout. '1v1' is the classic duel (and
+   * the lobby default); '2v2' and 'ffa' are the ARCADE brawls. Drives the
+   * platform roster, combatant count and HUD.
+   */
+  arcade: ArcadeMode;
+  /**
+   * My CANONICAL seat in a networked arcade bout (0..N-1 in the shared
+   * MODE_LAYOUT). 0 for bot bouts, the classic duel and the mesh host; a mesh
+   * guest gets the seat matchmaking assigned. The local view is always rebuilt
+   * with me at index 0 (see combat/layout.ts), so gameplay never sees this
+   * directly — only the netcode's coordinate transforms do.
+   */
+  mySlot: number;
   /** Human-readable connection status for the lobby info panel. */
   netStatus: string;
   /** Aim Training option: targets shoot back so you can train dodging. */
@@ -88,6 +104,8 @@ export const app: {
   state: 'menu',
   mode: 'bot',
   side: 0,
+  arcade: '1v1',
+  mySlot: 0,
   netStatus: 'not connected',
   // Off unless the player has explicitly switched it on.
   shootBack: localStorage.getItem('ff-shootback') === '1',

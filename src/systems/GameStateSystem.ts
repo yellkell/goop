@@ -2,25 +2,32 @@
  * Owns the match: round timer, scoring, win/lose and reset. Reads/writes the
  * shared `match` state and refreshes the scoreboards every frame.
  *
- * A round ends when a boxer's Health hits 0 (knockout) or the timer expires
- * (higher Health wins). First to MATCH.winTarget round wins takes the match.
- *
- * ONLINE: the HOST (side 0) is the sole authority — it runs exactly this
- * logic and echoes `state` packets; the GUEST applies those echoes instead
- * of deciding anything itself (NetworkSystem feeds them into `match`).
+ * Two authorities live here:
+ *  - the classic DUEL (1v1) — a round ends when a boxer's Health hits 0 (KO) or
+ *    the timer expires (higher Health wins); first to MATCH.winTarget round
+ *    wins takes it. ONLINE the HOST (side 0) runs this and echoes `state`; the
+ *    GUEST applies the echoes. This path is unchanged.
+ *  - the ARCADE brawls (2v2 / FFA) — a team survival rule: a round ends when
+ *    only one team has anyone left standing (or the timer expires, top team
+ *    health wins), that team banks the round, first team to winTarget wins.
+ *    Arcade bouts run against bots, so there is always a single local
+ *    authority — no echo.
  */
 
 import { createSystem, type Entity } from '@iwsdk/core';
 import { Combatant } from '../components/Combatant.js';
 import { Health } from '../components/Health.js';
 import { match } from '../combat/matchState.js';
+import { applyRoster } from '../combat/setup.js';
+import { applyArenaLayout } from '../arena/arena.js';
 import { app, saveStats, training, type AppMode } from '../menu/appState.js';
 import * as sfx from '../audio/sfx.js';
 import { announce, preloadAnnouncer } from '../audio/announcer.js';
-import { MATCH } from '../config.js';
-import { createScoreboard, type Scoreboard } from '../ui/scoreboard.js';
+import { MATCH, modeTeams, teamColor, type ArcadeMode } from '../config.js';
+import { createScoreboard, type FighterHud, type Scoreboard } from '../ui/scoreboard.js';
+import { UI } from '../ui/industrial.js';
 import { net } from '../net/client.js';
-import { reportBotResult, reportResult, rival } from '../net/leaderboard.js';
+import { reportArcade, reportBotResult, reportResult, rival, myName } from '../net/leaderboard.js';
 
 interface Boxers {
   me: Entity;
@@ -30,6 +37,22 @@ interface Boxers {
 type RoundResult = 'ko' | 'time';
 type RoundOutcome = 'win' | 'loss' | 'draw';
 
+function hexColor(n: number): string {
+  return `#${n.toString(16).padStart(6, '0')}`;
+}
+
+/** HUD tint for a team — keeps the duel's exact ember/blue, tints FFA 2/3. */
+function teamNeon(team: number): string {
+  if (team === 0) return UI.emberBright;
+  if (team === 1) return UI.cool;
+  return hexColor(teamColor(team));
+}
+
+function displayName(name: string, fallback: string): string {
+  const clean = name.trim();
+  return clean ? clean.toUpperCase() : fallback;
+}
+
 export class GameStateSystem extends createSystem({
   combatants: { required: [Combatant, Health] },
 }) {
@@ -38,6 +61,7 @@ export class GameStateSystem extends createSystem({
   /** Which mode the live bout is running in — a change while playing means a
    *  real opponent just replaced the bot, so the match restarts clean. */
   private lastMode: AppMode = 'bot';
+  private lastArcade: ArcadeMode = '1v1';
   private stateEchoTimer = 0;
   /** The countdown beat we last spoke, so the announcer fires once per beat. */
   private lastAnnounced = '';
@@ -50,14 +74,10 @@ export class GameStateSystem extends createSystem({
 
   update(delta: number): void {
     if (app.state === 'training') {
-      // TrainingSystem runs the session; we just keep the boards fresh.
-      const c = this.findBoxers();
-      if (c) {
+      const me = this.localPlayer();
+      if (me) {
         this.scoreboard?.setVisible(true);
-        this.scoreboard?.updateTraining(
-          c.me.getValue(Health, 'current') ?? 0,
-          c.me.getValue(Health, 'max') ?? 1,
-        );
+        this.scoreboard?.updateTraining(me.getValue(Health, 'current') ?? 0, me.getValue(Health, 'max') ?? 1);
       }
       this.wasPlaying = false;
       return;
@@ -69,37 +89,205 @@ export class GameStateSystem extends createSystem({
       return;
     }
 
-    const c = this.findBoxers();
-    if (!c) return;
+    // Entering a bout — or the mode / layout changed mid-bout (the background
+    // search paired a human, or a fresh arcade mode was picked). Re-stamp the
+    // roster + platforms, wipe the slate and (re)start clean.
+    const entering = !this.wasPlaying || app.mode !== this.lastMode || app.arcade !== this.lastArcade;
+    if (entering) {
+      applyRoster();
+      applyArenaLayout(this.scene);
+    }
 
-    // Entering a match — or a real opponent just replaced the bot mid-bout
-    // (the background search paired up). Either way: wipe the slate and
-    // (re)start clean so the live bout never inherits the practice scores
-    // or a half-drained health pool.
-    if (!this.wasPlaying || app.mode !== this.lastMode) {
-      this.startMatch(c);
+    const actives = this.activeCombatants();
+    const me = actives.find((e) => (e.getValue(Combatant, 'slot') ?? -1) === 0);
+    if (!me) return;
+
+    if (entering) {
+      this.startMatch(actives);
       this.scoreboard?.setVisible(true);
       this.wasPlaying = true;
     }
     this.lastMode = app.mode;
-
-    const pHp = c.me.getValue(Health, 'current') ?? 0;
-    const pMax = c.me.getValue(Health, 'max') ?? 1;
-    const oHp = c.them.getValue(Health, 'current') ?? 0;
-    const oMax = c.them.getValue(Health, 'max') ?? 1;
+    this.lastArcade = app.arcade;
 
     const authority = app.mode === 'bot' || app.side === 0;
     if (authority) {
-      this.runAuthority(c, pHp, oHp, delta);
+      if (app.arcade === '1v1') {
+        const them = actives.find((e) => (e.getValue(Combatant, 'slot') ?? -1) === 1);
+        if (them) this.runAuthority({ me, them }, me.getValue(Health, 'current') ?? 0, them.getValue(Health, 'current') ?? 0, delta);
+      } else {
+        this.runArcadeAuthority(actives, delta);
+      }
     }
-    // Guests: NetworkSystem writes `match` from host echoes; nothing to run.
+    // Guests (net 1v1 only): NetworkSystem writes `match` from host echoes.
 
-    this.scoreboard?.updateMatch(match, pHp, pMax, oHp, oMax);
-
-    // Ring announcer: speak each countdown beat as the HUD message ticks over
-    // (3 → 2 → 1 → FIGHT). Runs on every client — the host computes the message,
-    // the guest receives it via echo — so both hear the count.
+    this.scoreboard?.updateMatch(match, this.buildHud(actives));
     this.maybeAnnounce();
+  }
+
+  // --- HUD -----------------------------------------------------------------
+
+  private buildHud(actives: Entity[]): FighterHud[] {
+    const duel = app.arcade === '1v1';
+    return actives
+      .slice()
+      .sort((a, b) => (a.getValue(Combatant, 'slot') ?? 0) - (b.getValue(Combatant, 'slot') ?? 0))
+      .map((e) => {
+        const slot = e.getValue(Combatant, 'slot') ?? 0;
+        const team = e.getValue(Combatant, 'team') ?? 0;
+        const hp = e.getValue(Health, 'current') ?? 0;
+        const hpMax = e.getValue(Health, 'max') ?? 1;
+        const pips = duel ? (slot === 0 ? match.myScore : match.oppScore) : match.teamScores[team] ?? 0;
+        let name: string;
+        if (slot === 0) name = app.mode === 'net' ? displayName(myName(), 'YOU') : 'YOU';
+        else if (duel) name = app.mode === 'net' ? displayName(rival.name, 'RIVAL') : 'BOT';
+        else name = team === 0 ? 'ALLY' : 'BOT';
+        return { name, neon: teamNeon(team), hpFrac: hp / hpMax, pips, team };
+      });
+  }
+
+  // --- arcade authority (2v2 / FFA, bot bouts) -----------------------------
+
+  private runArcadeAuthority(actives: Entity[], delta: number): void {
+    const teams = modeTeams(app.arcade);
+    const teamHp = (t: number): number =>
+      actives.reduce((sum, e) => ((e.getValue(Combatant, 'team') ?? 0) === t ? sum + (e.getValue(Health, 'current') ?? 0) : sum), 0);
+
+    if (match.phase === 'countdown') {
+      match.roundTimer = Math.max(0, match.roundTimer - delta);
+      match.message = match.roundTimer <= 3 && match.roundTimer > 0 ? String(Math.ceil(match.roundTimer)) : '';
+      if (match.roundTimer <= 0) this.beginRoundArcade(actives);
+    } else if (match.phase === 'playing') {
+      match.roundTimer = Math.max(0, match.roundTimer - delta);
+      if (match.message === 'FIGHT' && match.roundTimer <= MATCH.roundTime - 1.2) match.message = '';
+      const alive = teams.filter((t) => teamHp(t) > 0);
+      if (alive.length <= 1) {
+        this.endRoundArcade(alive[0], 'ko');
+      } else if (match.roundTimer <= 0) {
+        this.endRoundArcade(this.topTeam(teams, teamHp), 'time');
+      }
+    } else if (match.phase === 'roundOver') {
+      match.resultTimer -= delta;
+      if (match.resultTimer <= 0) {
+        if (teams.some((t) => (match.teamScores[t] ?? 0) >= MATCH.winTarget)) this.toMatchOverArcade(teams);
+        else {
+          match.round += 1;
+          this.beginCountdownArcade(actives, MATCH.roundCountdown);
+        }
+      }
+    } else {
+      // matchOver → back to the lobby; drop any background search.
+      match.resultTimer -= delta;
+      if (match.resultTimer <= 0) {
+        net.cancel();
+        app.state = 'menu';
+        this.wasPlaying = false;
+      }
+    }
+  }
+
+  /** Team with the most total health, or undefined on a tie. */
+  private topTeam(teams: number[], teamHp: (t: number) => number): number | undefined {
+    let best: number | undefined;
+    let bestHp = -1;
+    let tie = false;
+    for (const t of teams) {
+      const h = teamHp(t);
+      if (h > bestHp) {
+        bestHp = h;
+        best = t;
+        tie = false;
+      } else if (h === bestHp) {
+        tie = true;
+      }
+    }
+    return tie ? undefined : best;
+  }
+
+  private endRoundArcade(winnerTeam: number | undefined, result: RoundResult): void {
+    match.roundWinnerTeam = winnerTeam ?? -1;
+    if (winnerTeam !== undefined) match.teamScores[winnerTeam] = (match.teamScores[winnerTeam] ?? 0) + 1;
+    if (modeTeams(app.arcade).some((t) => (match.teamScores[t] ?? 0) >= MATCH.winTarget)) {
+      this.toMatchOverArcade(modeTeams(app.arcade));
+      return;
+    }
+    const iWon = winnerTeam === 0;
+    match.phase = 'roundOver';
+    match.resultTimer = MATCH.roundOverDelay;
+    match.message =
+      winnerTeam === undefined ? 'DRAW' : result === 'ko' ? (iWon ? 'KO' : "KO'D") : iWon ? 'WIN' : 'LOSS';
+    sfx.roundEnd(winnerTeam === undefined ? 'draw' : iWon);
+  }
+
+  private toMatchOverArcade(teams: number[]): void {
+    match.phase = 'matchOver';
+    match.resultTimer = MATCH.matchOverDelay;
+    const winner = this.topTeam(teams, (t) => match.teamScores[t] ?? 0);
+    match.roundWinnerTeam = winner ?? -1;
+    const win = winner === 0;
+    match.message = win ? 'YOU WIN' : 'YOU LOSE';
+    if (win) app.stats.wins += 1;
+    else app.stats.losses += 1;
+    saveStats();
+    reportArcade(app.arcade, win); // +25 XP for taking part, win → mode board
+    sfx.matchEnd(win);
+  }
+
+  private beginCountdownArcade(actives: Entity[], duration: number): void {
+    this.refill(actives);
+    match.phase = 'countdown';
+    match.roundTimer = duration;
+    match.resultTimer = 0;
+    match.message = '';
+    match.resetCount += 1;
+  }
+
+  private beginRoundArcade(actives: Entity[]): void {
+    this.refill(actives);
+    match.roundTimer = MATCH.roundTime;
+    match.resultTimer = 0;
+    match.message = 'FIGHT';
+    match.phase = 'playing';
+    match.resetCount += 1;
+    sfx.roundBell();
+  }
+
+  // --- shared bout lifecycle ----------------------------------------------
+
+  private startMatch(actives: Entity[]): void {
+    this.lastAnnounced = '';
+    match.myScore = 0;
+    match.oppScore = 0;
+    match.teamScores = [0, 0, 0, 0];
+    match.roundWinnerTeam = -1;
+    match.round = 1;
+    match.rematchMine = false;
+    match.rematchTheirs = false;
+    training.active = false;
+    this.refill(actives);
+
+    if (app.arcade !== '1v1') {
+      this.beginRoundArcade(actives);
+      return;
+    }
+    // Classic duel: drive the original 1v1 flow.
+    const me = actives.find((e) => (e.getValue(Combatant, 'slot') ?? -1) === 0)!;
+    const them = actives.find((e) => (e.getValue(Combatant, 'slot') ?? -1) === 1)!;
+    const c = { me, them };
+    if (app.mode === 'bot') {
+      this.beginRound(c);
+    } else if (app.side === 0) {
+      this.beginCountdown(c);
+    } else {
+      match.phase = 'countdown';
+      match.roundTimer = MATCH.startDelay;
+      match.resultTimer = 0;
+      match.message = '';
+    }
+  }
+
+  private refill(actives: Entity[]): void {
+    for (const e of actives) e.setValue(Health, 'current', e.getValue(Health, 'max') ?? 100);
   }
 
   /** Fire the announcer once per countdown beat as `match.message` changes. */
@@ -111,20 +299,17 @@ export class GameStateSystem extends createSystem({
     else if (m === 'FIGHT') announce('fight');
   }
 
-  // --- authoritative match logic (bot bouts + online host) ----------------
+  // --- classic duel authority (1v1, bot + online host) — unchanged ---------
 
   private runAuthority(c: Boxers, pHp: number, oHp: number, delta: number): void {
     if (match.phase === 'countdown') {
       match.roundTimer = Math.max(0, match.roundTimer - delta);
       const prevMsg = match.message;
       match.message = match.roundTimer <= 3 && match.roundTimer > 0 ? String(Math.ceil(match.roundTimer)) : '';
-      // Push each new count to the guest the instant it changes so their
-      // announcer stays in step (the 0.5 s cadence echo alone could lag a beat).
       if (app.mode === 'net' && match.message && match.message !== prevMsg) this.echoState();
       if (match.roundTimer <= 0) this.beginRound(c);
     } else if (match.phase === 'playing') {
       match.roundTimer = Math.max(0, match.roundTimer - delta);
-      // The "FIGHT" bell cue flashes in, then clears so the HUD reads clean.
       if (match.message === 'FIGHT' && match.roundTimer <= MATCH.roundTime - 1.2) {
         match.message = '';
         if (app.mode === 'net') this.echoState();
@@ -137,11 +322,8 @@ export class GameStateSystem extends createSystem({
         else this.endRound(pHp > oHp ? 'win' : 'loss', 'time');
       }
     } else if (match.phase === 'matchOver' && app.mode === 'net') {
-      // Net bouts HOLD at FIGHT OVER — the panel decides. Both boxers
-      // pressing REMATCH restarts the match; RETURN (or the rival leaving)
-      // tears the bout down via MenuSystem / onClosed instead.
       if (match.rematchMine && match.rematchTheirs) {
-        this.startMatch(c);
+        this.startMatch(this.activeCombatants());
       }
     } else {
       match.resultTimer -= delta;
@@ -151,12 +333,9 @@ export class GameStateSystem extends createSystem({
             this.toMatchOver();
           } else {
             match.round += 1;
-            // Open the next round on a 3-2-1 countdown, not straight into play.
             this.beginCountdown(c, MATCH.roundCountdown);
           }
         } else {
-          // matchOver (bot bouts) → back to the lobby; drop the background
-          // search so we're not still queued from the menu.
           net.cancel();
           app.state = 'menu';
           this.wasPlaying = false;
@@ -164,7 +343,6 @@ export class GameStateSystem extends createSystem({
       }
     }
 
-    // Online host: echo the state on a cadence and on every transition.
     if (app.mode === 'net') {
       this.stateEchoTimer -= delta;
       if (this.stateEchoTimer <= 0) {
@@ -177,8 +355,6 @@ export class GameStateSystem extends createSystem({
   private endRound(outcome: RoundOutcome, result: RoundResult): void {
     if (outcome === 'win') match.myScore += 1;
     else if (outcome === 'loss') match.oppScore += 1;
-    // A match-deciding round lands STRAIGHT on YOU WIN / YOU LOSE — no long
-    // round-result hold between the final KO and the verdict.
     if (match.myScore >= MATCH.winTarget || match.oppScore >= MATCH.winTarget) {
       this.toMatchOver();
       return;
@@ -198,69 +374,34 @@ export class GameStateSystem extends createSystem({
     if (win) app.stats.wins += 1;
     else app.stats.losses += 1;
     saveStats();
-    // Both feed the board now: a real 1v1 win banks +20, a bot win a token +2.
     if (app.mode === 'net') reportResult(win, rival.elo);
     else reportBotResult(win);
     sfx.matchEnd(win);
     if (app.mode === 'net') this.echoState();
   }
 
-  private startMatch(c: Boxers): void {
-    this.lastAnnounced = ''; // a fresh bout re-announces its countdown
-    match.myScore = 0;
-    match.oppScore = 0;
-    match.round = 1;
-    match.rematchMine = false;
-    match.rematchTheirs = false;
-    training.active = false;
-    // Full pools up front — covers the GUEST, who skips beginRound and would
-    // otherwise carry a half-drained bot-bout pool until the host's first
-    // echo lands.
-    for (const e of [c.me, c.them]) {
-      e.setValue(Health, 'current', e.getValue(Health, 'max') ?? 100);
-    }
-    if (app.mode === 'bot') {
-      this.beginRound(c);
-    } else if (app.side === 0) {
-      this.beginCountdown(c);
-    } else {
-      match.phase = 'countdown';
-      match.roundTimer = MATCH.startDelay;
-      match.resultTimer = 0;
-      match.message = '';
-    }
-  }
-
-  /** Pre-round hold + 3-2-1: `duration` is the full lead-in (the count shows
-   *  for its last 3 s). The first round squares up over MATCH.startDelay; later
-   *  rounds open on a snappier MATCH.roundCountdown. */
   private beginCountdown(c: Boxers, duration = MATCH.startDelay): void {
-    for (const e of [c.me, c.them]) {
-      e.setValue(Health, 'current', e.getValue(Health, 'max') ?? 100);
-    }
+    for (const e of [c.me, c.them]) e.setValue(Health, 'current', e.getValue(Health, 'max') ?? 100);
     match.phase = 'countdown';
     match.roundTimer = duration;
     match.resultTimer = 0;
     match.message = '';
-    match.resetCount += 1; // park balls at fists before the pre-fight hold
+    match.resetCount += 1;
     if (app.mode === 'net') this.echoState();
   }
 
   private beginRound(c: Boxers): void {
-    for (const e of [c.me, c.them]) {
-      e.setValue(Health, 'current', e.getValue(Health, 'max') ?? 100);
-    }
+    for (const e of [c.me, c.them]) e.setValue(Health, 'current', e.getValue(Health, 'max') ?? 100);
     match.roundTimer = MATCH.roundTime;
     match.resultTimer = 0;
-    match.message = 'FIGHT'; // slams up at the bell; cleared ~1.2 s into the round
+    match.message = 'FIGHT';
     match.phase = 'playing';
-    match.resetCount += 1; // FireballSystem parks all balls back at fists
+    match.resetCount += 1;
     sfx.roundBell();
     if (app.mode === 'net') this.echoState();
   }
 
   private echoState(): void {
-    // Scores travel in HOST perspective; the guest flips them on receipt.
     net.send({
       k: 'state',
       phase: match.phase,
@@ -273,13 +414,20 @@ export class GameStateSystem extends createSystem({
     });
   }
 
-  private findBoxers(): Boxers | null {
-    let me: Entity | undefined;
-    let them: Entity | undefined;
+  // --- queries -------------------------------------------------------------
+
+  private activeCombatants(): Entity[] {
+    const out: Entity[] = [];
     for (const e of this.queries.combatants.entities) {
-      if ((e.getValue(Combatant, 'team') ?? 0) === 0) me = e;
-      else them = e;
+      if ((e.getValue(Combatant, 'active') ?? 0) === 1) out.push(e);
     }
-    return me && them ? { me, them } : null;
+    return out;
+  }
+
+  private localPlayer(): Entity | undefined {
+    for (const e of this.queries.combatants.entities) {
+      if ((e.getValue(Combatant, 'slot') ?? -1) === 0) return e;
+    }
+    return undefined;
   }
 }
