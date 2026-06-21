@@ -306,6 +306,8 @@ export const PALETTE = {
   whiteHot: 0xfff3cf,
   coolFlame: 0x4fb7ff, // their fire
   coolCore: 0x9fe2ff,
+  venom: 0x57e389, // FFA third fighter — toxic green
+  violet: 0xb06bff, // FFA fourth fighter — plasma violet
   danger: 0xe8352a,
   iron: 0x3a3d46,
   gunmetal: 0x2c2f36, // robot-wars chassis steel
@@ -315,9 +317,101 @@ export const PALETTE = {
   white: 0xf4f6fb,
 };
 
-/** Team → fire tint: 0 = you (orange), 1 = opponent (blue). */
+/**
+ * Team → fire tint. 0 = you (orange), 1 = the classic blue rival. Arcade FFA
+ * gives every fighter their own team, so teams 2 and 3 get distinct hues so
+ * four boxers read apart at a glance; 2v2 only ever uses 0 (your team, orange)
+ * and 1 (the enemy team, blue).
+ */
 export function teamColor(team: number): number {
-  return team === 0 ? PALETTE.ember : PALETTE.coolFlame;
+  switch (team) {
+    case 0:
+      return PALETTE.ember; // you / your team — orange
+    case 1:
+      return PALETTE.coolFlame; // rival / enemy team — blue
+    case 2:
+      return PALETTE.venom; // FFA third fighter — green
+    default:
+      return PALETTE.violet; // FFA fourth fighter — violet
+  }
+}
+
+/* ───────────────────────── ARCADE MODES ─────────────────────────────────
+ * The lobby's ARCADE panel hosts three brawls that all share the duel's
+ * fireball mechanics but differ in how many boxers stand in the pit and how
+ * their platforms are laid out. Every mode is described by a ROSTER of
+ * platform "slots" — slot 0 is ALWAYS the local player at the world origin
+ * (the headset origin), facing -Z exactly like the classic 1v1. The remaining
+ * slots are opponents/allies, each with a world position, a yaw so the fighter
+ * faces the action, and a team id (0 = your team).
+ *
+ * Layouts:
+ *  - '1v1'  : the original duel — you and one rival across the 3 m gap. The
+ *             roster is bit-identical to the hand-built arena, so ranked /
+ *             quick / private bouts play exactly as before.
+ *  - '2v2'  : teammates SIDE BY SIDE, enemies directly across. The 1v1 gap is
+ *             kept; the line is just widened — you + ally on the near side,
+ *             two rivals on the far side, each pair facing off across the gap.
+ *  - 'ffa'  : a four-way PLUS/CROSS. Your platform is one pinnacle; the other
+ *             three sit N / E / W around a shared centre, everyone facing in.
+ */
+
+export type ArcadeMode = '1v1' | '2v2' | 'ffa';
+
+/** Centre-to-centre spacing between same-side platforms in 2v2. */
+export const TEAM_SPACING = 1.9;
+
+/**
+ * FFA plus arm length — distance from the cross centre out to each pinnacle.
+ * Half the duel gap keeps the across-the-cross distance equal to the classic
+ * 3 m duel; the four arms then sit ~2.1 m from each diagonal neighbour, tight
+ * and chaotic — right for a brawl.
+ */
+export const FFA_ARM = ARENA_GAP / 2;
+
+/** One platform's place in a mode's roster. */
+export interface FighterSlot {
+  /** Platform-centre world position. Slot 0 is the local player at the origin. */
+  pos: [number, number, number];
+  /** Yaw (radians about +Y, 0 = facing -Z) so the boxer faces the fight. */
+  yaw: number;
+  /** Team id — 0 is always your team. FFA gives every slot its own team. */
+  team: number;
+}
+
+/**
+ * Platform rosters per mode. Yaw values face each platform toward the action:
+ * a rotation θ about +Y turns the default -Z forward into (-sinθ, 0, -cosθ),
+ * so π faces +Z, +π/2 faces -X (east platform looks west into the cross) and
+ * -π/2 faces +X (west platform looks east).
+ */
+export const MODE_LAYOUT: Record<ArcadeMode, FighterSlot[]> = {
+  '1v1': [
+    { pos: [0, 0, 0], yaw: 0, team: 0 }, // you
+    { pos: [0, 0, -ARENA_GAP], yaw: Math.PI, team: 1 }, // rival, across the gap
+  ],
+  '2v2': [
+    { pos: [0, 0, 0], yaw: 0, team: 0 }, // you
+    { pos: [TEAM_SPACING, 0, 0], yaw: 0, team: 0 }, // ally beside you
+    { pos: [0, 0, -ARENA_GAP], yaw: Math.PI, team: 1 }, // rival across from you
+    { pos: [TEAM_SPACING, 0, -ARENA_GAP], yaw: Math.PI, team: 1 }, // rival across from ally
+  ],
+  ffa: [
+    { pos: [0, 0, 0], yaw: 0, team: 0 }, // you — south pinnacle
+    { pos: [0, 0, -2 * FFA_ARM], yaw: Math.PI, team: 1 }, // north, faces +Z
+    { pos: [FFA_ARM, 0, -FFA_ARM], yaw: Math.PI / 2, team: 2 }, // east, faces -X
+    { pos: [-FFA_ARM, 0, -FFA_ARM], yaw: -Math.PI / 2, team: 3 }, // west, faces +X
+  ],
+};
+
+/** Opponent slots for a mode (everyone but the local player at slot 0). */
+export function opponentSlots(mode: ArcadeMode): FighterSlot[] {
+  return MODE_LAYOUT[mode].slice(1);
+}
+
+/** Every team id present in a mode, deduped (e.g. [0,1] for 2v2, [0,1,2,3] FFA). */
+export function modeTeams(mode: ArcadeMode): number[] {
+  return [...new Set(MODE_LAYOUT[mode].map((s) => s.team))];
 }
 
 /**
