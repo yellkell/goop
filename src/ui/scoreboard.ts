@@ -283,13 +283,19 @@ export function createScoreboard(scene: Scene): Scoreboard {
     const { ctx, tex } = centre;
     ctx.clearRect(0, 0, W, H);
     if (art) {
-      // Hand-made neon-metal plate: scaled to a tall countdown number (or a
-      // wide FIGHT bar), centred, undistorted. The mesh's slam-in spring still
-      // animates the whole board, so the plate pops in like the old text did.
-      const targetH = message === 'FIGHT' ? 220 : 360;
-      const scale = targetH / art.naturalHeight;
-      const w = art.naturalWidth * scale;
-      const h = targetH;
+      // Hand-made neon-metal plate, centred and undistorted. Numbers are sized
+      // to a tall glyph; the wide FIGHT bar is sized to fill the board's WIDTH
+      // so it reads big (its transparent top/bottom padding overruns the canvas
+      // harmlessly). The mesh's slam-in spring still animates the whole board,
+      // so the plate pops in like the old text did.
+      let w: number, h: number;
+      if (message === 'FIGHT') {
+        w = W - 90;
+        h = art.naturalHeight * (w / art.naturalWidth);
+      } else {
+        h = 360;
+        w = art.naturalWidth * (h / art.naturalHeight);
+      }
       ctx.drawImage(art, (W - w) / 2, (H - h) / 2, w, h);
     } else if (message) {
       // No backing plate: just the short chromed verdict floating over the gap.
