@@ -276,6 +276,21 @@ export const ACCENTS = [
  *  setting localStorage 'ibb-pub-server'. */
 export const PUB_SERVER = 'wss://iron-balls-pub.onrender.com';
 
+export interface PubRegion {
+  id: string;
+  label: string;
+  /** WS URL of this region's pub relay. */
+  url: string;
+}
+
+/** The pub regions a player can pick between at the door. Each is an
+ *  independent room (its own punters + voice); picking one stores its URL in
+ *  `ibb-pub-server`, which `pubServerUrl()` then resolves. First = default. */
+export const PUB_REGIONS: PubRegion[] = [
+  { id: 'usa', label: 'USA', url: PUB_SERVER },
+  { id: 'eu', label: 'EU', url: 'wss://iron-balls-boxing-eu.onrender.com' },
+];
+
 /** Resolve the pub server URL: ?server= param > localStorage > local dev
  *  server > the hosted Render relay. */
 export function pubServerUrl(): string {

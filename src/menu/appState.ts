@@ -64,9 +64,13 @@ export const app: {
   /** How many boxers are in the quick-match queue right now (−1 = unknown,
    *  e.g. before the matchmaker is reachable). Drives the 1V1 panel. */
   searching: number;
-  /** How many punters are in the pub right now (−1 = unknown / unreachable).
-   *  Drives the pub door's `X/12` headcount badge. */
+  /** Total punters across all pub regions right now (−1 = none reachable).
+   *  Drives the pub door's headcount badge. */
   pubCount: number;
+  /** Punter count per pub region id (for the EU/USA door picker). */
+  pubRegionCounts: Record<string, number>;
+  /** Which face the lobby info panel shows: its doors, or the pub-region picker. */
+  infoView: 'root' | 'pubpick';
   /** Which backdrop the arena renders — held across every mode. */
   environment: AppEnvironment;
   /** Player's chosen avatar-accent hue (0..1 around the colour wheel). */
@@ -89,6 +93,8 @@ export const app: {
   shootBack: localStorage.getItem('ff-shootback') === '1',
   searching: -1,
   pubCount: -1,
+  pubRegionCounts: {},
+  infoView: 'root',
   environment: localStorage.getItem('ff-env') === 'desert' ? 'desert' : 'ar',
   accentHue: loadAccentHue(),
   ballAttach: loadBallAttach(),
