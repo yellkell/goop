@@ -12,6 +12,8 @@
 
 import { createSystem, Quaternion, Vector3 } from '@iwsdk/core';
 import { Fireball, BallState } from '../components/Fireball.js';
+import { Combatant } from '../components/Combatant.js';
+import { Health } from '../components/Health.js';
 import { ballCommands, opponents } from '../combat/opponentBus.js';
 import { fighterTeam } from '../combat/fighters.js';
 import { localLayout } from '../combat/layout.js';
@@ -55,8 +57,17 @@ class Bot {
 
 export class BotSystem extends createSystem({
   balls: { required: [Fireball] },
+  combatants: { required: [Combatant, Health] },
 }) {
   private bots: Bot[] = [];
+
+  /** A bot is out once knocked to 0 health this round. */
+  private dead(slot: number): boolean {
+    for (const e of this.queries.combatants.entities) {
+      if ((e.getValue(Combatant, 'slot') ?? -1) === slot) return (e.getValue(Health, 'current') ?? 1) <= 0;
+    }
+    return false;
+  }
 
   update(delta: number): void {
     if (app.state !== 'playing' || app.mode !== 'bot') return;
@@ -69,6 +80,11 @@ export class BotSystem extends createSystem({
       const i = slot - 1;
       const pose = opponents[i];
       if (!pose.active) continue;
+      // Knocked out: stop throwing/moving and go cold until the round resets.
+      if (this.dead(slot)) {
+        pose.orbiting[0] = pose.orbiting[1] = false;
+        continue;
+      }
       const bot = (this.bots[i] ??= new Bot(slot));
       const seat = roster[slot];
       const myTeam = seat.team;

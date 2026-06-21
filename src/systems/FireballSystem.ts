@@ -18,6 +18,8 @@
 
 import { createSystem, InputComponent, Quaternion, Vector3, type Entity } from '@iwsdk/core';
 import { BallState, Fireball } from '../components/Fireball.js';
+import { Combatant } from '../components/Combatant.js';
+import { Health } from '../components/Health.js';
 import { createFireVisual, emberBurst, spawnEmber, stampTrail, type FireVisual } from '../fx/fire.js';
 import { ballCommands, opponents, MAX_OPPONENTS } from '../combat/opponentBus.js';
 import { fighterTeam } from '../combat/fighters.js';
@@ -85,8 +87,11 @@ const NO_ATTACH: AttachEffect = { att: 0, dmg: FIREBALL.damage, scl: 1 };
 
 export class FireballSystem extends createSystem({
   balls: { required: [Fireball] },
+  combatants: { required: [Combatant, Health] },
 }) {
   private visuals = new Map<Entity, FireVisual>();
+  /** Am I (slot 0) still standing this round? Refreshed each frame. */
+  private myAlive = true;
   private trackers: [VelocityTracker, VelocityTracker] = [new VelocityTracker(), new VelocityTracker()];
   private time = 0;
   private lastReset = -1;
@@ -209,8 +214,19 @@ export class FireballSystem extends createSystem({
     v[0] = vel.x; v[1] = vel.y; v[2] = vel.z;
   }
 
+  /** A fighter is "out" once knocked to 0 health DURING a live round — they
+   *  can't charge or throw until the round resets and refills them. */
+  private slotAlive(slot: number): boolean {
+    if (app.state !== 'playing') return true; // training / lobby: never "dead"
+    for (const e of this.queries.combatants.entities) {
+      if ((e.getValue(Combatant, 'slot') ?? -1) === slot) return (e.getValue(Health, 'current') ?? 1) > 0;
+    }
+    return true;
+  }
+
   update(delta: number): void {
     this.time += delta;
+    this.myAlive = this.slotAlive(0);
     const live = app.state === 'playing' || app.state === 'training';
 
     // Fresh round / mode change: park everything back at the fists.
@@ -278,6 +294,15 @@ export class FireballSystem extends createSystem({
 
     const obj = ball.object3D!;
     const state = ball.getValue(Fireball, 'state') ?? BallState.Hover;
+    // Knocked out this round (arcade): your fire goes cold — drop any orbit and
+    // ignore the trigger entirely until the round resets and revives you.
+    if (!this.myAlive) {
+      if (state === BallState.Orbit) {
+        ball.setValue(Fireball, 'state', BallState.Hover);
+        ball.setValue(Fireball, 'spin', 0);
+      }
+      return;
+    }
     // Balls only come alive during a live round — no charging (or throwing) in
     // the off time between rounds / after the match. Training has no rounds.
     const roundLive = app.state === 'training' || match.phase === 'playing';
@@ -347,10 +372,11 @@ export class FireballSystem extends createSystem({
     const obj = ball.object3D!;
     _dir.copy(_vel).normalize();
 
-    // Aim assist: blend the swing toward an enemy's chest. The classic duel
-    // keeps its fixed aim point (across the gap); arcade brawls steer toward
-    // the nearest enemy so a swing in their direction finds them.
-    this.aimTarget(obj.position, _aim);
+    // Aim assist: nudge the swing toward an enemy's chest. The classic duel
+    // keeps its fixed point across the gap; arcade brawls assist whichever
+    // enemy you're throwing TOWARD (best aligned with the swing), so a throw
+    // forward goes forward instead of being yanked at a side platform.
+    this.aimTarget(obj.position, _dir, _aim);
     _aim.sub(obj.position).normalize();
     _dir.lerp(_aim, FIREBALL.aimAssist).normalize();
 
@@ -379,26 +405,31 @@ export class FireballSystem extends createSystem({
     });
   }
 
-  /** Aim point for YOUR throw's assist: the nearest enemy chest, or — in the
-   *  classic duel — the fixed point across the gap (preserves 1v1 feel). */
-  private aimTarget(from: Vector3, out: Vector3): void {
+  /** Aim point for YOUR throw's assist. The classic duel uses the fixed point
+   *  across the gap (preserves 1v1 feel); arcade brawls pick the live enemy
+   *  whose direction best matches your throw `dir`, so the assist reinforces
+   *  where you aimed rather than dragging the ball at the closest platform. A
+   *  throw with no enemy ahead gets no pull (out = straight ahead). */
+  private aimTarget(from: Vector3, dir: Vector3, out: Vector3): void {
     if (app.arcade === '1v1') {
       out.set(0, 1.25, -ARENA_GAP);
       return;
     }
     let best: Vector3 | null = null;
-    let bestD = Infinity;
+    let bestDot = 0.25; // must be roughly in the direction thrown
     for (let i = 0; i < MAX_OPPONENTS; i++) {
       const o = opponents[i];
-      if (!o.active || fighterTeam(i + 1) === 0) continue;
-      const d = o.headPos.distanceToSquared(from);
-      if (d < bestD) {
-        bestD = d;
+      if (!o.active || fighterTeam(i + 1) === 0 || !this.slotAlive(i + 1)) continue;
+      _offset.copy(o.headPos).sub(from);
+      const len = _offset.length() || 1;
+      const dot = _offset.divideScalar(len).dot(dir);
+      if (dot > bestDot) {
+        bestDot = dot;
         best = o.headPos;
       }
     }
     if (best) out.copy(best);
-    else out.set(0, 1.25, -ARENA_GAP);
+    else out.copy(from).add(dir); // no enemy ahead → no deflection
   }
 
   // --- shared physics ----------------------------------------------------
@@ -571,6 +602,8 @@ export class FireballSystem extends createSystem({
       }
       if (!roundLive && (cmd.type === 'throw' || cmd.type === 'recall')) continue;
       const owner = (cmd.slot ?? 0) + 1; // command slot is the opponent index
+      // A knocked-out fighter can't throw or recall.
+      if ((cmd.type === 'throw' || cmd.type === 'recall') && !this.slotAlive(owner)) continue;
       const ball = this.findBall(owner, cmd.hand);
       if (!ball) continue;
       switch (cmd.type) {
@@ -621,11 +654,12 @@ export class FireballSystem extends createSystem({
     // Orbit flags from the bus drive each fighter's bound pair hover/orbit look.
     for (let i = 0; i < MAX_OPPONENTS; i++) {
       const pose = opponents[i];
+      const alive = this.slotAlive(i + 1);
       for (const hand of [0, 1] as const) {
         const ball = this.findBall(i + 1, hand);
         if (!ball) continue;
         const st = ball.getValue(Fireball, 'state') ?? 0;
-        if (!roundLive || !pose.active) {
+        if (!roundLive || !pose.active || !alive) {
           if (st === BallState.Orbit) ball.setValue(Fireball, 'state', BallState.Hover);
           continue;
         }

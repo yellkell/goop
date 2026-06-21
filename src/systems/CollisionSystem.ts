@@ -136,6 +136,7 @@ export class CollisionSystem extends createSystem({
 
       const actualDamage = this.damageFor(hitbox, damage);
       const me = (hitbox.getValue(Hitbox, 'owner') as Entity | null) ?? hitbox;
+      if ((me.getValue(Health, 'current') ?? 1) <= 0) return; // already down — ignore
       this.applyDamage(me, actualDamage);
       // Taking a hit is the loudest moment in the game: oversized burst,
       // extra spark spray, plate-clink sound, hard double-hand buzz. The damage
@@ -196,6 +197,7 @@ export class CollisionSystem extends createSystem({
 
       const actualDamage = this.damageFor(hitbox, damage);
       const victim = (hitbox.getValue(Hitbox, 'owner') as Entity | null) ?? hitbox;
+      if ((victim.getValue(Health, 'current') ?? 1) <= 0) continue; // already down
       this.applyDamage(victim, actualDamage);
 
       const victimIsMe = (victim.getValue(Combatant, 'slot') ?? -1) === 0;
