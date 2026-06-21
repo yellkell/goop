@@ -115,12 +115,12 @@ export class BotSystem extends createSystem({
         best = pos.clone();
       }
     };
-    if (myTeam !== fighterTeam(0)) consider(_head); // the local player
+    if (myTeam !== fighterTeam(0) && !this.dead(0)) consider(_head); // the local player, if up
     const roster = localLayout();
     for (let slot = 1; slot < roster.length; slot++) {
       if (slot === bot.slot) continue;
       const other = opponents[slot - 1];
-      if (!other.active || roster[slot].team === myTeam) continue;
+      if (!other.active || roster[slot].team === myTeam || this.dead(slot)) continue;
       consider(other.headPos);
     }
     return best;
