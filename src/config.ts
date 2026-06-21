@@ -47,8 +47,11 @@ export const PROGRESSION = {
   // Average ~25/game, the basis the tier thresholds above are paced against.
   matchPlay: 15,
   matchWin: 20,
-  // A bot win banks a token amount (bot losses report nothing).
-  botWin: 12,
+  // Quick match vs the bot: a steady participation trickle + a win bonus, so
+  // every quick match banks something (win 15 / loss 5) — less than a ranked
+  // bout, since the bot's the easy road.
+  botPlay: 5,
+  botWin: 10,
 };
 
 /**

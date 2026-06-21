@@ -40,7 +40,8 @@ export function xpForMatch(won: boolean): number {
   return PROGRESSION.matchPlay + (won ? PROGRESSION.matchWin : 0);
 }
 
-/** XP for a bot-bout win (a token amount). */
-export function xpForBotWin(): number {
-  return PROGRESSION.botWin;
+/** XP for a finished quick match vs the bot: participation always, win bonus
+ *  on a win — so even a loss banks a little. */
+export function xpForBot(won: boolean): number {
+  return PROGRESSION.botPlay + (won ? PROGRESSION.botWin : 0);
 }
