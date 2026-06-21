@@ -65,6 +65,8 @@ export class MeshImpl {
   private peers = new Map<number, Peer>();
   private roomUnsub: Unsubscribe | null = null;
   private closed = false;
+  private micStream: MediaStream | null = null;
+  private micPromise: Promise<MediaStream | null> | null = null;
 
   constructor(private readonly state: MeshState) {}
 
@@ -114,6 +116,9 @@ export class MeshImpl {
       peer.pc.close();
     }
     this.peers.clear();
+    for (const track of this.micStream?.getTracks() ?? []) track.stop();
+    this.micStream = null;
+    this.state.voice.clear();
     if (this.roomRef) {
       const ref = this.roomRef;
       const seat = this.state.mySeat;
@@ -201,7 +206,34 @@ export class MeshImpl {
     pc.onconnectionstatechange = () => {
       if (['failed', 'disconnected', 'closed'].includes(pc.connectionState)) this.dropPeer(seat);
     };
+    // Spatial voice: surface this peer's mic track to the facade, keyed by seat.
+    pc.ontrack = (ev) => {
+      if (ev.track.kind !== 'audio') return;
+      this.state.voice.set(seat, ev.streams[0] ?? new MediaStream([ev.track]));
+    };
     return peer;
+  }
+
+  /** Grab the mic once (shared across every peer). Null if denied/unavailable. */
+  private ensureMic(): Promise<MediaStream | null> {
+    this.micPromise ??= navigator.mediaDevices
+      .getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
+      .then((s) => (this.micStream = s))
+      .catch(() => null);
+    return this.micPromise;
+  }
+
+  /** Add my mic to a peer connection (recvonly if the mic was denied). */
+  private async addVoice(pc: RTCPeerConnection): Promise<void> {
+    const mic = await this.ensureMic();
+    if (this.closed) return;
+    if (mic) for (const track of mic.getTracks()) pc.addTrack(track, mic);
+    else
+      try {
+        pc.addTransceiver('audio', { direction: 'recvonly' });
+      } catch {
+        /* no audio support — data channels still work */
+      }
   }
 
   private adopt(peer: Peer, evt: RTCDataChannel, pose: RTCDataChannel | null): void {
@@ -233,6 +265,8 @@ export class MeshImpl {
     pc.onicecandidate = (ev) => {
       if (ev.candidate) void addDoc(myCands, ev.candidate.toJSON()).catch(() => {});
     };
+    await this.addVoice(pc); // mic m-line must be in the offer SDP
+    if (this.closed) return;
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
     await runTransaction(db(), async (txn) => {
@@ -270,6 +304,7 @@ export class MeshImpl {
         if (offer && !pc.currentRemoteDescription) {
           void (async () => {
             await pc.setRemoteDescription(new RTCSessionDescription(offer));
+            await this.addVoice(pc); // answer with my mic too
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
             await updateDoc(ref, { answer: { type: answer.type, sdp: answer.sdp } });
@@ -299,5 +334,6 @@ export class MeshImpl {
     peer.pose?.close();
     peer.pc.close();
     this.peers.delete(seat);
+    this.state.voice.delete(seat);
   }
 }

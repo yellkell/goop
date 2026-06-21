@@ -74,6 +74,68 @@ export function setSpeakerPosition(pos: Vector3): void {
   }
 }
 
+// --- mesh (2v2 / FFA): many spatial speakers at once, keyed by seat ----------
+
+interface Speaker {
+  el: HTMLAudioElement;
+  source: MediaStreamAudioSourceNode;
+  panner: PannerNode;
+  gain: GainNode;
+}
+const speakers = new Map<number, Speaker>();
+
+/** Start spatialised playback of one mesh peer's voice, keyed by their seat. */
+export function attachMeshVoice(key: number, stream: MediaStream): void {
+  const ctx = audioContext();
+  if (!ctx) return;
+  detachMeshVoice(key);
+  // Chromium quirk: sink the stream into a muted element or WebAudio is silent.
+  const el = new Audio();
+  el.srcObject = stream;
+  el.muted = true;
+  void el.play().catch(() => {});
+  const source = ctx.createMediaStreamSource(stream);
+  const panner = ctx.createPanner();
+  panner.panningModel = 'HRTF';
+  panner.distanceModel = 'inverse';
+  panner.refDistance = 1.2;
+  panner.maxDistance = 30;
+  panner.rolloffFactor = 1;
+  const gain = ctx.createGain();
+  gain.gain.value = 1.5;
+  source.connect(panner).connect(gain).connect(ctx.destination);
+  speakers.set(key, { el, source, panner, gain });
+}
+
+/** Pin a mesh peer's voice to their avatar's head. Call every frame. */
+export function setMeshSpeaker(key: number, pos: Vector3): void {
+  const ctx = audioContext();
+  const sp = speakers.get(key);
+  if (!ctx || !sp) return;
+  const t = ctx.currentTime + 0.05;
+  if (sp.panner.positionX) {
+    setParam(sp.panner.positionX, pos.x, t);
+    setParam(sp.panner.positionY, pos.y, t);
+    setParam(sp.panner.positionZ, pos.z, t);
+  } else {
+    sp.panner.setPosition(pos.x, pos.y, pos.z);
+  }
+}
+
+export function detachMeshVoice(key: number): void {
+  const sp = speakers.get(key);
+  if (!sp) return;
+  sp.el.srcObject = null;
+  sp.source.disconnect();
+  sp.panner.disconnect();
+  sp.gain.disconnect();
+  speakers.delete(key);
+}
+
+export function detachAllMeshVoice(): void {
+  for (const key of [...speakers.keys()]) detachMeshVoice(key);
+}
+
 const _fwd = { x: 0, y: 0, z: 0 };
 const _up = { x: 0, y: 0, z: 0 };
 

@@ -477,7 +477,7 @@ export class FireballSystem extends createSystem({
         // The invisible cage ~10 yards out from the platforms: a ball that
         // reaches it bursts against the wall and dies right there.
         if (this.clampToCage(obj.position)) {
-          emberBurst(obj.position, 14, owner !== 0);
+          emberBurst(obj.position, 14, fighterTeam(owner) !== 0);
           sfx.wallThud();
           if (transient) {
             this.destroyBall(ball);
@@ -697,7 +697,10 @@ export class FireballSystem extends createSystem({
     ball.setValue(Fireball, 'heat', heat);
     visual.update(this.time, heat, _camQ);
 
-    const cool = (ball.getValue(Fireball, 'owner') ?? 0) !== 0;
+    // Colour by TEAM, not by "is it mine": a 2v2 ally's fire reads orange like
+    // yours; only other teams burn blue.
+    const cool = fighterTeam(ball.getValue(Fireball, 'owner') ?? 0) !== 0;
+    visual.setCool(cool ? 1 : 0);
 
     // Comet trail while moving fast — stamped densely so the fat core
     // particles overlap into one thick molten rope (see fx/fire.ts).

@@ -36,6 +36,8 @@ class Mesh {
   capacity = 0;
   /** Seat → member id ('' = still empty); mirrors the room doc. */
   occupants: string[] = [];
+  /** Seat → that peer's remote voice stream, set by the impl on `ontrack`. */
+  voice = new Map<number, MediaStream>();
   /** True once every seat is filled by a human. */
   full = false;
   /** Room closed to new joiners — full, or the host locked a short-handed FFA. */
@@ -83,6 +85,7 @@ class Mesh {
     this.inbox.length = 0;
     this.mySeat = 0;
     this.occupants = [];
+    this.voice.clear();
   }
 }
 
