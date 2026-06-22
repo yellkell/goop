@@ -271,7 +271,10 @@ export function buildPub(world: World): PubRefs {
   const top = new Mesh(new BoxGeometry(bar.halfLength * 2 + 0.1, 0.05, bar.depth + 0.12), gunmetal(0.25));
   top.position.set(0, bar.top - 0.025, bar.z - bar.depth / 2 + 0.02);
   counter.add(top);
-  const nose = new Mesh(new BoxGeometry(bar.halfLength * 2 + 0.1, 0.052, 0.03), amberGlow(0.4));
+  // Narrower than the top slab (which is +0.1) so the strip's ends tuck INSIDE
+  // the slab instead of sharing its end planes — coplanar end faces were
+  // z-fighting (the flicker at the ends).
+  const nose = new Mesh(new BoxGeometry(bar.halfLength * 2 - 0.04, 0.052, 0.03), amberGlow(0.4));
   nose.position.set(0, bar.top - 0.025, bar.z + 0.06);
   counter.add(nose);
   // Foot rail.
