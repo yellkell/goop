@@ -32,7 +32,7 @@ import { PlayerFeedbackSystem } from './systems/PlayerFeedbackSystem.js';
 import { PlayerGloveSystem } from './systems/PlayerGloveSystem.js';
 import { PlayerGestureSystem } from './systems/PlayerGestureSystem.js';
 import { FXSystem } from './systems/FXSystem.js';
-import { EnvironmentSystem } from './systems/EnvironmentSystem.js';
+import { DesertSystem } from './systems/DesertSystem.js';
 
 const container = document.getElementById('scene-container') as HTMLDivElement;
 const enterVrButton = document.getElementById('enter-vr') as HTMLButtonElement | null;
@@ -100,9 +100,8 @@ World.create(container, {
   world.registerSystem(PlayerGloveSystem);
   world.registerSystem(PlayerGestureSystem);
   world.registerSystem(FXSystem);
-  // Optional backdrops (off = bare AR passthrough): papercraft desert + the
-  // dark neon OLD FACTORY fight-hall.
-  world.registerSystem(EnvironmentSystem);
+  // The optional papercraft desert backdrop (off = bare AR passthrough).
+  world.registerSystem(DesertSystem);
 
   const xrSupported = (await navigator.xr?.isSessionSupported(SessionMode.ImmersiveAR).catch(() => false)) === true;
 

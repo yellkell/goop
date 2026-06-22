@@ -319,25 +319,23 @@ function drawDuelRoot(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | n
   // PRIVATE — share a 5-digit code with a friend.
   buttonPlate(ctx, 70, 228, PW - 140, 58, 'PRIVATE', UI.coolBright, hoverAction === 'private-open');
 
-  // Arena backdrop selector — tap to cycle AR → DESERT → OLD FACTORY.
-  const envLabel = app.environment === 'desert' ? 'DESERT' : app.environment === 'factory' ? 'OLD FACTORY' : 'AR';
-  const envOn = app.environment !== 'ar';
+  // Desert-arena breaker switch.
+  const on = app.environment === 'desert';
   const environmentHot = hoverAction === 'toggle-environment';
   ctx.font = '700 24px system-ui, sans-serif';
   ctx.textAlign = 'left';
   ctx.fillStyle = environmentHot ? UI.amber : UI.textDim;
-  ctx.fillText('arena', 64, 320);
-  const sw = 184, sh = 44, sx = PW - 64 - sw, sy = 298;
+  ctx.fillText('desert', 64, 320);
+  const sw = 110, sh = 44, sx = PW - 64 - sw, sy = 298;
   plate(ctx, sx, sy, sw, sh, {
     cut: 10,
-    fill: envOn ? 'rgba(255,176,0,0.18)' : environmentHot ? 'rgba(255,176,0,0.16)' : 'rgba(150,150,170,0.12)',
-    stroke: environmentHot || envOn ? UI.amber : UI.steelDim,
+    fill: on ? 'rgba(255,176,0,0.22)' : environmentHot ? 'rgba(255,176,0,0.16)' : 'rgba(150,150,170,0.12)',
+    stroke: environmentHot || on ? UI.amber : UI.steelDim,
     rivets: false,
   });
-  ctx.textAlign = 'center';
-  ctx.font = '800 22px system-ui, sans-serif';
-  ctx.fillStyle = envOn ? UI.amber : UI.textDim;
-  ctx.fillText(envLabel, sx + sw / 2, sy + sh / 2 + 1);
+  ctx.fillStyle = on ? UI.amber : UI.steelDim;
+  const kw = sw / 2 - 12;
+  ctx.fillRect(on ? sx + sw - kw - 8 : sx + 8, sy + 8, kw, sh - 16);
 
   if (queueing) {
     ctx.textAlign = 'center';
