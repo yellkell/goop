@@ -1572,10 +1572,11 @@ function drawNews(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null)
     if (newsScroll < newsMaxScroll - 0.5) chevron(viewBottom - 6, true);
   }
 
-  // CLOSE — the one control on the page.
-  buttonPlate(ctx, NEWS_CLOSE.x, NEWS_CLOSE.y, NEWS_CLOSE.w, NEWS_CLOSE.h, 'CLOSE', UI.amber, hoverAction === 'gazette-close');
-  // Restore the baseline the rest of the menu kit expects.
+  // CLOSE — the one control on the page. Restore the 'middle' baseline FIRST
+  // (the masthead left it 'alphabetic'); buttonPlate centres its label assuming
+  // middle, so without this the CLOSE text rides high in the button.
   ctx.textBaseline = 'middle';
+  buttonPlate(ctx, NEWS_CLOSE.x, NEWS_CLOSE.y, NEWS_CLOSE.w, NEWS_CLOSE.h, 'CLOSE', UI.amber, hoverAction === 'gazette-close');
 }
 
 function hitNews(u: number, v: number): MenuAction | null {
