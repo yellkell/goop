@@ -244,7 +244,7 @@ export const PLATFORM = {
  * arena eats your health FAST. Stay on your platform.
  */
 export const BOUNDARY = {
-  wallHeight: 1.5, // barrier wall height above the platform
+  wallHeight: 2.2, // barrier wall height above the platform — clears the head
   warnDistance: 0.3, // walls start glowing when the head is this close (m)
   drainPerSec: 38, // hp/s while your head is outside the rim
   graceDepth: 0.06, // head may poke this far past the rim before draining
