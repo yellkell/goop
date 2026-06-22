@@ -32,7 +32,7 @@ import {
   myProfileRow,
   type LeaderboardTab,
 } from '../net/leaderboard.js';
-import { gazette } from '../net/gazette.js';
+import { gazette, type GazetteArticle } from '../net/gazette.js';
 import { PUB_MAX_PLAYERS } from '../pub/protocol.js';
 import { PUB_REGIONS } from '../pub/config.js';
 import { UI, buttonPlate, hazardStrip, plate, segmentBar, stencilFont } from '../ui/industrial.js';
@@ -1448,6 +1448,37 @@ function drawSheriffBadge(ctx: CanvasRenderingContext2D, cx: number, cy: number,
   ctx.restore();
 }
 
+/** Where the scrolling article column begins (just below the dateline rule). */
+const NEWS_CONTENT_TOP = 272;
+
+/** Lay out the whole article — headline, subhead, rule, body, byline — from
+ *  `top` downward, returning the y past the last line. `draw = false` measures
+ *  only (for scroll clamping); the y arithmetic is identical either way so the
+ *  measured height matches what's drawn. */
+function layoutArticle(ctx: CanvasRenderingContext2D, art: GazetteArticle, top: number, draw: boolean): number {
+  ctx.textAlign = 'center';
+  ctx.fillStyle = NEWS_INK;
+  ctx.font = `900 46px ${NEWS_SERIF}`;
+  let y = flowParagraph(ctx, art.headline.toUpperCase(), NW / 2, top, NW - 110, 50, draw);
+  if (art.subhead) {
+    ctx.font = `italic 24px ${NEWS_SERIF}`;
+    y = flowParagraph(ctx, art.subhead, NW / 2, y + 18, NW - 150, 30, draw) + 6;
+  }
+  if (draw) newsRule(ctx, y + 6, 2);
+  y += 34;
+
+  ctx.textAlign = 'left';
+  ctx.fillStyle = NEWS_INK;
+  ctx.font = `22px ${NEWS_SERIF}`;
+  for (const para of art.body.split(/\n\s*\n/)) y = flowParagraph(ctx, para, 50, y, NW - 100, 30, draw) + 12;
+
+  ctx.textAlign = 'right';
+  ctx.font = `italic bold 22px ${NEWS_SERIF}`;
+  if (draw) ctx.fillText(`— ${art.byline}, Gasket Township`, NW - 50, y + 8);
+  y += 40;
+  return y;
+}
+
 /** The Gasket Gazette front page. */
 function drawNews(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
   // Aged paper, lightly vignetted at the edges.
@@ -1500,47 +1531,23 @@ function drawNews(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null)
     ctx.font = `18px ${NEWS_SERIF}`;
     ctx.fillText('Check back after the next edition is filed.', NW / 2, NH / 2);
   } else {
-    // Headline.
-    ctx.fillStyle = NEWS_INK;
-    ctx.font = `900 46px ${NEWS_SERIF}`;
-    let y = flowParagraph(ctx, art.headline.toUpperCase(), NW / 2, 284, NW - 110, 50);
-    // Subhead.
-    if (art.subhead) {
-      ctx.font = `italic 24px ${NEWS_SERIF}`;
-      y = flowParagraph(ctx, art.subhead, NW / 2, y + 18, NW - 150, 30) + 6;
-    }
-    newsRule(ctx, y + 6, 2);
+    // The WHOLE article — headline, subhead, body, byline — scrolls together
+    // as one column under the fixed masthead (thumbstick, like the leaderboard).
+    const viewBottom = NEWS_CLOSE.y - 16;
+    const clipTop = 238; // just under the dateline rule, above the headline tops
 
-    // Body — single column that scrolls under the fixed headline when the
-    // edition runs long (thumbstick, like the leaderboard).
-    const bodyTop = y + 28;
-    const bodyBottom = NEWS_CLOSE.y - 16;
-    const viewH = bodyBottom - bodyTop;
-    const paras = art.body.split(/\n\s*\n/);
-    const BYLINE_H = 40;
-
-    // Measure the full body height (no draw) to clamp the scroll.
-    ctx.font = `22px ${NEWS_SERIF}`;
-    let measured = bodyTop;
-    for (const para of paras) measured = flowParagraph(ctx, para, 50, measured, NW - 100, 30, false) + 12;
-    measured += BYLINE_H;
-    newsMaxScroll = Math.max(0, measured - bodyBottom);
+    // Measure the full article height (no draw) to clamp the scroll.
+    const contentBottom = layoutArticle(ctx, art, NEWS_CONTENT_TOP, false);
+    newsMaxScroll = Math.max(0, contentBottom - viewBottom);
     if (newsScroll > newsMaxScroll) newsScroll = newsMaxScroll;
 
-    // Draw, clipped to the view band and shifted up by the scroll.
+    // Draw the article in a scrolling viewport.
     ctx.save();
     ctx.beginPath();
-    ctx.rect(40, bodyTop - 8, NW - 80, viewH + 16);
+    ctx.rect(28, clipTop, NW - 56, viewBottom - clipTop);
     ctx.clip();
     ctx.translate(0, -newsScroll);
-    ctx.textAlign = 'left';
-    ctx.fillStyle = NEWS_INK;
-    ctx.font = `22px ${NEWS_SERIF}`;
-    let by = bodyTop;
-    for (const para of paras) by = flowParagraph(ctx, para, 50, by, NW - 100, 30) + 12;
-    ctx.textAlign = 'right';
-    ctx.font = `italic bold 22px ${NEWS_SERIF}`;
-    ctx.fillText(`— ${art.byline}, Gasket Township`, NW - 50, by + 8);
+    layoutArticle(ctx, art, NEWS_CONTENT_TOP, true);
     ctx.restore();
 
     // More-to-read chevrons in the right margin.
@@ -1561,8 +1568,8 @@ function drawNews(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null)
       ctx.closePath();
       ctx.fill();
     };
-    if (newsScroll > 0.5) chevron(bodyTop + 2, false);
-    if (newsScroll < newsMaxScroll - 0.5) chevron(bodyBottom - 6, true);
+    if (newsScroll > 0.5) chevron(clipTop + 8, false);
+    if (newsScroll < newsMaxScroll - 0.5) chevron(viewBottom - 6, true);
   }
 
   // CLOSE — the one control on the page.
