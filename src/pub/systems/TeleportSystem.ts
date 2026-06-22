@@ -31,7 +31,7 @@ import type { XROrigin } from '@iwsdk/xr-input';
 import { OCTAGON_VERTICES, PALETTE } from '../../config.js';
 import { octagonSlab } from '../../arena/octagon.js';
 import { uiClick } from '../../audio/sfx.js';
-import { EXIT_ZONE, PUB, TELEPORT, TELEPORT_AREAS } from '../config.js';
+import { EXIT_ZONE, PUB, TELEPORT, TELEPORT_AREAS, WALL_SEGMENTS } from '../config.js';
 import { pub } from '../state.js';
 
 const _origin = new Vector3();
@@ -88,6 +88,26 @@ export function snapTurn(player: XROrigin, deltaYaw: number): void {
 
 function inTeleportArea(x: number, z: number): boolean {
   return TELEPORT_AREAS.some((a) => x >= a.minX && x <= a.maxX && z >= a.minZ && z <= a.maxZ);
+}
+
+/** Do segments AB and CD properly cross? (Collinear/endpoint touches don't
+ *  count — grazing a doorway edge shouldn't block the hop.) */
+function segmentsCross(
+  ax: number, az: number, bx: number, bz: number,
+  cx: number, cz: number, dx: number, dz: number,
+): boolean {
+  const o = (px: number, pz: number, qx: number, qz: number, rx: number, rz: number): number =>
+    (qx - px) * (rz - pz) - (qz - pz) * (rx - px);
+  const d1 = o(cx, cz, dx, dz, ax, az);
+  const d2 = o(cx, cz, dx, dz, bx, bz);
+  const d3 = o(ax, az, bx, bz, cx, cz);
+  const d4 = o(ax, az, bx, bz, dx, dz);
+  return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+}
+
+/** Does the straight path (x0,z0)→(x1,z1) cross any solid wall? */
+function crossesWall(x0: number, z0: number, x1: number, z1: number): boolean {
+  return WALL_SEGMENTS.some(([ax, az, bx, bz]) => segmentsCross(x0, z0, x1, z1, ax, az, bx, bz));
 }
 
 /** Is the local player currently locked to a fight platform? */
@@ -275,7 +295,13 @@ export class TeleportSystem extends createSystem({}) {
     }
     this.arcGeo.setPositions(buf);
 
-    this.valid = landed && inTeleportArea(this.landing.x, this.landing.z);
+    // Valid only if it lands on floor AND the straight path there doesn't phase
+    // through a wall (you must go through the doorway, not the wall beside it).
+    this.player.head.getWorldPosition(_head);
+    this.valid =
+      landed &&
+      inTeleportArea(this.landing.x, this.landing.z) &&
+      !crossesWall(_head.x, _head.z, this.landing.x, this.landing.z);
 
     // Facing: thumbstick angle relative to where the controller points.
     const ctrlYaw = Math.atan2(-_dir.x, -_dir.z);

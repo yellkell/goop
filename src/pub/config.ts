@@ -179,6 +179,24 @@ export const TELEPORT_AREAS = [
   { minX: FIGHT.cage.minX - 0.15, maxX: FIGHT.cage.maxX + 0.15, minZ: FIGHT.cage.maxZ + 0.15, maxZ: FIGHT.hall.maxZ - 0.3 },
 ];
 
+/**
+ * Solid walls a teleport may not arc THROUGH — the landing point can be valid
+ * floor, but if the straight path from where you stand crosses one of these
+ * you can't go (no phasing through walls). Each is an XZ segment [ax,az,bx,bz].
+ * The shared pub↔hall wall is split around the FIGHT.door opening, so you can
+ * still teleport through the doorway — just not the wall beside it. The sunken
+ * fight pit is left open (spectators may aim across its rim).
+ */
+export const WALL_SEGMENTS: Array<[number, number, number, number]> = [
+  // Shared west wall (pub ↔ fight hall), carved open at the doorway.
+  [-HALF_W, -HALF_D, -HALF_W, FIGHT.door.z0],
+  [-HALF_W, FIGHT.door.z1, -HALF_W, HALF_D],
+  // Pub perimeter — nothing valid lies beyond, but this stops corner phasing.
+  [-HALF_W, -HALF_D, HALF_W, -HALF_D], // north (bar) wall
+  [HALF_W, -HALF_D, HALF_W, HALF_D], // east wall
+  [-HALF_W, HALF_D, HALF_W, HALF_D], // south (door) wall
+];
+
 export const TELEPORT = {
   engage: 0.5, // thumbstick magnitude that starts aiming
   release: 0.35, // …and below this on the way back, you go

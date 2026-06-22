@@ -14,7 +14,7 @@
  */
 
 import { createSystem, InputComponent } from '@iwsdk/core';
-import { Mesh, MeshStandardMaterial, Vector3 } from 'three';
+import { Mesh, MeshStandardMaterial, Quaternion, Vector3 } from 'three';
 import { uiClick } from '../../audio/sfx.js';
 import { JUKEBOX } from '../config.js';
 import { TRACKS } from '../songs.js';
@@ -26,7 +26,18 @@ const HANDS = ['left', 'right'] as const;
 
 const _cam = new Vector3();
 const _box = new Vector3();
-const _hand = new Vector3();
+const _aim = new Vector3();
+const _rayO = new Vector3();
+const _rayDir = new Vector3();
+const _toJuke = new Vector3();
+const _q = new Quaternion();
+
+// The jukebox is "actionable" exactly when a hand's AIM CONE falls on it —
+// the same forgiving touch-cone cue the grabbable props (beer, darts) use,
+// rather than mere proximity. Matched to PropSystem's range-grab cone.
+const JUKE_AIM_MAX = 1.6; // how far you can stand and still aim at it (m)
+const JUKE_AIM_CONE_COS = Math.cos((32 * Math.PI) / 180);
+const JUKE_AIM_Y = 1.1; // aim at the cabinet body, not its floor-level origin
 
 export class MusicSystem extends createSystem({}) {
   /** One <audio> per track, created the first time that track is selected. */
@@ -49,35 +60,38 @@ export class MusicSystem extends createSystem({}) {
 
   update(): void {
     if (!this.player || !pub.refs) return;
-    pub.refs.jukebox.getWorldPosition(_box);
+    pub.refs.jukebox.getWorldPosition(_box); // floor centre — for distance volume
+    _aim.copy(_box);
+    _aim.y += JUKE_AIM_Y; // the point on the cabinet a hand aims at
 
-    // Light the cabinet up when a hand is close enough to use it — the same
+    // Light the cabinet up when a hand's aim cone falls on it — the same
     // "you can interact with this" cue the grabbable props (beer, darts) give.
-    let near = false;
+    const handAimed: Record<'left' | 'right', boolean> = { left: false, right: false };
+    let aimed = false;
     for (const hand of HANDS) {
-      const grip = this.player.gripSpaces[hand];
-      if (!grip) continue;
-      grip.getWorldPosition(_hand);
-      if (nearXZ(_hand, _box, JUKEBOX.reach * 1.4)) {
-        near = true;
-        break;
-      }
+      const ray = this.player.raySpaces[hand];
+      if (!ray) continue;
+      ray.getWorldPosition(_rayO);
+      ray.getWorldQuaternion(_q);
+      _rayDir.set(0, 0, -1).applyQuaternion(_q).normalize();
+      _toJuke.copy(_aim).sub(_rayO);
+      const dist = _toJuke.length();
+      if (dist < 1e-3 || dist > JUKE_AIM_MAX) continue;
+      if (_toJuke.divideScalar(dist).dot(_rayDir) < JUKE_AIM_CONE_COS) continue;
+      handAimed[hand] = true;
+      aimed = true;
     }
-    this.setLit(near);
+    this.setLit(aimed);
 
-    // Walk-up control: a trigger pull with a hand near the cabinet flips station.
+    // Walk-up control: a trigger pull while a hand is aimed at it flips station.
     let triggered = false;
     for (const hand of HANDS) {
       const gp = this.input.xr.gamepads[hand];
       if (!gp || !gp.getButtonDown(InputComponent.Trigger)) continue;
       triggered = true; // any trigger is a fresh gesture (may unblock autoplay)
-      const grip = this.player.gripSpaces[hand];
-      if (grip) {
-        grip.getWorldPosition(_hand);
-        if (nearXZ(_hand, _box, JUKEBOX.reach)) {
-          this.flip();
-          break;
-        }
+      if (handAimed[hand]) {
+        this.flip();
+        break;
       }
     }
     if (this.pendingPlay && triggered) this.resume();
@@ -205,8 +219,4 @@ export class MusicSystem extends createSystem({}) {
       { text: sub, size: 28, colour: this.signal === 'nosignal' ? '#e8352a' : '#aeb6c2' },
     ]);
   }
-}
-
-function nearXZ(a: Vector3, b: Vector3, r: number): boolean {
-  return (a.x - b.x) ** 2 + (a.z - b.z) ** 2 <= r * r;
 }
