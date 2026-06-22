@@ -32,6 +32,8 @@ import {
   createActionPanel,
   createMenu,
   flashProfileKeyboardHint,
+  resetNewsScroll,
+  scrollNews,
   type ActionButton,
   type ActionPanel,
   type Menu,
@@ -83,6 +85,8 @@ const _fwd = new Vector3();
 const BOARD_SCROLL_DEADZONE = 0.55;
 const BOARD_SCROLL_INITIAL_REPEAT = 0.28;
 const BOARD_SCROLL_REPEAT = 0.12;
+/** Pixels of newspaper body scrolled per thumbstick step (~2.5 lines). */
+const NEWS_SCROLL_STEP = 76;
 
 interface Pointer {
   line: Line;
@@ -112,6 +116,8 @@ export class MenuSystem extends createSystem({}) {
   private skinVersion = 0;
   private boardScrollCooldown = 0;
   private boardScrollDir = 0;
+  private newsScrollCooldown = 0;
+  private newsScrollDir = 0;
   private draggingHue = false;
   private accentHue = Number.NaN;
   /** Which hand+panel currently owns a slider scrub. A scrub may only START on
@@ -174,6 +180,8 @@ export class MenuSystem extends createSystem({}) {
     let hoverAction: MenuAction | null = null;
     let boardPointed = false;
     let boardScrollAxis = 0;
+    let newsPointed = false;
+    let newsScrollAxis = 0;
     let dragged = false;
     let clicked = false;
     const meshes = this.menu.panels.filter((p) => p.mesh.visible).map((p) => p.mesh);
@@ -186,6 +194,11 @@ export class MenuSystem extends createSystem({}) {
         boardPointed = true;
         const axis = this.input.xr.gamepads[hand]?.getAxesValues(InputComponent.Thumbstick)?.y ?? 0;
         if (Math.abs(axis) > Math.abs(boardScrollAxis)) boardScrollAxis = axis;
+      }
+      if (panel.id === 'news') {
+        newsPointed = true;
+        const axis = this.input.xr.gamepads[hand]?.getAxesValues(InputComponent.Thumbstick)?.y ?? 0;
+        if (Math.abs(axis) > Math.abs(newsScrollAxis)) newsScrollAxis = axis;
       }
       const action = hit.uv ? panel.hitTest(hit.uv.x, hit.uv.y) : null;
       if (action || !hoverAction) {
@@ -220,10 +233,11 @@ export class MenuSystem extends createSystem({}) {
       }
     }
     const boardScrolled = this.updateBoardScroll(boardPointed, boardScrollAxis, delta);
+    const newsScrolled = this.updateNewsScroll(newsPointed, newsScrollAxis, delta);
     const skinChanged = customization.version !== this.lastSkinDraw;
     if (skinChanged) this.lastSkinDraw = customization.version;
     const hoverChanged = hover !== this.hovered || hoverAction !== this.hoveredAction;
-    if (hoverChanged || boardScrolled || skinChanged) {
+    if (hoverChanged || boardScrolled || newsScrolled || skinChanged) {
       this.hovered = hover;
       this.hoveredAction = hoverAction;
       this.menu.redrawAll(hover, hoverAction);
@@ -269,6 +283,25 @@ export class MenuSystem extends createSystem({}) {
     this.boardScrollDir = dir;
     this.boardScrollCooldown = changedDir ? BOARD_SCROLL_INITIAL_REPEAT : BOARD_SCROLL_REPEAT;
     return scrollLeaderboard(dir);
+  }
+
+  /** The newspaper body scrolls the same way as the leaderboard — stepped
+   *  thumbstick with a repeat cooldown — but in pixels rather than rows. */
+  private updateNewsScroll(pointing: boolean, axisY: number, delta: number): boolean {
+    this.newsScrollCooldown = Math.max(0, this.newsScrollCooldown - delta);
+    if (!pointing || Math.abs(axisY) < BOARD_SCROLL_DEADZONE) {
+      this.newsScrollCooldown = 0;
+      this.newsScrollDir = 0;
+      return false;
+    }
+
+    const dir = axisY > 0 ? 1 : -1;
+    const changedDir = dir !== this.newsScrollDir;
+    if (!changedDir && this.newsScrollCooldown > 0) return false;
+
+    this.newsScrollDir = dir;
+    this.newsScrollCooldown = changedDir ? BOARD_SCROLL_INITIAL_REPEAT : BOARD_SCROLL_REPEAT;
+    return scrollNews(dir * NEWS_SCROLL_STEP);
   }
 
   private run(action: MenuAction): void {
@@ -409,6 +442,7 @@ export class MenuSystem extends createSystem({}) {
         // Open the paper, and the moment you do the edition counts as read —
         // the red dot clears.
         app.gazetteOpen = true;
+        resetNewsScroll();
         markGazetteRead();
         void refreshGazette(true);
         break;

@@ -1354,7 +1354,8 @@ function newsRule(ctx: CanvasRenderingContext2D, y: number, h = 3): void {
   ctx.fillRect(48, y, NW - 96, h);
 }
 
-/** Flow one paragraph, wrapped to `maxW`; returns the y past the last line. */
+/** Flow one paragraph, wrapped to `maxW`; returns the y past the last line.
+ *  Pass `draw = false` to measure height only (for scroll clamping). */
 function flowParagraph(
   ctx: CanvasRenderingContext2D,
   text: string,
@@ -1362,6 +1363,7 @@ function flowParagraph(
   y: number,
   maxW: number,
   lineH: number,
+  draw = true,
 ): number {
   const words = text.replace(/\s+/g, ' ').trim().split(' ');
   let line = '';
@@ -1369,7 +1371,7 @@ function flowParagraph(
   for (const w of words) {
     const test = line ? `${line} ${w}` : w;
     if (ctx.measureText(test).width > maxW && line) {
-      ctx.fillText(line, x, cy);
+      if (draw) ctx.fillText(line, x, cy);
       line = w;
       cy += lineH;
     } else {
@@ -1377,10 +1379,28 @@ function flowParagraph(
     }
   }
   if (line) {
-    ctx.fillText(line, x, cy);
+    if (draw) ctx.fillText(line, x, cy);
     cy += lineH;
   }
   return cy;
+}
+
+// Body scroll (pixels): the news body scrolls under the fixed masthead/headline
+// when an edition runs long, driven by the thumbstick like the leaderboard.
+// drawNews sets the max each redraw; scrollNews clamps against it.
+let newsScroll = 0;
+let newsMaxScroll = 0;
+
+/** Scroll the news body by `deltaPx`, clamped. Returns true if it moved. */
+export function scrollNews(deltaPx: number): boolean {
+  const before = newsScroll;
+  newsScroll = Math.max(0, Math.min(newsMaxScroll, newsScroll + deltaPx));
+  return newsScroll !== before;
+}
+
+/** Back to the top — called when the paper is opened. */
+export function resetNewsScroll(): void {
+  newsScroll = 0;
 }
 
 /** A tin sheriff's star, drawn as a bold newsprint engraving (sepia ink): a
@@ -1491,29 +1511,58 @@ function drawNews(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null)
     }
     newsRule(ctx, y + 6, 2);
 
-    // Body — justified-ish single column, clipped so it can never spill onto
-    // the CLOSE button no matter how long Cole runs his mouth.
-    ctx.save();
+    // Body — single column that scrolls under the fixed headline when the
+    // edition runs long (thumbstick, like the leaderboard).
     const bodyTop = y + 28;
-    const bodyBottom = NEWS_CLOSE.y - 24;
+    const bodyBottom = NEWS_CLOSE.y - 16;
+    const viewH = bodyBottom - bodyTop;
+    const paras = art.body.split(/\n\s*\n/);
+    const BYLINE_H = 40;
+
+    // Measure the full body height (no draw) to clamp the scroll.
+    ctx.font = `22px ${NEWS_SERIF}`;
+    let measured = bodyTop;
+    for (const para of paras) measured = flowParagraph(ctx, para, 50, measured, NW - 100, 30, false) + 12;
+    measured += BYLINE_H;
+    newsMaxScroll = Math.max(0, measured - bodyBottom);
+    if (newsScroll > newsMaxScroll) newsScroll = newsMaxScroll;
+
+    // Draw, clipped to the view band and shifted up by the scroll.
+    ctx.save();
     ctx.beginPath();
-    ctx.rect(48, bodyTop - 24, NW - 96, bodyBottom - (bodyTop - 24));
+    ctx.rect(40, bodyTop - 8, NW - 80, viewH + 16);
     ctx.clip();
+    ctx.translate(0, -newsScroll);
     ctx.textAlign = 'left';
     ctx.fillStyle = NEWS_INK;
     ctx.font = `22px ${NEWS_SERIF}`;
     let by = bodyTop;
-    for (const para of art.body.split(/\n\s*\n/)) {
-      if (by > bodyBottom) break;
-      by = flowParagraph(ctx, para, 50, by, NW - 100, 30) + 12;
-    }
-    // Byline.
-    if (by <= bodyBottom) {
-      ctx.textAlign = 'right';
-      ctx.font = `italic bold 22px ${NEWS_SERIF}`;
-      ctx.fillText(`— ${art.byline}, Gasket Township`, NW - 50, by + 8);
-    }
+    for (const para of paras) by = flowParagraph(ctx, para, 50, by, NW - 100, 30) + 12;
+    ctx.textAlign = 'right';
+    ctx.font = `italic bold 22px ${NEWS_SERIF}`;
+    ctx.fillText(`— ${art.byline}, Gasket Township`, NW - 50, by + 8);
     ctx.restore();
+
+    // More-to-read chevrons in the right margin.
+    const chevron = (yc: number, down: boolean): void => {
+      ctx.fillStyle = 'rgba(36,28,18,0.6)';
+      const xc = NW - 40;
+      const s = 7;
+      ctx.beginPath();
+      if (down) {
+        ctx.moveTo(xc - s, yc - s);
+        ctx.lineTo(xc + s, yc - s);
+        ctx.lineTo(xc, yc + s);
+      } else {
+        ctx.moveTo(xc - s, yc + s);
+        ctx.lineTo(xc + s, yc + s);
+        ctx.lineTo(xc, yc - s);
+      }
+      ctx.closePath();
+      ctx.fill();
+    };
+    if (newsScroll > 0.5) chevron(bodyTop + 2, false);
+    if (newsScroll < newsMaxScroll - 0.5) chevron(bodyBottom - 6, true);
   }
 
   // CLOSE — the one control on the page.
