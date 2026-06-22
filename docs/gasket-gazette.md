@@ -14,6 +14,7 @@ button wears a **red notification dot** until you've read the latest edition.
    └─ /daily-gazette  (.claude/commands/daily-gazette.md)
         1. node scripts/ladder-brief.mjs    → reads Firestore `players`,
            diffs `newspaper/_snapshot`, prints a JSON "wire report"
+           (climbers + busiest only — never who fell; the paper won't punch down)
         2. Claude writes the editorial in Sheriff Cole Ironside's voice
         3. node scripts/publish-gazette.mjs → writes `newspaper/latest`
            (edition bumped, publish timestamp) + rolls `_snapshot` forward

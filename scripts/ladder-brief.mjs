@@ -87,15 +87,17 @@ const rows = players.map((p, i) => {
     scoreGained: before ? p.score - before.score : 0,
     duoGained: before ? p.duo - before.duo : 0,
     ffaGained: before ? p.ffa - before.ffa : 0,
-    rankChange: prevRank ? prevRank - (i + 1) : null, // +climbed, -slid
+    // Climbs ONLY — we never surface who slid down the board. The paper does
+    // not punch down at players who dropped a place; null = no climb to note.
+    rankChange: prevRank && prevRank > i + 1 ? prevRank - (i + 1) : null,
     activeRecently: p.updatedAt > 0 && now - p.updatedAt < ACTIVE_WINDOW_MS,
   };
 });
 
 const movers = rows.filter((r) => r.gamesApprox > 0 || r.activeRecently);
 const totalGames = rows.reduce((s, r) => s + r.gamesApprox, 0);
+// Climbers only — the paper celebrates who rose, never who slid.
 const climbers = rows.filter((r) => (r.rankChange ?? 0) > 0).sort((a, b) => b.rankChange - a.rankChange);
-const fallers = rows.filter((r) => (r.rankChange ?? 0) < 0).sort((a, b) => a.rankChange - b.rankChange);
 const busiest = [...rows].sort((a, b) => b.gamesApprox - a.gamesApprox).filter((r) => r.gamesApprox > 0);
 
 const brief = {
@@ -110,7 +112,6 @@ const brief = {
     totalGamesApprox: totalGames,
     newcomers: rows.filter((r) => r.isNew).map((r) => r.name),
     topClimber: climbers[0] ?? null,
-    biggestFaller: fallers[0] ?? null,
     busiest: busiest[0] ?? null,
     leader: rows[0] ?? null,
   },

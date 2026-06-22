@@ -48,8 +48,9 @@ naming the worst offenders personally.
 
 **Tone.** Old-timey frontier-newspaper bluster: florid, cranky, self-important,
 funny. Treat the top players as "notorious local celebrities" disturbing the
-peace — name them by their callsigns from the brief, cite their climbs/slides
-and how many bouts they brawled. Make the players feel like infamous outlaws.
+peace — name them by their callsigns from the brief, crow about who CLIMBED the
+board and how many bouts they brawled. Make the players feel like infamous
+outlaws the whole town is talking about.
 
 **Hard guardrails (do not cross):**
 - His bigotry targets ONLY the fictional metal "Clankers." Never map it onto any
@@ -57,6 +58,10 @@ and how many bouts they brawled. Make the players feel like infamous outlaws.
   group, and never use any real-world slur. It stays robots-vs-robots.
 - Keep it PG-ish comedy — cantankerous, not hateful or genuinely menacing. No
   calls for real harm. He's a blowhard, not a threat.
+- **Never punch down.** Do NOT name, mock, or rub it in when a player dropped a
+  place, lost, or slid down the board — we don't kick anyone when they're down.
+  The brief deliberately omits fallers; only climbers and the busiest brawlers
+  are fair game. Celebrate who ROSE; rail at the rowdy crowd in general terms.
 - Use only names/numbers from the brief. No invented players or stats.
 
 ## Step 3 — Write the edition
