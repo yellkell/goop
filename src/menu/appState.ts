@@ -87,6 +87,8 @@ export const app: {
   pubRegionCounts: Record<string, number>;
   /** Which face the lobby info panel shows: its doors, or the pub-region picker. */
   infoView: 'root' | 'pubpick';
+  /** The Gasket Gazette is open over the lobby (modal, like customisation). */
+  gazetteOpen: boolean;
   /** Which backdrop the arena renders — held across every mode. */
   environment: AppEnvironment;
   /** Player's chosen avatar-accent hue (0..1 around the colour wheel). */
@@ -113,6 +115,7 @@ export const app: {
   pubCount: -1,
   pubRegionCounts: {},
   infoView: 'root',
+  gazetteOpen: false,
   environment: localStorage.getItem('ff-env') === 'desert' ? 'desert' : 'ar',
   accentHue: loadAccentHue(),
   ballAttach: loadBallAttach(),

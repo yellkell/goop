@@ -71,6 +71,7 @@ import {
   setPlayerNote,
   setProfileView,
 } from '../net/leaderboard.js';
+import { markGazetteRead, refreshGazette } from '../net/gazette.js';
 import { hueToColor, pubUrl } from '../config.js';
 import * as sfx from '../audio/sfx.js';
 
@@ -143,12 +144,30 @@ export class MenuSystem extends createSystem({}) {
       return;
     }
 
-    // Customisation is modal: the arc swaps out for the panel + mirror.
+    // Customisation and the gazette are both modal: the lobby arc swaps out for
+    // the open panel. The leaderboard ('board') hangs behind you — always up.
+    const modalCustom = customization.open;
+    const modalNews = app.gazetteOpen;
     for (const p of this.menu.panels) {
-      if (p.id === 'custom' || p.id === 'loadout' || p.id === 'balls') p.mesh.visible = customization.open;
-      else if (p.id !== 'board') p.mesh.visible = !customization.open;
+      switch (p.id) {
+        case 'board':
+          break;
+        case 'custom':
+        case 'loadout':
+        case 'balls':
+          p.mesh.visible = modalCustom;
+          break;
+        case 'news':
+          p.mesh.visible = modalNews;
+          break;
+        default:
+          // The arc (train/duel/info) AND the paper button: the lobby's face,
+          // gone while any modal is open.
+          p.mesh.visible = !modalCustom && !modalNews;
+          break;
+      }
     }
-    if (this.mirror) this.mirror.group.visible = customization.open;
+    if (this.mirror) this.mirror.group.visible = modalCustom;
 
     // Lobby / queueing: hover + click the panels.
     let hover: PanelId | null = null;
@@ -386,6 +405,16 @@ export class MenuSystem extends createSystem({}) {
         this.kbMode = 'name';
         this.keyboard.open(myStats().name);
         return;
+      case 'open-gazette':
+        // Open the paper, and the moment you do the edition counts as read —
+        // the red dot clears.
+        app.gazetteOpen = true;
+        markGazetteRead();
+        void refreshGazette(true);
+        break;
+      case 'gazette-close':
+        app.gazetteOpen = false;
+        break;
       case 'open-pub':
         // Don't navigate yet — open the EU/USA region picker first.
         app.infoView = 'pubpick';
@@ -720,8 +749,12 @@ export class MenuSystem extends createSystem({}) {
   private applyState(): void {
     const inLobby = app.state === 'menu' || app.state === 'queueing';
     this.menu.setVisible(inLobby);
-    // Fresh board standings whenever you land back in the lobby (throttled).
-    if (inLobby) void refreshLeaderboard();
+    // Fresh board standings + the day's Gasket Gazette whenever you land back
+    // in the lobby (both throttled).
+    if (inLobby) {
+      void refreshLeaderboard();
+      void refreshGazette();
+    }
 
     // Live "N searching" (1V1 panel) and "X/12 in the pub" (pub door) counts —
     // only watched in the lobby.
@@ -755,9 +788,10 @@ export class MenuSystem extends createSystem({}) {
       this.keyboard.close();
       this.kbPending = null;
     }
-    // Customisation (panel + mirror) is a lobby-only affair.
+    // Customisation (panel + mirror) and the gazette are lobby-only affairs.
     if (!inLobby) {
       customization.open = false;
+      app.gazetteOpen = false;
       if (this.mirror) this.mirror.group.visible = false;
     }
 

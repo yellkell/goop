@@ -12,6 +12,7 @@
 
 import { launchXR, SessionMode, World } from '@iwsdk/core';
 import { initLeaderboard } from './net/leaderboard.js';
+import { initGazette } from './net/gazette.js';
 import { buildArena } from './arena/arena.js';
 import { setupEnvironment } from './arena/environment.js';
 import { setupCombatants } from './combat/setup.js';
@@ -72,6 +73,7 @@ World.create(container, {
   },
 }).then(async (world) => {
   initLeaderboard(); // anonymous profile + first board fetch
+  initGazette(); // pull the day's Gasket Gazette for the lobby paper button
   setupEnvironment(world);
   buildArena(world);
   setupCombatants(world);

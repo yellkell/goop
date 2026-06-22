@@ -32,11 +32,23 @@ import {
   myProfileRow,
   type LeaderboardTab,
 } from '../net/leaderboard.js';
+import { gazette } from '../net/gazette.js';
 import { PUB_MAX_PLAYERS } from '../pub/protocol.js';
 import { PUB_REGIONS } from '../pub/config.js';
 import { UI, buttonPlate, hazardStrip, plate, segmentBar, stencilFont } from '../ui/industrial.js';
 
-export type PanelId = 'train' | 'duel' | 'info' | 'board' | 'custom' | 'loadout' | 'balls';
+export type PanelId =
+  | 'train'
+  | 'duel'
+  | 'info'
+  | 'board'
+  | 'custom'
+  | 'loadout'
+  | 'balls'
+  /** The little circular paper button hanging above the right panel. */
+  | 'gazette'
+  /** The Gasket Gazette front page itself (opens modal over the lobby). */
+  | 'news';
 
 export type MenuAction =
   | 'start-training'
@@ -77,7 +89,10 @@ export type MenuAction =
   | 'av-uncolor'
   /** Reset the avatar-accent (neon) hue to the house ember default. */
   | 'accent-default'
-  | 'pf-0' | 'pf-1' | 'pf-2';
+  | 'pf-0' | 'pf-1' | 'pf-2'
+  /** Open / close the Gasket Gazette. */
+  | 'open-gazette'
+  | 'gazette-close';
 
 const PW = 512;
 const PH = 400;
@@ -1271,6 +1286,218 @@ function clickBalls(u: number, v: number): boolean {
   return false;
 }
 
+// --- THE GASKET GAZETTE -----------------------------------------------------
+// A plain circular button hangs above the right panel; it wears a red dot when
+// Sheriff Cole Ironside has filed a new edition you haven't read. Tapping it
+// opens the paper itself — an aged-newsprint front page (serif type on cream,
+// a deliberate break from the smoked-steel lobby) over the lobby arc.
+
+const GZ = 128; // the round button's square canvas
+const NW = 720; // newspaper page canvas — portrait, like a real front page
+const NH = 900;
+
+/** The round paper button: a steel disc with a folded-newspaper glyph, plus a
+ *  red notification dot while the latest edition is unread. NOT glowing. */
+function drawGazetteButton(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
+  ctx.clearRect(0, 0, GZ, GZ);
+  const hot = hoverAction === 'open-gazette';
+  const cx = GZ / 2;
+  const cy = GZ / 2;
+  const r = 52;
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fillStyle = hot ? 'rgba(16,18,24,0.92)' : 'rgba(9,10,14,0.82)';
+  ctx.fill();
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = hot ? UI.amber : UI.steel;
+  ctx.stroke();
+
+  // Folded-newspaper glyph: a page with a masthead bar + body lines.
+  const iw = 50;
+  const ih = 44;
+  const ix = cx - iw / 2;
+  const iy = cy - ih / 2;
+  const ink = hot ? UI.amber : UI.text;
+  ctx.fillStyle = ink;
+  ctx.fillRect(ix, iy, iw, ih);
+  ctx.fillStyle = 'rgba(9,10,14,0.92)';
+  ctx.fillRect(ix + 6, iy + 6, iw - 12, 9); // masthead block
+  for (let i = 0; i < 4; i++) ctx.fillRect(ix + 6, iy + 21 + i * 6, iw - 12, 3); // text lines
+
+  // Unread dot — the whole point of the button.
+  if (gazette.unread) {
+    ctx.beginPath();
+    ctx.arc(cx + r * 0.66, cy - r * 0.66, 12, 0, Math.PI * 2);
+    ctx.fillStyle = UI.danger;
+    ctx.fill();
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+    ctx.stroke();
+  }
+}
+
+/** Inside the disc → open the gazette. */
+function hitGazetteButton(u: number, v: number): MenuAction | null {
+  const dx = u - 0.5;
+  const dy = v - 0.5;
+  return dx * dx + dy * dy <= 0.41 * 0.41 ? 'open-gazette' : null;
+}
+
+const NEWS_INK = '#241c12'; // sepia newsprint ink
+const NEWS_SERIF = 'Georgia, "Times New Roman", serif';
+/** CLOSE button band on the page (canvas coords). */
+const NEWS_CLOSE = { x: NW / 2 - 120, y: NH - 92, w: 240, h: 56 };
+
+function newsRule(ctx: CanvasRenderingContext2D, y: number, h = 3): void {
+  ctx.fillStyle = NEWS_INK;
+  ctx.fillRect(48, y, NW - 96, h);
+}
+
+/** Flow one paragraph, wrapped to `maxW`; returns the y past the last line. */
+function flowParagraph(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  maxW: number,
+  lineH: number,
+): number {
+  const words = text.replace(/\s+/g, ' ').trim().split(' ');
+  let line = '';
+  let cy = y;
+  for (const w of words) {
+    const test = line ? `${line} ${w}` : w;
+    if (ctx.measureText(test).width > maxW && line) {
+      ctx.fillText(line, x, cy);
+      line = w;
+      cy += lineH;
+    } else {
+      line = test;
+    }
+  }
+  if (line) {
+    ctx.fillText(line, x, cy);
+    cy += lineH;
+  }
+  return cy;
+}
+
+/** The Gasket Gazette front page. */
+function drawNews(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
+  // Aged paper, lightly vignetted at the edges.
+  ctx.clearRect(0, 0, NW, NH);
+  ctx.fillStyle = '#e9e2cf';
+  ctx.fillRect(0, 0, NW, NH);
+  const vg = ctx.createRadialGradient(NW / 2, NH / 2, NH * 0.18, NW / 2, NH / 2, NH * 0.72);
+  vg.addColorStop(0, 'rgba(0,0,0,0)');
+  vg.addColorStop(1, 'rgba(74,52,18,0.22)');
+  ctx.fillStyle = vg;
+  ctx.fillRect(0, 0, NW, NH);
+  ctx.strokeStyle = NEWS_INK;
+  ctx.lineWidth = 4;
+  ctx.strokeRect(14, 14, NW - 28, NH - 28);
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(22, 22, NW - 44, NH - 44);
+
+  const art = gazette.article;
+
+  // Masthead.
+  ctx.fillStyle = NEWS_INK;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  newsRule(ctx, 44);
+  ctx.font = `900 62px ${NEWS_SERIF}`;
+  ctx.fillText('The Gasket Gazette', NW / 2, 116);
+  ctx.font = `italic 17px ${NEWS_SERIF}`;
+  ctx.fillText('GASKET TERRITORY · EST. 1887 · PRICE ONE CENT', NW / 2, 142);
+  newsRule(ctx, 156, 2);
+
+  // Dateline strip.
+  ctx.font = `bold 16px ${NEWS_SERIF}`;
+  ctx.textAlign = 'left';
+  ctx.fillText(art ? `No. ${art.edition}` : 'No. —', 50, 180);
+  ctx.textAlign = 'center';
+  ctx.fillText(art?.dateline || 'GASKET TERRITORY', NW / 2, 180);
+  ctx.textAlign = 'right';
+  ctx.fillText("FROM THE SHERIFF'S DESK", NW - 50, 180);
+  newsRule(ctx, 192, 2);
+
+  ctx.textAlign = 'center';
+  if (!art) {
+    ctx.font = `italic 26px ${NEWS_SERIF}`;
+    ctx.fillStyle = NEWS_INK;
+    ctx.fillText(gazette.status || 'the presses are quiet', NW / 2, NH / 2 - 40);
+    ctx.font = `18px ${NEWS_SERIF}`;
+    ctx.fillText('Check back after the next edition is filed.', NW / 2, NH / 2);
+  } else {
+    // Headline.
+    ctx.fillStyle = NEWS_INK;
+    ctx.font = `900 46px ${NEWS_SERIF}`;
+    let y = flowParagraph(ctx, art.headline.toUpperCase(), NW / 2, 248, NW - 110, 50);
+    // Subhead.
+    if (art.subhead) {
+      ctx.font = `italic 24px ${NEWS_SERIF}`;
+      y = flowParagraph(ctx, art.subhead, NW / 2, y + 18, NW - 150, 30) + 6;
+    }
+    newsRule(ctx, y + 6, 2);
+
+    // Mood stamp — a faint red rubber stamp, rotated, top-right of the body.
+    if (art.mood) {
+      ctx.save();
+      ctx.translate(NW - 150, y + 70);
+      ctx.rotate(-0.22);
+      ctx.globalAlpha = 0.5;
+      ctx.strokeStyle = UI.danger;
+      ctx.lineWidth = 4;
+      ctx.strokeRect(-86, -34, 172, 60);
+      ctx.fillStyle = UI.danger;
+      ctx.font = `900 30px ${NEWS_SERIF}`;
+      ctx.textAlign = 'center';
+      ctx.fillText(art.mood.toUpperCase().slice(0, 9), 0, 11);
+      ctx.restore();
+    }
+
+    // Body — justified-ish single column, clipped so it can never spill onto
+    // the CLOSE button no matter how long Cole runs his mouth.
+    ctx.save();
+    const bodyTop = y + 28;
+    const bodyBottom = NEWS_CLOSE.y - 24;
+    ctx.beginPath();
+    ctx.rect(48, bodyTop - 24, NW - 96, bodyBottom - (bodyTop - 24));
+    ctx.clip();
+    ctx.textAlign = 'left';
+    ctx.fillStyle = NEWS_INK;
+    ctx.font = `22px ${NEWS_SERIF}`;
+    let by = bodyTop;
+    for (const para of art.body.split(/\n\s*\n/)) {
+      if (by > bodyBottom) break;
+      by = flowParagraph(ctx, para, 50, by, NW - 100, 30) + 12;
+    }
+    // Byline.
+    if (by <= bodyBottom) {
+      ctx.textAlign = 'right';
+      ctx.font = `italic bold 22px ${NEWS_SERIF}`;
+      ctx.fillText(`— ${art.byline}, Gasket Township`, NW - 50, by + 8);
+    }
+    ctx.restore();
+  }
+
+  // CLOSE — the one control on the page.
+  buttonPlate(ctx, NEWS_CLOSE.x, NEWS_CLOSE.y, NEWS_CLOSE.w, NEWS_CLOSE.h, 'CLOSE', UI.amber, hoverAction === 'gazette-close');
+  // Restore the baseline the rest of the menu kit expects.
+  ctx.textBaseline = 'middle';
+}
+
+function hitNews(u: number, v: number): MenuAction | null {
+  const x = u * NW;
+  const y = (1 - v) * NH;
+  if (x >= NEWS_CLOSE.x && x <= NEWS_CLOSE.x + NEWS_CLOSE.w && y >= NEWS_CLOSE.y && y <= NEWS_CLOSE.y + NEWS_CLOSE.h) {
+    return 'gazette-close';
+  }
+  return null;
+}
+
 export function createMenu(scene: Scene): Menu {
   const group = new Group();
   group.name = 'lobby-menu';
@@ -1293,6 +1520,13 @@ export function createMenu(scene: Scene): Menu {
     ch: BALL_H,
     click: clickBalls,
   });
+  // The little round paper button (above the right panel) + the front page it
+  // opens. The page is portrait (NW:NH), sized to keep newsprint readable.
+  const gazetteBtn = makePanel('gazette', 0.16, 0.16, drawGazetteButton, hitGazetteButton, {
+    cw: GZ,
+    ch: GZ,
+  });
+  const news = makePanel('news', 0.86, 0.86 * (NH / NW), drawNews, hitNews, { cw: NW, ch: NH });
 
   // Shallow arc in front of the player, tilted inward toward the centre.
   const y = 1.45;
@@ -1324,8 +1558,14 @@ export function createMenu(scene: Scene): Menu {
   loadout.mesh.position.set(0.54, 0.86, -1.08);
   loadout.mesh.rotation.y = -0.3;
   loadout.mesh.visible = false;
+  // The paper button sits just above the right (info) panel, sharing its tilt.
+  gazetteBtn.mesh.position.set(0.92, 1.86, -1.05);
+  gazetteBtn.mesh.rotation.y = -0.48;
+  // The front page opens dead centre, facing you — modal over the lobby arc.
+  news.mesh.position.set(0, 1.5, -1.16);
+  news.mesh.visible = false;
 
-  const panels = [train, duel, info, board, custom, balls, loadout];
+  const panels = [train, duel, info, board, custom, balls, loadout, gazetteBtn, news];
   for (const p of panels) {
     p.redraw(null);
     group.add(p.mesh);
