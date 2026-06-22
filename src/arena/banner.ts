@@ -59,7 +59,8 @@ export function createTitleBanner(scene: Scene): Mesh {
   const texture = new CanvasTexture(canvas);
   texture.minFilter = LinearFilter;
   const material = new MeshBasicMaterial({ map: texture, transparent: true });
-  // Square plane — fire-fight.png is a 1:1 canvas with transparent margins.
+  // Square plane sized to the procedural fallback; the real sign art (any
+  // aspect) is letterbox-fitted onto it once it loads (see below).
   const banner = new Mesh(new PlaneGeometry(2.2, 2.2), material);
   banner.name = 'title-banner';
   banner.position.set(0, 3.2, -ARENA_GAP - 1.2);
@@ -75,6 +76,14 @@ export function createTitleBanner(scene: Scene): Mesh {
       material.map?.dispose();
       material.map = tex;
       material.needsUpdate = true;
+      // Letterbox-fit the art to its true aspect on the square plane so it's
+      // never stretched (a landscape plate keeps its proportions).
+      const img = tex.image as { width?: number; height?: number } | undefined;
+      if (img?.width && img.height) {
+        const aspect = img.width / img.height;
+        if (aspect >= 1) banner.scale.y = 1 / aspect;
+        else banner.scale.x = aspect;
+      }
     },
     undefined,
     () => {
