@@ -564,11 +564,23 @@ export function buildPub(world: World): PubRefs {
   const dartsBoardPanel = new Panel(0.85, 0.7);
   dartsBoardPanel.mesh.position.set(darts.boardX - 1.15, 1.7, darts.wallZ + 0.02);
   root.add(dartsBoardPanel.mesh);
-  // RESET button just beneath it — wipes the chalkboard for the whole room.
-  // DartsSystem draws it and drives the aim-cone interaction.
-  const dartsResetButton = new Panel(0.44, 0.13);
-  dartsResetButton.mesh.position.set(darts.boardX - 1.15, 1.28, darts.wallZ + 0.025);
-  root.add(dartsResetButton.mesh);
+  // RESET button just beneath it — a physical red push-button that wipes the
+  // chalkboard for the whole room. A gunmetal bezel ring with a glowing red
+  // cap; DartsSystem brightens the cap on the aim cone and drives the press.
+  const resetBtnX = darts.boardX - 1.15;
+  const resetBtnY = 1.28;
+  const resetBezel = new Mesh(new CylinderGeometry(0.05, 0.055, 0.03, 24), gunmetal(0.4));
+  resetBezel.rotation.x = Math.PI / 2; // lay the disc flat against the wall (faces +z)
+  resetBezel.position.set(resetBtnX, resetBtnY, darts.wallZ + 0.03);
+  root.add(resetBezel);
+  const dartsResetButton = new Mesh(
+    new CylinderGeometry(0.038, 0.038, 0.05, 24),
+    new MeshStandardMaterial({ color: 0xd31919, emissive: 0xff2a2a, emissiveIntensity: 0.45, roughness: 0.35, metalness: 0.1 }),
+  );
+  dartsResetButton.name = 'darts-reset';
+  dartsResetButton.rotation.x = Math.PI / 2;
+  dartsResetButton.position.set(resetBtnX, resetBtnY, darts.wallZ + 0.05); // proud of the bezel
+  root.add(dartsResetButton);
 
   // --- IRON SNAKE arcade cabinet (north-west corner) -----------------------------
   const arcadePos: [number, number, number] = [-4.45, 0, -2.85];
@@ -699,13 +711,11 @@ function buildJukebox(): { group: Group; panel: Panel } {
   g.add(knob);
 
   // --- Marquee: the current-track readout, up under the arch -------------------
-  const panel = new Panel(0.52, 0.2, 384);
+  // A proper LED-screen marquee (drawn by MusicSystem) — bigger + higher-res
+  // than before so the track name actually fits (and scrolls if it's long).
+  const panel = new Panel(0.6, 0.26, 512);
   panel.mesh.position.set(0, 0.86, F - 0.02);
   panel.mesh.rotation.y = Math.PI; // plane faces +z by default; turn it to −z
-  panel.setLines([
-    { text: 'JUKEBOX', size: 58, colour: '#ffb000', bold: true },
-    { text: 'pull trigger to play', size: 30, colour: '#aeb6c2' },
-  ]);
   g.add(panel.mesh);
 
   return { group: g, panel };

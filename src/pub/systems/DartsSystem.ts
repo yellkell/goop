@@ -7,7 +7,7 @@
  */
 
 import { createSystem, InputComponent } from '@iwsdk/core';
-import { CanvasTexture, LinearFilter, Mesh, MeshBasicMaterial, PlaneGeometry, Quaternion, SRGBColorSpace, Vector3 } from 'three';
+import { CanvasTexture, LinearFilter, Mesh, MeshBasicMaterial, MeshStandardMaterial, PlaneGeometry, Quaternion, SRGBColorSpace, Vector3 } from 'three';
 import { uiClick } from '../../audio/sfx.js';
 import type { BoardRow } from '../protocol.js';
 import { pubSendEvent } from '../net.js';
@@ -25,10 +25,13 @@ const _o = new Vector3();
 const _dir = new Vector3();
 const _toBtn = new Vector3();
 const _bq = new Quaternion();
-// The RESET button is "actionable" when a hand's aim cone falls on it — the
-// same touch-cone cue the props + jukebox use.
-const RESET_AIM_MAX = 2.6;
-const RESET_AIM_CONE_COS = Math.cos((26 * Math.PI) / 180);
+// The RESET button only lights when a hand's aim cone falls on it from CLOSE —
+// you walk up and press it, so the reach is short (it used to light from across
+// the room). Cap glow at rest vs. when aimed.
+const RESET_AIM_MAX = 1.3;
+const RESET_AIM_CONE_COS = Math.cos((22 * Math.PI) / 180);
+const RESET_GLOW_REST = 0.45;
+const RESET_GLOW_HOT = 1.9;
 
 export class DartsSystem extends createSystem({}) {
   private popups: Popup[] = [];
@@ -56,7 +59,6 @@ export class DartsSystem extends createSystem({}) {
       bus.on('board', (rows) => this.renderBoard(rows)),
     );
     this.renderBoard([]);
-    this.drawResetButton(false);
   }
 
   update(delta: number): void {
@@ -78,12 +80,12 @@ export class DartsSystem extends createSystem({}) {
     }
   }
 
-  /** Highlight the RESET button when a hand aims at it; a trigger pull wipes
-   *  the board (server-authoritative online, local offline). */
+  /** Brighten the red button when a hand aims at it from close; a trigger pull
+   *  wipes the board (server-authoritative online, local offline). */
   private updateResetButton(): void {
-    const panel = pub.refs?.dartsResetButton;
-    if (!panel || !this.player) return;
-    panel.mesh.getWorldPosition(_btn);
+    const btn = pub.refs?.dartsResetButton;
+    if (!btn || !this.player) return;
+    btn.getWorldPosition(_btn);
 
     const aimed: Record<'left' | 'right', boolean> = { left: false, right: false };
     for (const hand of HANDS) {
@@ -102,7 +104,7 @@ export class DartsSystem extends createSystem({}) {
     const hot = aimed.left || aimed.right;
     if (hot !== this.resetHover) {
       this.resetHover = hot;
-      this.drawResetButton(hot);
+      (btn.material as MeshStandardMaterial).emissiveIntensity = hot ? RESET_GLOW_HOT : RESET_GLOW_REST;
     }
 
     for (const hand of HANDS) {
@@ -112,23 +114,6 @@ export class DartsSystem extends createSystem({}) {
         break;
       }
     }
-  }
-
-  private drawResetButton(hot: boolean): void {
-    const panel = pub.refs?.dartsResetButton;
-    if (!panel) return;
-    panel.draw((ctx, w, h) => {
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.font = '700 30px "Arial Narrow", system-ui, sans-serif';
-      ctx.fillStyle = hot ? '#ffd24a' : '#ffb000';
-      if (hot) {
-        ctx.shadowColor = '#ff7a18';
-        ctx.shadowBlur = 18;
-      }
-      ctx.fillText('RESET SCORES', w / 2, h / 2 + 2);
-      ctx.shadowBlur = 0;
-    });
   }
 
   private resetBoard(): void {

@@ -39,6 +39,8 @@ const JUKE_AIM_MAX = 1.6; // how far you can stand and still aim at it (m)
 const JUKE_AIM_CONE_COS = Math.cos((32 * Math.PI) / 180);
 const JUKE_AIM_Y = 1.1; // aim at the cabinet body, not its floor-level origin
 
+const MARQUEE_SCROLL_SPEED = 70; // px/s a too-long title scrolls across the screen
+
 export class MusicSystem extends createSystem({}) {
   /** One <audio> per track, created the first time that track is selected. */
   private audios: (HTMLAudioElement | null)[] = TRACKS.map(() => null);
@@ -50,15 +52,30 @@ export class MusicSystem extends createSystem({}) {
   private signal: 'connecting' | 'live' | 'nosignal' = 'connecting';
   /** True while a hand is close enough to interact — the cabinet flares up. */
   private lit = false;
+  // --- marquee (LED screen) state ---
+  /** Big line: the track title (or a prompt when off). */
+  private marqueeMain = 'JUKEBOX';
+  /** Small line beneath it: status / track count. */
+  private marqueeSub = 'pull trigger to play';
+  /** Horizontal scroll offset (px) used only when the title overruns the screen. */
+  private marqueeScroll = 0;
+  /** Set by the last render: does the main line overflow (and so scroll)? */
+  private marqueeScrolls = false;
 
   init(): void {
     // The room (or another punter) chose a station: switch to match.
     this.cleanupFuncs.push(bus.on('music', (s) => this.setStation(s)));
     // Adopt whatever's already on (if welcome landed before us).
     this.setStation(pub.music);
+    this.drawMarquee(); // paint the screen once even if the station didn't change
   }
 
-  update(): void {
+  update(delta: number): void {
+    // Scroll a too-long title across the marquee, jukebox-style.
+    if (this.marqueeScrolls) {
+      this.marqueeScroll += delta * MARQUEE_SCROLL_SPEED;
+      this.renderMarquee();
+    }
     if (!this.player || !pub.refs) return;
     pub.refs.jukebox.getWorldPosition(_box); // floor centre — for distance volume
     _aim.copy(_box);
@@ -192,31 +209,81 @@ export class MusicSystem extends createSystem({}) {
     return audio;
   }
 
+  /** Work out what the marquee should say, reset the scroll, and paint it. */
   private drawMarquee(): void {
+    if (TRACKS.length === 0) {
+      this.marqueeMain = 'JUKEBOX';
+      this.marqueeSub = 'add songs to src/pub/songs';
+    } else if (this.station < 0) {
+      this.marqueeMain = 'JUKEBOX';
+      this.marqueeSub = 'pull trigger to play';
+    } else {
+      this.marqueeMain = `♪ ${TRACKS[this.station].name}`;
+      this.marqueeSub =
+        this.signal === 'nosignal' ? "can't play — trigger to skip"
+        : this.signal === 'connecting' ? 'loading…'
+        : `track ${this.station + 1} of ${TRACKS.length}`;
+    }
+    this.marqueeScroll = 0;
+    this.renderMarquee();
+  }
+
+  /**
+   * Paint the marquee as a small amber LED screen set in the cabinet's steel
+   * bezel: a big title line and a small status line. A title wider than the
+   * screen scrolls (looping) instead of being shrunk to nothing.
+   */
+  private renderMarquee(): void {
     const panel = pub.refs?.jukeboxPanel;
     if (!panel) return;
-    if (TRACKS.length === 0) {
-      panel.setLines([
-        { text: 'JUKEBOX', size: 58, colour: '#ffb000', bold: true },
-        { text: 'add songs to src/pub/songs', size: 26, colour: '#aeb6c2' },
-      ]);
-      return;
-    }
-    if (this.station < 0) {
-      panel.setLines([
-        { text: 'JUKEBOX', size: 58, colour: '#ffb000', bold: true },
-        { text: 'pull trigger to play', size: 30, colour: '#aeb6c2' },
-      ]);
-      return;
-    }
-    const t = TRACKS[this.station];
-    const sub =
-      this.signal === 'nosignal' ? "can't play this file — trigger to skip"
-      : this.signal === 'connecting' ? 'loading…'
-      : `track ${this.station + 1} of ${TRACKS.length}`;
-    panel.setLines([
-      { text: `♪ ${t.name}`, size: 50, colour: '#ffb000', bold: true },
-      { text: sub, size: 28, colour: this.signal === 'nosignal' ? '#e8352a' : '#aeb6c2' },
-    ]);
+    const danger = this.station >= 0 && this.signal === 'nosignal';
+    panel.draw((ctx, w, h) => {
+      // Dark LED screen inset within the steel plate.
+      const m = 12;
+      ctx.fillStyle = '#0b0f0d';
+      ctx.fillRect(m, m, w - 2 * m, h - 2 * m);
+      ctx.strokeStyle = 'rgba(255,176,0,0.4)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(m, m, w - 2 * m, h - 2 * m);
+
+      const padX = m + 14;
+      const screenW = w - 2 * padX;
+      const mainY = h * 0.42;
+      const subY = h * 0.74;
+
+      // --- big title line (scrolls if it overruns) ---
+      ctx.textBaseline = 'middle';
+      ctx.font = "900 46px 'Arial Black', 'Arial Narrow', system-ui, sans-serif";
+      const titleW = ctx.measureText(this.marqueeMain).width;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(padX, m, screenW, h - 2 * m);
+      ctx.clip();
+      ctx.fillStyle = '#ffb000';
+      ctx.shadowColor = '#ff7a18';
+      ctx.shadowBlur = 14;
+      if (titleW <= screenW) {
+        this.marqueeScrolls = false;
+        ctx.textAlign = 'center';
+        ctx.fillText(this.marqueeMain, w / 2, mainY);
+      } else {
+        // Loop two copies separated by a gap so it reads continuously.
+        this.marqueeScrolls = true;
+        const gap = 64;
+        const period = titleW + gap;
+        const off = ((this.marqueeScroll % period) + period) % period;
+        ctx.textAlign = 'left';
+        ctx.fillText(this.marqueeMain, padX - off, mainY);
+        ctx.fillText(this.marqueeMain, padX - off + period, mainY);
+      }
+      ctx.restore();
+
+      // --- small status line ---
+      ctx.shadowBlur = 0;
+      ctx.textAlign = 'center';
+      ctx.font = "700 24px 'Arial Narrow', system-ui, sans-serif";
+      ctx.fillStyle = danger ? '#ff5a4a' : 'rgba(174,182,194,0.9)';
+      ctx.fillText(this.marqueeSub, w / 2, subY);
+    });
   }
 }
