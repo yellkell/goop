@@ -16,8 +16,9 @@ export type AppState = 'menu' | 'queueing' | 'playing' | 'training';
 export type AppMode = 'bot' | 'net';
 export type { ArcadeMode } from '../config.js';
 import type { ArcadeMode } from '../config.js';
-/** The arena backdrop: bare AR passthrough, or the papercraft desert. */
-export type AppEnvironment = 'ar' | 'desert';
+/** The arena backdrop: bare AR passthrough, the papercraft desert, or the
+ *  dark neon "old factory" fight-hall. */
+export type AppEnvironment = 'ar' | 'desert' | 'factory';
 
 export interface LifetimeStats {
   wins: number;
@@ -34,6 +35,12 @@ function loadAccentHue(): number {
   const raw = localStorage.getItem('ff-accent');
   const n = raw == null ? NaN : parseFloat(raw);
   return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : DEFAULT_ACCENT_HUE;
+}
+
+/** The saved arena backdrop choice (defaults to bare AR passthrough). */
+function loadEnvironment(): AppEnvironment {
+  const v = localStorage.getItem('ff-env');
+  return v === 'desert' || v === 'factory' ? v : 'ar';
 }
 
 /** Per-fist ball attachment: [left, right], each 0 none / 1 split / 2 grow / 3 shrink. */
@@ -116,7 +123,7 @@ export const app: {
   pubRegionCounts: {},
   infoView: 'root',
   gazetteOpen: false,
-  environment: localStorage.getItem('ff-env') === 'desert' ? 'desert' : 'ar',
+  environment: loadEnvironment(),
   accentHue: loadAccentHue(),
   ballAttach: loadBallAttach(),
   duelView: 'root',

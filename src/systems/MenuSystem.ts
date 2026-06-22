@@ -395,7 +395,8 @@ export class MenuSystem extends createSystem({}) {
         }
         break;
       case 'toggle-environment':
-        app.environment = app.environment === 'desert' ? 'ar' : 'desert';
+        // Cycle the arena backdrop: AR → DESERT → OLD FACTORY → AR.
+        app.environment = app.environment === 'ar' ? 'desert' : app.environment === 'desert' ? 'factory' : 'ar';
         saveEnvironment();
         break;
       case 'lb-ranked':
