@@ -1383,6 +1383,53 @@ function flowParagraph(
   return cy;
 }
 
+/** A tin sheriff's star, drawn as an old newsprint engraving (sepia ink): a
+ *  ring, a five-point ball-tipped star, and a punched cream centre. */
+function drawSheriffBadge(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number): void {
+  ctx.save();
+  ctx.strokeStyle = NEWS_INK;
+  ctx.fillStyle = NEWS_INK;
+  ctx.lineJoin = 'round';
+
+  // Outer ring.
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Five-point star.
+  const tips = 5;
+  const outer = r * 0.74;
+  const inner = r * 0.3;
+  const ballR = r * 0.12;
+  ctx.beginPath();
+  for (let i = 0; i < tips * 2; i++) {
+    const ang = -Math.PI / 2 + (i * Math.PI) / tips;
+    const rad = i % 2 === 0 ? outer : inner;
+    const x = cx + Math.cos(ang) * rad;
+    const y = cy + Math.sin(ang) * rad;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fill();
+
+  // Ball tips on each of the five points.
+  for (let i = 0; i < tips; i++) {
+    const ang = -Math.PI / 2 + (i * 2 * Math.PI) / tips;
+    ctx.beginPath();
+    ctx.arc(cx + Math.cos(ang) * (outer + ballR * 0.4), cy + Math.sin(ang) * (outer + ballR * 0.4), ballR, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Punched cream centre — reads as a stamped tin star.
+  ctx.fillStyle = '#e9e2cf';
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.13, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
 /** The Gasket Gazette front page. */
 function drawNews(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
   // Aged paper, lightly vignetted at the edges.
@@ -1402,26 +1449,28 @@ function drawNews(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null)
 
   const art = gazette.article;
 
-  // Masthead.
+  // Masthead — a tin sheriff's star crests the page.
   ctx.fillStyle = NEWS_INK;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
-  newsRule(ctx, 44);
-  ctx.font = `900 62px ${NEWS_SERIF}`;
-  ctx.fillText('The Gasket Gazette', NW / 2, 116);
+  drawSheriffBadge(ctx, NW / 2, 64, 30);
+  newsRule(ctx, 102);
+  ctx.fillStyle = NEWS_INK;
+  ctx.font = `900 58px ${NEWS_SERIF}`;
+  ctx.fillText('The Gasket Gazette', NW / 2, 152);
   ctx.font = `italic 17px ${NEWS_SERIF}`;
-  ctx.fillText('GASKET TERRITORY · EST. 1887 · PRICE ONE CENT', NW / 2, 142);
-  newsRule(ctx, 156, 2);
+  ctx.fillText('GASKET TERRITORY · EST. 1887 · PRICE ONE CENT', NW / 2, 178);
+  newsRule(ctx, 192, 2);
 
   // Dateline strip.
   ctx.font = `bold 16px ${NEWS_SERIF}`;
   ctx.textAlign = 'left';
-  ctx.fillText(art ? `No. ${art.edition}` : 'No. —', 50, 180);
+  ctx.fillText(art ? `No. ${art.edition}` : 'No. —', 50, 216);
   ctx.textAlign = 'center';
-  ctx.fillText(art?.dateline || 'GASKET TERRITORY', NW / 2, 180);
+  ctx.fillText(art?.dateline || 'GASKET TERRITORY', NW / 2, 216);
   ctx.textAlign = 'right';
-  ctx.fillText("FROM THE SHERIFF'S DESK", NW - 50, 180);
-  newsRule(ctx, 192, 2);
+  ctx.fillText("FROM THE SHERIFF'S DESK", NW - 50, 216);
+  newsRule(ctx, 228, 2);
 
   ctx.textAlign = 'center';
   if (!art) {
@@ -1434,7 +1483,7 @@ function drawNews(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null)
     // Headline.
     ctx.fillStyle = NEWS_INK;
     ctx.font = `900 46px ${NEWS_SERIF}`;
-    let y = flowParagraph(ctx, art.headline.toUpperCase(), NW / 2, 248, NW - 110, 50);
+    let y = flowParagraph(ctx, art.headline.toUpperCase(), NW / 2, 284, NW - 110, 50);
     // Subhead.
     if (art.subhead) {
       ctx.font = `italic 24px ${NEWS_SERIF}`;
