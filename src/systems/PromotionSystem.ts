@@ -33,7 +33,7 @@ import { rankBadgeTexture } from '../menu/rankBadges.js';
 import { myStats } from '../net/leaderboard.js';
 import { glowSprite } from '../materials/glow.js';
 import { emberBurst, spawnEmber } from '../fx/fire.js';
-import { UI, fitStencilText, plate, stencilFont } from '../ui/industrial.js';
+import { UI, fitStencilText, stencilFont } from '../ui/industrial.js';
 import * as sfx from '../audio/sfx.js';
 
 const EMBER = 0xff7a18;
@@ -325,12 +325,13 @@ export class PromotionSystem extends createSystem({}) {
     const h = canvas.height;
     const ctx = canvas.getContext('2d')!;
     ctx.clearRect(0, 0, w, h);
-    // A dark industrial plate behind the words so they stay legible over the
-    // bright glow + sunburst, no matter how hot the flare gets behind them.
-    plate(ctx, 14, 8, w - 28, h - 16, { cut: 18, fill: 'rgba(8,9,12,0.82)', stroke: UI.amber, rivets: false });
+    // No backing plate — the words float free over the flare, kept legible by a
+    // heavy dark outline + a soft dark glow behind each glyph.
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.lineJoin = 'round';
+    ctx.shadowColor = 'rgba(4,5,8,0.9)';
+    ctx.shadowBlur = 14;
 
     ctx.font = stencilFont(44);
     ctx.lineWidth = 9;
@@ -347,6 +348,7 @@ export class PromotionSystem extends createSystem({}) {
     ctx.strokeText(tierName, w / 2, 114);
     ctx.fillStyle = UI.emberBright;
     ctx.fillText(tierName, w / 2, 114);
+    ctx.shadowBlur = 0;
     this.labelTex!.needsUpdate = true;
   }
 
