@@ -89,6 +89,15 @@ export function buildSign(url: string, wMeters: number, hMeters: number): Mesh {
       mat.map?.dispose();
       mat.map = tex;
       mat.needsUpdate = true;
+      // Letterbox-fit the art inside the w×h box so it's never stretched,
+      // whatever the image's aspect (the plane shrinks on one axis, centred).
+      const img = tex.image as { width?: number; height?: number } | undefined;
+      if (img?.width && img.height) {
+        const imgAspect = img.width / img.height;
+        const boxAspect = wMeters / hMeters;
+        if (imgAspect > boxAspect) mesh.scale.y = boxAspect / imgAspect;
+        else mesh.scale.x = imgAspect / boxAspect;
+      }
     },
     undefined,
     () => {
