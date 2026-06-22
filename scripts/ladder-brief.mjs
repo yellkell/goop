@@ -118,3 +118,5 @@ const brief = {
 };
 
 process.stdout.write(JSON.stringify(brief, null, 2) + '\n');
+// Firestore's gRPC channel keeps the event loop alive; exit explicitly.
+process.exit(0);

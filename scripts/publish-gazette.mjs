@@ -87,3 +87,5 @@ await setDoc(doc(db, 'newspaper', '_snapshot'), {
 });
 
 console.log(`Filed edition No. ${edition} — "${article.headline}" (${standings.length} players snapshotted).`);
+// Firestore's gRPC channel keeps the event loop alive; exit explicitly.
+process.exit(0);
