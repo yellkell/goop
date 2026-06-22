@@ -51,9 +51,11 @@ const latestSnap = await getDoc(doc(db, 'newspaper', 'latest'));
 const edition = ((latestSnap.exists() && latestSnap.data().edition) || 0) + 1;
 
 const today = new Date();
+// Just the date — the page template already prints "GASKET TERRITORY" in the
+// masthead, so the dateline strip stays short.
 const dateline =
   article.dateline ||
-  `GASKET TERRITORY — ${today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase()}`;
+  today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase();
 
 await setDoc(doc(db, 'newspaper', 'latest'), {
   edition,
