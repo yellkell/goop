@@ -69,6 +69,11 @@ const ELO_K = 32;
 const SCORE_WIN = 20;
 const SCORE_BOT_WIN = 2;
 
+/** Arcade brawl boards (2v2 / FFA): a win banks +11, just showing up banks +1
+ *  either way — so the boards reward turning out, and reward winning more. */
+const ARCADE_WIN = 11;
+const ARCADE_PLAY = 1;
+
 const profile = { id: '', name: '', score: 0, elo: 1000, training: 0, duo: 0, ffa: 0, xp: 0, note: '' };
 
 /** Your own profile as a board row (for the PROFILE face when viewing self). */
@@ -351,13 +356,19 @@ export function reportBotResult(win: boolean): void {
 
 /**
  * A finished arcade brawl (2v2 / FFA): bank a flat participation XP either way,
- * and on a win tick that mode's own win board. No 1v1 score / ELO movement.
+ * and tick that mode's own board — +11 for a win, +1 just for taking part.
  */
 export function reportArcade(mode: ArcadeMode, win: boolean): void {
   profile.xp += xpForArcade();
+  const gain = win ? ARCADE_WIN : ARCADE_PLAY;
   const fields: Record<string, unknown> = { xp: profile.xp };
-  if (win && mode === '2v2') fields.duo = ++profile.duo;
-  else if (win && mode === 'ffa') fields.ffa = ++profile.ffa;
+  if (mode === '2v2') {
+    profile.duo += gain;
+    fields.duo = profile.duo;
+  } else if (mode === 'ffa') {
+    profile.ffa += gain;
+    fields.ffa = profile.ffa;
+  }
   writeMine(fields);
   void refreshLeaderboard(true);
 }
