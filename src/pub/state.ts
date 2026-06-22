@@ -36,6 +36,8 @@ export interface PubRefs {
   dartBox: { center: [number, number, number]; half: [number, number, number] };
   glassSlots: [number, number, number][];
   dartsBoardPanel: Panel;
+  /** The RESET button beneath the leaderboard — wipes the chalkboard. */
+  dartsResetButton: Panel;
   arcadeScreen: Mesh;
   arcadePos: [number, number, number];
   /** The cabinet root + its joystick stick (pivot at the deck). */

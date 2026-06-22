@@ -6,8 +6,8 @@
  * pushes render it); offline you get a local board so practice still counts.
  */
 
-import { createSystem } from '@iwsdk/core';
-import { CanvasTexture, LinearFilter, Mesh, MeshBasicMaterial, PlaneGeometry, Quaternion, SRGBColorSpace } from 'three';
+import { createSystem, InputComponent } from '@iwsdk/core';
+import { CanvasTexture, LinearFilter, Mesh, MeshBasicMaterial, PlaneGeometry, Quaternion, SRGBColorSpace, Vector3 } from 'three';
 import { uiClick } from '../../audio/sfx.js';
 import type { BoardRow } from '../protocol.js';
 import { pubSendEvent } from '../net.js';
@@ -19,10 +19,23 @@ interface Popup {
   life: number;
 }
 
+const HANDS = ['left', 'right'] as const;
+const _btn = new Vector3();
+const _o = new Vector3();
+const _dir = new Vector3();
+const _toBtn = new Vector3();
+const _bq = new Quaternion();
+// The RESET button is "actionable" when a hand's aim cone falls on it — the
+// same touch-cone cue the props + jukebox use.
+const RESET_AIM_MAX = 2.6;
+const RESET_AIM_CONE_COS = Math.cos((26 * Math.PI) / 180);
+
 export class DartsSystem extends createSystem({}) {
   private popups: Popup[] = [];
   private localBoard = new Map<string, BoardRow>();
   private _camQ = new Quaternion();
+  /** Whether a hand is currently aimed at the RESET button (drives its glow). */
+  private resetHover = false;
 
   init(): void {
     this.cleanupFuncs.push(
@@ -43,9 +56,11 @@ export class DartsSystem extends createSystem({}) {
       bus.on('board', (rows) => this.renderBoard(rows)),
     );
     this.renderBoard([]);
+    this.drawResetButton(false);
   }
 
   update(delta: number): void {
+    this.updateResetButton();
     if (this.popups.length) this.camera.getWorldQuaternion(this._camQ);
     for (let i = this.popups.length - 1; i >= 0; i--) {
       const p = this.popups[i];
@@ -60,6 +75,69 @@ export class DartsSystem extends createSystem({}) {
         p.mesh.geometry.dispose();
         this.popups.splice(i, 1);
       }
+    }
+  }
+
+  /** Highlight the RESET button when a hand aims at it; a trigger pull wipes
+   *  the board (server-authoritative online, local offline). */
+  private updateResetButton(): void {
+    const panel = pub.refs?.dartsResetButton;
+    if (!panel || !this.player) return;
+    panel.mesh.getWorldPosition(_btn);
+
+    const aimed: Record<'left' | 'right', boolean> = { left: false, right: false };
+    for (const hand of HANDS) {
+      const ray = this.player.raySpaces[hand];
+      if (!ray) continue;
+      ray.getWorldPosition(_o);
+      ray.getWorldQuaternion(_bq);
+      _dir.set(0, 0, -1).applyQuaternion(_bq).normalize();
+      _toBtn.copy(_btn).sub(_o);
+      const dist = _toBtn.length();
+      if (dist < 1e-3 || dist > RESET_AIM_MAX) continue;
+      if (_toBtn.divideScalar(dist).dot(_dir) < RESET_AIM_CONE_COS) continue;
+      aimed[hand] = true;
+    }
+
+    const hot = aimed.left || aimed.right;
+    if (hot !== this.resetHover) {
+      this.resetHover = hot;
+      this.drawResetButton(hot);
+    }
+
+    for (const hand of HANDS) {
+      const gp = this.input.xr.gamepads[hand];
+      if (aimed[hand] && gp?.getButtonDown(InputComponent.Trigger)) {
+        this.resetBoard();
+        break;
+      }
+    }
+  }
+
+  private drawResetButton(hot: boolean): void {
+    const panel = pub.refs?.dartsResetButton;
+    if (!panel) return;
+    panel.draw((ctx, w, h) => {
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = '700 30px "Arial Narrow", system-ui, sans-serif';
+      ctx.fillStyle = hot ? '#ffd24a' : '#ffb000';
+      if (hot) {
+        ctx.shadowColor = '#ff7a18';
+        ctx.shadowBlur = 18;
+      }
+      ctx.fillText('RESET SCORES', w / 2, h / 2 + 2);
+      ctx.shadowBlur = 0;
+    });
+  }
+
+  private resetBoard(): void {
+    uiClick();
+    if (pub.online) {
+      pubSendEvent({ e: 'DARTS_RESET' }); // server clears + broadcasts an empty board
+    } else {
+      this.localBoard.clear();
+      this.renderBoard([]);
     }
   }
 

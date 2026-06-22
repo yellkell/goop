@@ -518,6 +518,37 @@ export function buildPub(world: World): PubRefs {
   dartBoxLabel.rotation.x = -Math.PI / 2; // lie flat in the crate, facing up
   dartBoxLabel.position.set(boxX, 1.205, boxZ); // just proud of the crate floor
   root.add(dartBoxLabel);
+  // "DARTS" stencilled on the crate's outer faces so the box reads as the dart
+  // supply from across the room (the GRAB DARTS prompt inside only shows when
+  // you're already looking down into it).
+  const sideCanvas = document.createElement('canvas');
+  sideCanvas.width = 256;
+  sideCanvas.height = 96;
+  const sctx = sideCanvas.getContext('2d')!;
+  sctx.textAlign = 'center';
+  sctx.textBaseline = 'middle';
+  sctx.font = "900 62px 'Arial Black', 'Arial Narrow', system-ui, sans-serif";
+  sctx.lineWidth = 9;
+  sctx.strokeStyle = 'rgba(6,5,4,0.92)';
+  sctx.fillStyle = '#ffb000';
+  sctx.shadowColor = '#ff7a18';
+  sctx.shadowBlur = 16;
+  sctx.strokeText('DARTS', 128, 52);
+  sctx.fillText('DARTS', 128, 52);
+  const sideTex = new CanvasTexture(sideCanvas);
+  sideTex.colorSpace = SRGBColorSpace;
+  sideTex.minFilter = LinearFilter;
+  const sideMat = new MeshBasicMaterial({ map: sideTex, transparent: true, depthWrite: false });
+  const dartLabelDecal = (w: number, x: number, z: number, ry: number): void => {
+    const m = new Mesh(new PlaneGeometry(w, w * (96 / 256)), sideMat);
+    m.position.set(x, 1.24, z);
+    m.rotation.y = ry;
+    root.add(m);
+  };
+  dartLabelDecal(0.32, boxX, boxZ + 0.205, 0); // room-facing front (+z)
+  dartLabelDecal(0.32, boxX, boxZ - 0.205, Math.PI); // back (−z)
+  dartLabelDecal(0.26, boxX + 0.265, boxZ, Math.PI / 2); // right side (+x)
+  dartLabelDecal(0.26, boxX - 0.265, boxZ, -Math.PI / 2); // left side (−x)
   // Dart home slots: the six house darts rest here OUT OF SIGHT (PropSystem
   // hides any dart resting in the box) until you reach in and pull one.
   for (let i = 0; i < darts.rackSlots; i++) {
@@ -530,6 +561,11 @@ export function buildPub(world: World): PubRefs {
   const dartsBoardPanel = new Panel(0.85, 0.7);
   dartsBoardPanel.mesh.position.set(darts.boardX - 1.15, 1.7, darts.wallZ + 0.02);
   root.add(dartsBoardPanel.mesh);
+  // RESET button just beneath it — wipes the chalkboard for the whole room.
+  // DartsSystem draws it and drives the aim-cone interaction.
+  const dartsResetButton = new Panel(0.44, 0.13);
+  dartsResetButton.mesh.position.set(darts.boardX - 1.15, 1.28, darts.wallZ + 0.025);
+  root.add(dartsResetButton.mesh);
 
   // --- IRON SNAKE arcade cabinet (north-west corner) -----------------------------
   const arcadePos: [number, number, number] = [-4.45, 0, -2.85];
@@ -561,6 +597,7 @@ export function buildPub(world: World): PubRefs {
     dartBox,
     glassSlots,
     dartsBoardPanel,
+    dartsResetButton,
     arcadeScreen: screen,
     arcadePos,
     arcadeCabinet: cabinet,
