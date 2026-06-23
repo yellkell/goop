@@ -13,7 +13,7 @@ import { buildHand, HAND_ADDUCTION, setHandCurl } from '../../avatar/hands.js';
 import { applyAvatarSkin, resolveAvatarSkin } from '../../avatar/skins.js';
 import { myAvatarSkin } from '../../menu/customization.js';
 import { solveTorso } from '../../avatar/boxer.js';
-import { PALETTE, teamColor } from '../../config.js';
+import { NET, PALETTE, teamColor } from '../../config.js';
 import { spawnGestureCue } from '../../fx/effects.js';
 import { pulseHand } from '../../input/haptics.js';
 import { audioContext, clap, micToggle, saloonEntry } from '../../audio/sfx.js';
@@ -155,7 +155,10 @@ export class PubPlayerSystem extends createSystem({}) {
     // --- outbound pose ------------------------------------------------------
     if (pub.online) {
       this.sendTimer += delta;
-      if (this.sendTimer >= SEND_INTERVAL) {
+      // A fighter in the pit streams at quick-match's denser pose rate so their
+      // dodges read crisply across the gap; the casual crowd stays at 20 Hz.
+      const interval = pub.fight.sides.includes(pub.myId) ? 1 / NET.poseRateHz : SEND_INTERVAL;
+      if (this.sendTimer >= interval) {
         this.sendTimer = 0;
         pubSendRaw({
           t: 'pose',
@@ -181,10 +184,14 @@ export class PubPlayerSystem extends createSystem({}) {
 
     // --- remote punters -----------------------------------------------------
     if (pub.punters.size === 0) return;
-    const k = 1 - Math.exp(-EASE * delta);
+    const crowdK = 1 - Math.exp(-EASE * delta);
+    const fighterK = 1 - Math.exp(-NET.smoothing * delta); // arena-grade for the pit
 
     for (const punter of pub.punters.values()) {
       const rig = punter.rig;
+      // A fighter (denser pose stream) eases in at the arena's smoothing so the
+      // duel tracks 1:1 with quick match; everyone else stays gently smoothed.
+      const k = pub.fight.sides.includes(punter.id) ? fighterK : crowdK;
       // Ease the visible head toward the network target, then solve the torso
       // under it exactly like the arena does.
       _head.set(punter.head[0], punter.head[1], punter.head[2]);

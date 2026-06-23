@@ -33,7 +33,7 @@
 import { createSystem, InputComponent } from '@iwsdk/core';
 import { MeshStandardMaterial, Quaternion, Vector3 } from 'three';
 import type { XROrigin } from '@iwsdk/xr-input';
-import { ATTACH, BODY_IK, FIREBALL, teamColor } from '../../config.js';
+import { ATTACH, BODY_IK, FIREBALL, NET, teamColor } from '../../config.js';
 import { buildBoxer, solveTorso, type BoxerRig } from '../../avatar/boxer.js';
 import { applyAvatarSkin, platformSkin } from '../../avatar/skins.js';
 import { customization, myAvatarSkin } from '../../menu/customization.js';
@@ -67,7 +67,11 @@ const FLYING = 2;
 const RETURNING = 3;
 const DEAD = 4;
 
-const STREAM_INTERVAL = 0.05; // 20 Hz
+// Fighters stream their fireballs at the SAME rate quick match streams poses
+// (NET.poseRateHz), and the foe's balls ease in at the arena's NET.smoothing —
+// so a pub bout tracks as smoothly as a quick match. Only the two fighters
+// stream, so the denser rate costs the room nothing.
+const STREAM_INTERVAL = 1 / NET.poseRateHz;
 const FIST_TOUCH_DISTANCE = 0.32;
 const FIST_LANE_RADIUS = 0.34;
 const FIST_CLOSING_SPEED = 1.35;
@@ -394,7 +398,7 @@ export class FightSystem extends createSystem({}) {
         continue;
       }
       const cool = this.teamFor(id) === 1;
-      const k = 1 - Math.exp(-16 * delta);
+      const k = 1 - Math.exp(-NET.smoothing * delta);
       for (const b of balls) {
         b.hitCooldown = Math.max(0, b.hitCooldown - delta);
         if (b.hasTarget) {
