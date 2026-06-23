@@ -79,8 +79,10 @@ export const customization = {
   version: 1,
   /** The customisation panel (and the avatar mirror) is up in the lobby. */
   open: false,
-  /** The PLATFORM SHOP face is up (a sub-modal of customisation). */
+  /** The SHOP face is up (a sub-modal of customisation); false = the LOCKER. */
   shopOpen: false,
+  /** Which tab the shop / locker shows. 'colour' is locker-only (the sliders). */
+  tab: 'avatars' as 'avatars' | 'platforms' | 'colour',
 };
 
 /** Set the custom armour hue (0..1), or -1 to revert to the skin's default. */

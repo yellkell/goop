@@ -27,6 +27,7 @@ import {
 } from 'three';
 import { app, DEFAULT_ACCENT_HUE, saveAccentHue, saveEnvironment, saveShootBack, type AppState } from '../menu/appState.js';
 import {
+  accentBarHue,
   clearProfileKeyboardHint,
   colorBarHue,
   createActionPanel,
@@ -171,8 +172,7 @@ export class MenuSystem extends createSystem({}) {
       switch (p.id) {
         case 'board':
           break;
-        case 'custom':
-        case 'loadout':
+        case 'custom': // the LOCKER
         case 'balls':
           p.mesh.visible = modalCustom;
           break;
@@ -242,6 +242,10 @@ export class MenuSystem extends createSystem({}) {
         if (down) this.sliderGrab = { hand, panel: panel.id };
         // The hue bar is continuous: scrub the armour colour live while held.
         setAvatarColor(colorBarHue(hit.uv.x));
+      } else if (hit.uv && action === 'accent-color' && (down || owns)) {
+        if (down) this.sliderGrab = { hand, panel: panel.id };
+        app.accentHue = accentBarHue(hit.uv.x); // scrub the neon accent live
+        saveAccentHue();
       } else if (hit.uv && down) {
         if (panel.click) {
           if (panel.click(hit.uv.x, hit.uv.y)) clicked = true;
@@ -489,6 +493,7 @@ export class MenuSystem extends createSystem({}) {
         app.infoView = 'root';
         break;
       case 'open-custom':
+        // Opens onto the LOCKER (your inventory + colours).
         customization.open = true;
         customization.shopOpen = false;
         this.ensureMirror();
@@ -500,8 +505,17 @@ export class MenuSystem extends createSystem({}) {
       case 'open-shop':
         customization.shopOpen = true;
         break;
-      case 'shop-close':
+      case 'open-locker':
         customization.shopOpen = false;
+        break;
+      case 'tab-avatars':
+        customization.tab = 'avatars';
+        break;
+      case 'tab-platforms':
+        customization.tab = 'platforms';
+        break;
+      case 'tab-colour':
+        customization.tab = 'colour';
         break;
       case 'av-uncolor':
         setAvatarColor(-1); // back to the skin's own palette

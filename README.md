@@ -42,15 +42,22 @@ in-your-face boxing feel.
   ducks with them. Mic permission is asked when you queue; declining still
   lets you hear them.
 
-## Coins & the platform shop
+## Coins, the shop & the locker
 
 Every bout, brawl and training run banks **coins** (the riveted bolt-dollar
 "$") alongside your XP — a flat amount per completed game. Your balance shows
-beside the newspaper button in the lobby. Spend it in the **shop** (open it
-from CUSTOMISE): the four avatars are free to equip, the three launch pads are
-free, two platform recolours (TOXIC, PLASMA) cost the equivalent of ten games,
-the premium **GOLD RUSH** pad (gold piping + slab) a hundred, and the top-shelf
-**XD** pad — a jet-black deck with a white XD grin painted on it — five hundred.
+beside the newspaper button in the lobby. CUSTOMISE opens a two-faced cosmetics
+plate, each item shown as a picture (an animal silhouette — a shield for the
+KNIGHT — for avatars, a little coloured pad for platforms):
+
+- the **SHOP** (tabs: AVATARS / PLATFORMS) lists everything with prices;
+  buying auto-equips it and stocks your locker. The four avatars are free, the
+  three launch pads are free, two recolours (TOXIC, PLASMA) cost ten games'
+  worth, the premium **GOLD RUSH** pad a hundred, and the top-shelf **XD** pad
+  — a jet-black deck with a white XD grin — five hundred.
+- the **LOCKER** is your inventory: equip anything you own, and a COLOUR tab
+  carries the armour-suit and neon-accent hue sliders.
+
 The wallet is shared with the pub (same browser), where coins become physical —
 and feed the snake cabinet and jukebox.
 

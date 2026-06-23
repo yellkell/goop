@@ -24,7 +24,8 @@ import { rankBadge } from './rankBadges.js';
 import { coinImage } from './coinIcon.js';
 import { canAfford, coins } from './wallet.js';
 import { tierForXp } from './progression.js';
-import { AVATAR_SKINS, PLATFORM_SKINS } from '../avatar/skins.js';
+import { AVATAR_SKINS, PLATFORM_SKINS, type AvatarSkin, type PlatformSkin } from '../avatar/skins.js';
+import { drawAvatarIcon, drawPlatformIcon } from './skinIcons.js';
 import { ATTACH, GAME_TITLE, hueToColor } from '../config.js';
 import {
   LEADERBOARD_VISIBLE_ROWS,
@@ -93,11 +94,17 @@ export type MenuAction =
   | 'av-color'
   /** Reset the armour colour to the skin's default palette. */
   | 'av-uncolor'
+  /** Dragging the avatar-accent (neon) hue bar in the locker's COLOUR tab. */
+  | 'accent-color'
   /** Reset the avatar-accent (neon) hue to the house ember default. */
   | 'accent-default'
-  /** Open / close the cosmetics shop (reached from the customise panel). */
+  /** Swap between SHOP (all items) and LOCKER (your inventory + colours). */
   | 'open-shop'
-  | 'shop-close'
+  | 'open-locker'
+  /** Switch the shop / locker tab. */
+  | 'tab-avatars'
+  | 'tab-platforms'
+  | 'tab-colour'
   /** Tap an avatar tile (equip) or a platform tile (buy if unowned, else equip). */
   | `shop-av-${number}`
   | `shop-pf-${number}`
@@ -113,18 +120,6 @@ const PH = 400;
 const BW = 512;
 const BH = 548;
 const PROFILE_KEYBOARD_HINT_MS = 4500;
-// The customisation plate: room for the avatar/platform chips AND the armour-
-// colour picker beneath them. (The CLOSE button now lives on the AVATAR ACCENT
-// panel, so this plate ends just under the colour picker.)
-const CW = 512;
-const CH = 430;
-/** The hue-picker bar on the customisation panel (canvas coords). */
-const COLOR_BAR = { x: 40, y: 322, w: CW - 80, h: 44 };
-
-/** Map a customisation-panel hit u (0..1) to a hue (0..1), clamped to the bar. */
-export function colorBarHue(u: number): number {
-  return Math.max(0, Math.min(1, (u * CW - COLOR_BAR.x) / COLOR_BAR.w));
-}
 
 let profileKeyboardHintUntil = 0;
 
@@ -577,90 +572,6 @@ function hitPubPicker(v: number): MenuAction | null {
   return null;
 }
 
-/**
- * The customisation panel — replaces the lobby arc while open, with the
- * avatar mirror standing beside it. One chip row per slot: three live
- * skins + a greyed-out COMING SOON.
- */
-function drawCustom(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
-  panelBg(ctx, false, UI.emberBright, 'CUSTOMISE', CW, CH);
-
-  // Both cosmetics — avatars AND platforms — now live in the SHOP. One button
-  // opens it; the line beneath shows what you've currently got on.
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'alphabetic';
-  ctx.font = '700 22px system-ui, sans-serif';
-  ctx.fillStyle = UI.textDim;
-  ctx.fillText('SKINS', 40, 116);
-  buttonPlate(ctx, 40, 128, CW - 80, 66, 'OPEN SHOP', UI.amber, hoverAction === 'open-shop');
-  const av = AVATAR_SKINS.find((s) => s.id === customization.avatar);
-  const pf = PLATFORM_SKINS.find((s) => s.id === customization.platform);
-  ctx.textAlign = 'center';
-  ctx.font = '600 16px system-ui, sans-serif';
-  ctx.fillStyle = 'rgba(232,236,242,0.55)';
-  ctx.fillText(`wearing   ${av?.name ?? 'PANTHER'}   ·   ${pf?.name ?? 'EMBER'}`, CW / 2, 218);
-
-  // --- ARMOUR COLOUR picker: a hue bar repainting the whole suit -------------
-  const hue = customization.colorHue;
-  ctx.textAlign = 'left';
-  ctx.font = '700 22px system-ui, sans-serif';
-  ctx.fillStyle = UI.textDim;
-  ctx.fillText('ARMOUR COLOUR', 40, 304);
-  // Live swatch of the current colour beside the label.
-  ctx.fillStyle = hue >= 0 ? `hsl(${hue * 360}, 85%, 56%)` : UI.steelDim;
-  ctx.fillRect(228, 289, 26, 18);
-  ctx.lineWidth = 1.5;
-  ctx.strokeStyle = UI.steel;
-  ctx.strokeRect(228, 289, 26, 18);
-  // DEFAULT — revert to the skin's own palette.
-  const resetHot = hoverAction === 'av-uncolor';
-  plate(ctx, CW - 132, 286, 92, 30, {
-    cut: 8,
-    fill: resetHot ? 'rgba(255,176,0,0.16)' : 'rgba(10,11,15,0.7)',
-    stroke: hue < 0 || resetHot ? UI.amber : UI.steelDim,
-    rivets: false,
-  });
-  ctx.textAlign = 'center';
-  ctx.font = '700 15px system-ui, sans-serif';
-  ctx.fillStyle = hue < 0 ? UI.amber : UI.textDim;
-  ctx.fillText('DEFAULT', CW - 86, 305);
-  // The hue spectrum bar + a cursor at the picked hue.
-  const grad = ctx.createLinearGradient(COLOR_BAR.x, 0, COLOR_BAR.x + COLOR_BAR.w, 0);
-  for (let s = 0; s <= 12; s++) grad.addColorStop(s / 12, `hsl(${(s / 12) * 360}, 85%, 55%)`);
-  ctx.fillStyle = grad;
-  ctx.fillRect(COLOR_BAR.x, COLOR_BAR.y, COLOR_BAR.w, COLOR_BAR.h);
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = UI.steel;
-  ctx.strokeRect(COLOR_BAR.x, COLOR_BAR.y, COLOR_BAR.w, COLOR_BAR.h);
-  if (hue >= 0) {
-    const cx = COLOR_BAR.x + hue * COLOR_BAR.w;
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(cx - 2.5, COLOR_BAR.y - 5, 5, COLOR_BAR.h + 10);
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = 'rgba(0,0,0,0.75)';
-    ctx.strokeRect(cx - 2.5, COLOR_BAR.y - 5, 5, COLOR_BAR.h + 10);
-  }
-
-  // CLOSE now lives on the AVATAR ACCENT panel, beneath the accent slider.
-  ctx.textAlign = 'center';
-  ctx.font = '600 20px system-ui, sans-serif';
-  ctx.fillStyle = UI.textDim;
-  ctx.fillText('looks only — your hitbox never changes', CW / 2, 400);
-}
-
-function hitCustom(u: number, v: number): MenuAction | null {
-  const x = u * CW;
-  const y = (1 - v) * CH;
-  if (y >= 128 && y <= 194 && x >= 40 && x <= CW - 40) return 'open-shop';
-  if (y >= 282 && y <= 320 && x >= CW - 136 && x <= CW - 36) return 'av-uncolor';
-  if (
-    y >= COLOR_BAR.y - 6 && y <= COLOR_BAR.y + COLOR_BAR.h + 6 &&
-    x >= COLOR_BAR.x - 6 && x <= COLOR_BAR.x + COLOR_BAR.w + 6
-  ) {
-    return 'av-color';
-  }
-  return null;
-}
 
 // Leaderboard row band: the full top 10 laid out at once, then the footer.
 const BOARD_ROW_Y0 = 164;
@@ -980,113 +891,6 @@ export function createActionPanel(scene: Scene): ActionPanel {
   };
 }
 
-// --- AVATAR ACCENT: a hue slider for all your neon highlights ---------------
-// Its own canvas; tall enough to carry the slider up top and the customisation
-// CLOSE button beneath it (moved here off the CUSTOMISE plate).
-const LW = 512;
-const LH = 312;
-const SL_X = 44; // slider track left
-const SL_W = 296; // slider track width
-const SL_Y = 120; // slider track top (canvas y, down)
-const SL_H = 34; // slider track height
-const SW_X = SL_X + SL_W + 12; // colour swatch left
-const SW_Y = SL_Y - 6;
-const SW = 46; // swatch size
-// DEFAULT button — to the right of the swatch, mirroring the ARMOUR COLOUR
-// picker's reset. Sits clear of the slider track's x-range so a tap on it
-// falls through the drag handler (see dragLoadout) to a clean click.
-const ACC_DEF = { x: SW_X + SW + 12, y: SL_Y - 6, w: LW - (SW_X + SW + 12) - 16, h: 46 };
-// CLOSE the whole customisation modal — sits beneath the accent slider (moved
-// off the CUSTOMISE plate). Well below the slider's drag band, so a tap on it
-// falls through dragLoadout to a clean click.
-const ACC_CLOSE = { x: (LW - 220) / 2, y: 232, w: 220, h: 60 };
-
-function hexCss(color: number): string {
-  return `#${color.toString(16).padStart(6, '0')}`;
-}
-
-/** AVATAR ACCENT: drag a hue bar to tint every neon highlight you wear. */
-function drawLoadout(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
-  const hover = hoverAction !== null;
-  const col = hueToColor(app.accentHue);
-  const css = hexCss(col);
-  panelBg(ctx, hover, css, 'AVATAR ACCENT', LW, LH);
-
-  // Slider housing.
-  plate(ctx, SL_X - 10, SL_Y - 12, SL_W + 20, SL_H + 24, {
-    cut: 8,
-    fill: 'rgba(10,11,14,0.55)',
-    stroke: hover ? css : UI.steel,
-    rivets: false,
-  });
-
-  // Hue gradient track.
-  const grad = ctx.createLinearGradient(SL_X, 0, SL_X + SL_W, 0);
-  for (let i = 0; i <= 12; i++) {
-    const f = i / 12;
-    grad.addColorStop(f, hexCss(hueToColor(f)));
-  }
-  ctx.fillStyle = grad;
-  ctx.fillRect(SL_X, SL_Y, SL_W, SL_H);
-
-  // Knob.
-  const kx = SL_X + Math.min(1, Math.max(0, app.accentHue)) * SL_W;
-  ctx.fillStyle = '#f4f6fb';
-  ctx.strokeStyle = 'rgba(0,0,0,0.65)';
-  ctx.lineWidth = 3;
-  ctx.fillRect(kx - 5, SL_Y - 9, 10, SL_H + 18);
-  ctx.strokeRect(kx - 5, SL_Y - 9, 10, SL_H + 18);
-
-  // Live colour swatch.
-  plate(ctx, SW_X, SW_Y, SW, SW, { cut: 8, fill: css, stroke: UI.steel, rivets: false });
-
-  // DEFAULT — revert the accent to the house ember (DEFAULT_ACCENT_HUE).
-  const atDefault = Math.abs(app.accentHue - DEFAULT_ACCENT_HUE) < 0.005;
-  const resetHot = hoverAction === 'accent-default';
-  plate(ctx, ACC_DEF.x, ACC_DEF.y, ACC_DEF.w, ACC_DEF.h, {
-    cut: 8,
-    fill: resetHot ? 'rgba(255,176,0,0.16)' : 'rgba(10,11,15,0.7)',
-    stroke: atDefault || resetHot ? UI.amber : UI.steelDim,
-    rivets: false,
-  });
-  ctx.textAlign = 'center';
-  ctx.font = '700 15px system-ui, sans-serif';
-  ctx.fillStyle = atDefault ? UI.amber : UI.textDim;
-  ctx.fillText('DEFAULT', ACC_DEF.x + ACC_DEF.w / 2, ACC_DEF.y + ACC_DEF.h / 2 + 1);
-
-  ctx.font = '600 22px system-ui, sans-serif';
-  ctx.fillStyle = UI.textDim;
-  ctx.textAlign = 'center';
-  ctx.fillText("drag to tint your avatar's neon", LW / 2, 196);
-
-  // CLOSE the customisation modal — moved here, directly beneath the slider.
-  buttonPlate(ctx, ACC_CLOSE.x, ACC_CLOSE.y, ACC_CLOSE.w, ACC_CLOSE.h, 'CLOSE', UI.amber, hoverAction === 'custom-close');
-}
-
-/** While the trigger is held over the TRACK (not the swatch/DEFAULT button to
- *  its right), set the hue from the hit X. Returning false off the track lets
- *  a tap fall through to the DEFAULT button's click. */
-function dragLoadout(u: number, v: number): boolean {
-  const y = (1 - v) * LH;
-  const x = u * LW;
-  if (y < SL_Y - 30 || y > SL_Y + SL_H + 30) return false;
-  if (x < SL_X - 14 || x > SL_X + SL_W + 12) return false;
-  app.accentHue = Math.min(1, Math.max(0, (x - SL_X) / SL_W));
-  return true;
-}
-
-/** Hover/hit test for the AVATAR ACCENT panel: only the DEFAULT button. */
-function hitLoadout(u: number, v: number): MenuAction | null {
-  const x = u * LW;
-  const y = (1 - v) * LH;
-  if (x >= ACC_DEF.x && x <= ACC_DEF.x + ACC_DEF.w && y >= ACC_DEF.y && y <= ACC_DEF.y + ACC_DEF.h) {
-    return 'accent-default';
-  }
-  if (x >= ACC_CLOSE.x && x <= ACC_CLOSE.x + ACC_CLOSE.w && y >= ACC_CLOSE.y && y <= ACC_CLOSE.y + ACC_CLOSE.h) {
-    return 'custom-close';
-  }
-  return null;
-}
 
 // --- BALL LOADOUT: pick an attachment for each fist's ball -----------------
 
@@ -1639,158 +1443,338 @@ function drawCoinHud(ctx: CanvasRenderingContext2D): void {
 // The shop sells both cosmetics: AVATARS (everything we've got, plus a COMING
 // SOON tile) on top, PLATFORMS (free recolours + paid ones) below. Two tidy
 // grids of chips with the CLOSE button clear beneath them.
-const SHOP_W = 512;
-const SHOP_H = 492;
-const SHOP_GAP = 8;
-const SHOP_AV_Y = 104;
-const SHOP_AV_H = 56;
-const SHOP_AV_COLS = 5; // four avatars + a COMING SOON tile
-const SHOP_PF_H = 56;
-const SHOP_PF_COLS = 3;
-const SHOP_PF_ROWS = [196, 260, 324]; // three rows of three platforms
-const SHOP_CLOSE = { x: SHOP_W / 2 - 120, y: 406, w: 240, h: 54 };
+// ─────────────────────────── SHOP & LOCKER ──────────────────────────────────
+// Two faces of one tabbed cosmetics plate. SHOP lists every item with prices
+// (buying auto-equips AND stocks your locker); LOCKER lists only what you own,
+// to equip — plus a COLOUR tab carrying the armour + accent hue sliders. Each
+// tile shows a PICTURE of the skin: an animal silhouette (a shield for the
+// knight) for avatars, a little coloured pad for platforms.
 
-interface ShopRect {
+const PAN_W = 560;
+const PAN_H = 600;
+const TAB_Y = 84;
+const TAB_H = 46;
+const GRID_TOP = 152;
+const GRID_COLS = 3;
+const GRID_GAP = 14;
+const ITEM_W = (PAN_W - 80 - (GRID_COLS - 1) * GRID_GAP) / GRID_COLS;
+const ITEM_H = 112;
+const ROW_STEP = ITEM_H + 12;
+const FOOT_SWAP = { x: 40, y: PAN_H - 66, w: 210, h: 50 };
+const FOOT_CLOSE = { x: PAN_W - 40 - 160, y: PAN_H - 66, w: 160, h: 50 };
+// COLOUR-tab hue tracks (locker only): armour repaints the suit, accent the neon.
+const ARMOUR_BAR = { x: 40, y: 214, w: PAN_W - 210, h: 42 };
+const ARMOUR_DEF = { x: PAN_W - 156, y: 214, w: 116, h: 42 };
+const ACCENT_BAR = { x: 40, y: 344, w: PAN_W - 210, h: 42 };
+const ACCENT_DEF = { x: PAN_W - 156, y: 344, w: 116, h: 42 };
+
+interface PanRect {
   x: number;
   y: number;
   w: number;
   h: number;
 }
 
-function shopCell(col: number, cols: number): { x: number; w: number } {
-  const w = (SHOP_W - 80 - (cols - 1) * SHOP_GAP) / cols;
-  return { x: 40 + col * (w + SHOP_GAP), w };
+function hexCss(color: number): string {
+  return `#${(color & 0xffffff).toString(16).padStart(6, '0')}`;
 }
 
-function avRect(i: number): ShopRect {
-  const { x, w } = shopCell(i, SHOP_AV_COLS);
-  return { x, y: SHOP_AV_Y, w, h: SHOP_AV_H };
+function inPanRect(x: number, y: number, r: PanRect): boolean {
+  return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
 }
 
-function pfRect(j: number): ShopRect {
-  const { x, w } = shopCell(j % SHOP_PF_COLS, SHOP_PF_COLS);
-  return { x, y: SHOP_PF_ROWS[Math.floor(j / SHOP_PF_COLS)], w, h: SHOP_PF_H };
+/** u (0..1 across the panel) → hue (0..1) for the armour track. */
+export function colorBarHue(u: number): number {
+  return Math.max(0, Math.min(1, (u * PAN_W - ARMOUR_BAR.x) / ARMOUR_BAR.w));
+}
+/** u → hue for the accent track. */
+export function accentBarHue(u: number): number {
+  return Math.max(0, Math.min(1, (u * PAN_W - ACCENT_BAR.x) / ACCENT_BAR.w));
 }
 
-function shopChip(ctx: CanvasRenderingContext2D, r: ShopRect, name: string, accentHex: string, selected: boolean, locked: boolean, hot: boolean): void {
-  const css = locked ? UI.steelDim : accentHex;
+/** Which tab is showing. 'colour' is locker-only, so the shop falls back to avatars. */
+function activeTab(locker: boolean): 'avatars' | 'platforms' | 'colour' {
+  const t = customization.tab;
+  return !locker && t === 'colour' ? 'avatars' : t;
+}
+
+interface DisplayItem {
+  rect: PanRect;
+  action: MenuAction;
+  kind: 'avatar' | 'platform';
+  skin: AvatarSkin | PlatformSkin;
+  index: number;
+}
+
+/** The tiles shown for the current tab — laid out in a 3-wide grid. SHOP shows
+ *  everything (+ a COMING SOON slot), the LOCKER only what's owned. */
+function panelItems(locker: boolean): { items: DisplayItem[]; soon: PanRect | null } {
+  const tab = activeTab(locker);
+  const items: DisplayItem[] = [];
+  let idx = 0;
+  const next = (): PanRect => {
+    const col = idx % GRID_COLS;
+    const row = Math.floor(idx / GRID_COLS);
+    idx++;
+    return { x: 40 + col * (ITEM_W + GRID_GAP), y: GRID_TOP + row * ROW_STEP, w: ITEM_W, h: ITEM_H };
+  };
+  if (tab === 'avatars') {
+    AVATAR_SKINS.forEach((s, i) => {
+      if (s.locked) return;
+      items.push({ rect: next(), action: `shop-av-${i}` as MenuAction, kind: 'avatar', skin: s, index: i });
+    });
+    return { items, soon: locker ? null : next() };
+  }
+  PLATFORM_SKINS.forEach((s, j) => {
+    if (locker && !platformOwned(s.id)) return;
+    items.push({ rect: next(), action: `shop-pf-${j}` as MenuAction, kind: 'platform', skin: s, index: j });
+  });
+  return { items, soon: null };
+}
+
+/** One cosmetic tile: a picture, its name, and a status footer. */
+function drawTile(ctx: CanvasRenderingContext2D, it: DisplayItem, hoverAction: MenuAction | null): void {
+  const r = it.rect;
+  const avatar = it.kind === 'avatar';
+  const accent = avatar ? (it.skin as AvatarSkin).accent : (it.skin as PlatformSkin).neon;
+  const css = hexCss(accent);
+  const equipped = avatar ? customization.avatar === it.skin.id : customization.platform === it.skin.id;
+  const owned = avatar ? true : platformOwned(it.skin.id);
+  const hot = hoverAction === it.action;
+  plate(ctx, r.x, r.y, r.w, r.h, {
+    cut: 10,
+    fill: equipped ? 'rgba(20,22,30,0.94)' : hot ? 'rgba(20,22,30,0.9)' : 'rgba(10,11,15,0.72)',
+    stroke: equipped || hot ? css : UI.steel,
+    rivets: false,
+  });
+  const icx = r.x + r.w / 2;
+  const iconR = r.h * 0.27;
+  if (avatar) drawAvatarIcon(ctx, it.skin.id, icx, r.y + r.h * 0.34, iconR, css);
+  else drawPlatformIcon(ctx, it.skin as PlatformSkin, icx, r.y + r.h * 0.34, iconR);
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  let fs = 18;
+  ctx.font = `700 ${fs}px system-ui, sans-serif`;
+  while (fs > 11 && ctx.measureText(it.skin.name).width > r.w - 16) {
+    fs -= 1;
+    ctx.font = `700 ${fs}px system-ui, sans-serif`;
+  }
+  ctx.fillStyle = equipped || hot ? css : UI.text;
+  ctx.fillText(it.skin.name, icx, r.y + r.h * 0.72);
+
+  const fy = r.y + r.h - 14;
+  ctx.font = '800 12px system-ui, sans-serif';
+  if (equipped) {
+    ctx.fillStyle = UI.amber;
+    ctx.fillText('EQUIPPED', icx, fy);
+  } else if (owned) {
+    ctx.fillStyle = 'rgba(232,236,242,0.5)';
+    ctx.fillText('EQUIP', icx, fy);
+  } else {
+    const price = (it.skin as PlatformSkin).price ?? 0;
+    const str = String(price);
+    ctx.font = '800 15px system-ui, sans-serif';
+    const tw = ctx.measureText(str).width;
+    const sym = 16;
+    const sx = icx - (sym + 4 + tw) / 2;
+    drawCoinSymbol(ctx, sx, fy - sym / 2, sym, sym);
+    ctx.textAlign = 'left';
+    ctx.fillStyle = canAfford(price) ? UI.amber : UI.steelDim;
+    ctx.fillText(str, sx + sym + 4, fy);
+  }
+}
+
+function drawSoonTile(ctx: CanvasRenderingContext2D, r: PanRect): void {
+  plate(ctx, r.x, r.y, r.w, r.h, { cut: 10, fill: 'rgba(60,62,70,0.22)', stroke: UI.steelDim, rivets: false });
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = UI.steelDim;
+  ctx.font = `900 ${Math.round(r.h * 0.36)}px system-ui, sans-serif`;
+  ctx.fillText('?', r.x + r.w / 2, r.y + r.h * 0.36);
+  ctx.font = '700 16px system-ui, sans-serif';
+  ctx.fillText('SOON', r.x + r.w / 2, r.y + r.h * 0.72);
+  ctx.font = '800 12px system-ui, sans-serif';
+  ctx.fillText('COMING SOON', r.x + r.w / 2, r.y + r.h - 14);
+}
+
+interface TabDef {
+  label: string;
+  action: MenuAction;
+  active: boolean;
+}
+
+function drawTabs(ctx: CanvasRenderingContext2D, tabs: TabDef[], hoverAction: MenuAction | null): void {
+  const gap = 10;
+  const w = (PAN_W - 80 - (tabs.length - 1) * gap) / tabs.length;
+  tabs.forEach((t, i) => {
+    const x = 40 + i * (w + gap);
+    const hot = hoverAction === t.action;
+    plate(ctx, x, TAB_Y, w, TAB_H, {
+      cut: 8,
+      fill: t.active ? 'rgba(255,176,0,0.16)' : hot ? 'rgba(20,22,30,0.9)' : 'rgba(10,11,15,0.6)',
+      stroke: t.active ? UI.amber : hot ? UI.steel : UI.steelDim,
+      rivets: false,
+    });
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = '800 19px system-ui, sans-serif';
+    ctx.fillStyle = t.active ? UI.amber : UI.textDim;
+    ctx.fillText(t.label, x + w / 2, TAB_Y + TAB_H / 2);
+  });
+}
+
+function tabHit(x: number, y: number, count: number): number | null {
+  if (y < TAB_Y || y > TAB_Y + TAB_H) return null;
+  const gap = 10;
+  const w = (PAN_W - 80 - (count - 1) * gap) / count;
+  for (let i = 0; i < count; i++) {
+    const tx = 40 + i * (w + gap);
+    if (x >= tx && x <= tx + w) return i;
+  }
+  return null;
+}
+
+/** A hue track + knob; `accent` true uses the neon ramp, else a plain spectrum.
+ *  `hue` < 0 (armour default) draws no knob. */
+function drawHueBar(ctx: CanvasRenderingContext2D, bar: PanRect, hue: number, accent: boolean): void {
+  const grad = ctx.createLinearGradient(bar.x, 0, bar.x + bar.w, 0);
+  for (let i = 0; i <= 12; i++) {
+    const f = i / 12;
+    grad.addColorStop(f, accent ? hexCss(hueToColor(f)) : `hsl(${f * 360}, 85%, 55%)`);
+  }
+  ctx.fillStyle = grad;
+  ctx.fillRect(bar.x, bar.y, bar.w, bar.h);
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = UI.steel;
+  ctx.strokeRect(bar.x, bar.y, bar.w, bar.h);
+  if (hue >= 0) {
+    const kx = bar.x + Math.min(1, Math.max(0, hue)) * bar.w;
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+    ctx.lineWidth = 1.5;
+    ctx.fillRect(kx - 3, bar.y - 6, 6, bar.h + 12);
+    ctx.strokeRect(kx - 3, bar.y - 6, 6, bar.h + 12);
+  }
+}
+
+function drawResetBtn(ctx: CanvasRenderingContext2D, r: PanRect, atDefault: boolean, hot: boolean): void {
   plate(ctx, r.x, r.y, r.w, r.h, {
     cut: 8,
-    fill: locked
-      ? 'rgba(60,62,70,0.25)'
-      : selected
-        ? 'rgba(20,22,30,0.92)'
-        : hot
-          ? 'rgba(20,22,30,0.9)'
-          : 'rgba(10,11,15,0.7)',
-    stroke: locked ? UI.steelDim : selected || hot ? css : UI.steel,
+    fill: hot ? 'rgba(255,176,0,0.16)' : 'rgba(10,11,15,0.7)',
+    stroke: atDefault || hot ? UI.amber : UI.steelDim,
     rivets: false,
   });
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  let fs = 19;
-  ctx.font = `700 ${fs}px system-ui, sans-serif`;
-  while (fs > 11 && ctx.measureText(name).width > r.w - 14) {
-    fs -= 1;
-    ctx.font = `700 ${fs}px system-ui, sans-serif`;
-  }
-  ctx.fillStyle = locked ? UI.steelDim : selected || hot ? css : UI.text;
-  ctx.fillText(name, r.x + r.w / 2, r.y + 22);
+  ctx.font = '700 16px system-ui, sans-serif';
+  ctx.fillStyle = atDefault ? UI.amber : UI.textDim;
+  ctx.fillText('DEFAULT', r.x + r.w / 2, r.y + r.h / 2 + 1);
 }
 
-function shopSub(ctx: CanvasRenderingContext2D, r: ShopRect, text: string, color: string): void {
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.font = '700 12px system-ui, sans-serif';
-  ctx.fillStyle = color;
-  ctx.fillText(text, r.x + r.w / 2, r.y + r.h - 15);
-}
-
-/** A platform's price as the coin symbol + amount, centred in the chip footer. */
-function shopPrice(ctx: CanvasRenderingContext2D, r: ShopRect, price: number, affordable: boolean): void {
-  const str = String(price);
-  ctx.textBaseline = 'middle';
-  ctx.font = '800 16px system-ui, sans-serif';
-  const tw = ctx.measureText(str).width;
-  const sym = 17;
-  const sx = r.x + r.w / 2 - (sym + 4 + tw) / 2;
-  const cy = r.y + r.h - 15;
-  drawCoinSymbol(ctx, sx, cy - sym / 2, sym, sym);
-  ctx.textAlign = 'left';
-  ctx.fillStyle = affordable ? UI.amber : UI.steelDim;
-  ctx.fillText(str, sx + sym + 4, cy);
-}
-
-function shopSectionLabel(ctx: CanvasRenderingContext2D, text: string, y: number): void {
+/** The locker's COLOUR tab: armour-suit hue + neon-accent hue sliders. */
+function drawColourTab(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
   ctx.font = '700 20px system-ui, sans-serif';
   ctx.fillStyle = UI.textDim;
-  ctx.fillText(text, 40, y);
+  ctx.fillText('ARMOUR COLOUR', 40, ARMOUR_BAR.y - 14);
+  drawHueBar(ctx, ARMOUR_BAR, customization.colorHue, false);
+  drawResetBtn(ctx, ARMOUR_DEF, customization.colorHue < 0, hoverAction === 'av-uncolor');
+
+  ctx.textAlign = 'left';
+  ctx.fillStyle = UI.textDim;
+  ctx.font = '700 20px system-ui, sans-serif';
+  ctx.fillText('NEON ACCENT', 40, ACCENT_BAR.y - 14);
+  drawHueBar(ctx, ACCENT_BAR, app.accentHue, true);
+  drawResetBtn(ctx, ACCENT_DEF, Math.abs(app.accentHue - DEFAULT_ACCENT_HUE) < 0.005, hoverAction === 'accent-default');
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = '600 18px system-ui, sans-serif';
+  ctx.fillStyle = 'rgba(232,236,242,0.5)';
+  ctx.fillText('drag to repaint your armour and its neon — looks only', PAN_W / 2, PAN_H - 96);
 }
 
-function drawShop(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
-  panelBg(ctx, false, UI.amber, 'SHOP', SHOP_W, SHOP_H);
+function drawGrid(ctx: CanvasRenderingContext2D, locker: boolean, hoverAction: MenuAction | null): void {
+  const { items, soon } = panelItems(locker);
+  for (const it of items) drawTile(ctx, it, hoverAction);
+  if (soon) drawSoonTile(ctx, soon);
+}
 
-  // Balance, top-right of the header.
-  drawCoinSymbol(ctx, SHOP_W - 150, 22, 34, 34);
+function gridHit(x: number, y: number, locker: boolean): MenuAction | null {
+  for (const it of panelItems(locker).items) {
+    if (inPanRect(x, y, it.rect)) return it.action;
+  }
+  return null;
+}
+
+/** SHOP — everything, with prices. Tabs: AVATARS / PLATFORMS. */
+function drawShop(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
+  panelBg(ctx, false, UI.amber, 'SHOP', PAN_W, PAN_H);
+  drawCoinSymbol(ctx, PAN_W - 150, 22, 32, 32);
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   ctx.font = '800 30px system-ui, sans-serif';
   ctx.fillStyle = UI.amber;
-  ctx.fillText(String(coins.balance), SHOP_W - 108, 39);
+  ctx.fillText(String(coins.balance), PAN_W - 110, 39);
 
-  // --- AVATARS: all we've got (free to equip) + a COMING SOON tile ----------
-  shopSectionLabel(ctx, 'AVATARS', SHOP_AV_Y - 14);
-  for (let i = 0; i < SHOP_AV_COLS; i++) {
-    const r = avRect(i);
-    if (i >= AVATAR_SKINS.length) {
-      shopChip(ctx, r, 'SOON', UI.steelDim, false, true, false);
-      shopSub(ctx, r, 'COMING SOON', UI.steelDim);
-      continue;
-    }
-    const s = AVATAR_SKINS[i];
-    const selected = customization.avatar === s.id;
-    const hot = hoverAction === (`shop-av-${i}` as MenuAction);
-    shopChip(ctx, r, s.name, `#${s.accent.toString(16).padStart(6, '0')}`, selected, !!s.locked, hot);
-    shopSub(ctx, r, selected ? 'EQUIPPED' : 'EQUIP', selected ? UI.amber : 'rgba(232,236,242,0.5)');
-  }
-
-  // --- PLATFORMS: free recolours + the paid ones ----------------------------
-  shopSectionLabel(ctx, 'PLATFORMS', SHOP_PF_ROWS[0] - 14);
-  PLATFORM_SKINS.forEach((skin, j) => {
-    const r = pfRect(j);
-    const owned = platformOwned(skin.id);
-    const equipped = customization.platform === skin.id;
-    const hot = hoverAction === (`shop-pf-${j}` as MenuAction);
-    shopChip(ctx, r, skin.name, `#${skin.neon.toString(16).padStart(6, '0')}`, equipped, false, hot);
-    if (equipped) shopSub(ctx, r, 'EQUIPPED', UI.amber);
-    else if (owned) shopSub(ctx, r, 'EQUIP', 'rgba(232,236,242,0.5)');
-    else shopPrice(ctx, r, skin.price ?? 0, canAfford(skin.price ?? 0));
-  });
+  const tab = activeTab(false);
+  drawTabs(ctx, [
+    { label: 'AVATARS', action: 'tab-avatars', active: tab === 'avatars' },
+    { label: 'PLATFORMS', action: 'tab-platforms', active: tab === 'platforms' },
+  ], hoverAction);
+  drawGrid(ctx, false, hoverAction);
 
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  buttonPlate(ctx, SHOP_CLOSE.x, SHOP_CLOSE.y, SHOP_CLOSE.w, SHOP_CLOSE.h, 'CLOSE', UI.amber, hoverAction === 'shop-close');
-}
-
-function inRect(x: number, y: number, r: ShopRect): boolean {
-  return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+  buttonPlate(ctx, FOOT_SWAP.x, FOOT_SWAP.y, FOOT_SWAP.w, FOOT_SWAP.h, 'LOCKER', UI.cool, hoverAction === 'open-locker');
+  buttonPlate(ctx, FOOT_CLOSE.x, FOOT_CLOSE.y, FOOT_CLOSE.w, FOOT_CLOSE.h, 'CLOSE', UI.amber, hoverAction === 'custom-close');
 }
 
 function hitShop(u: number, v: number): MenuAction | null {
-  const x = u * SHOP_W;
-  const y = (1 - v) * SHOP_H;
-  if (x >= SHOP_CLOSE.x && x <= SHOP_CLOSE.x + SHOP_CLOSE.w && y >= SHOP_CLOSE.y && y <= SHOP_CLOSE.y + SHOP_CLOSE.h) {
-    return 'shop-close';
+  const x = u * PAN_W;
+  const y = (1 - v) * PAN_H;
+  if (inPanRect(x, y, FOOT_SWAP)) return 'open-locker';
+  if (inPanRect(x, y, FOOT_CLOSE)) return 'custom-close';
+  const t = tabHit(x, y, 2);
+  if (t !== null) return t === 0 ? 'tab-avatars' : 'tab-platforms';
+  return gridHit(x, y, false);
+}
+
+/** LOCKER — your inventory: equip owned skins, plus the COLOUR sliders. */
+function drawLocker(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
+  panelBg(ctx, false, UI.emberBright, 'LOCKER', PAN_W, PAN_H);
+  const tab = activeTab(true);
+  drawTabs(ctx, [
+    { label: 'AVATARS', action: 'tab-avatars', active: tab === 'avatars' },
+    { label: 'PLATFORMS', action: 'tab-platforms', active: tab === 'platforms' },
+    { label: 'COLOUR', action: 'tab-colour', active: tab === 'colour' },
+  ], hoverAction);
+  if (tab === 'colour') drawColourTab(ctx, hoverAction);
+  else drawGrid(ctx, true, hoverAction);
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  buttonPlate(ctx, FOOT_SWAP.x, FOOT_SWAP.y, FOOT_SWAP.w, FOOT_SWAP.h, 'SHOP', UI.amber, hoverAction === 'open-shop');
+  buttonPlate(ctx, FOOT_CLOSE.x, FOOT_CLOSE.y, FOOT_CLOSE.w, FOOT_CLOSE.h, 'CLOSE', UI.amber, hoverAction === 'custom-close');
+}
+
+function hitLocker(u: number, v: number): MenuAction | null {
+  const x = u * PAN_W;
+  const y = (1 - v) * PAN_H;
+  if (inPanRect(x, y, FOOT_SWAP)) return 'open-shop';
+  if (inPanRect(x, y, FOOT_CLOSE)) return 'custom-close';
+  const t = tabHit(x, y, 3);
+  if (t !== null) return t === 0 ? 'tab-avatars' : t === 1 ? 'tab-platforms' : 'tab-colour';
+  if (activeTab(true) === 'colour') {
+    if (inPanRect(x, y, ARMOUR_DEF)) return 'av-uncolor';
+    if (inPanRect(x, y, ACCENT_DEF)) return 'accent-default';
+    if (inPanRect(x, y, ARMOUR_BAR)) return 'av-color';
+    if (inPanRect(x, y, ACCENT_BAR)) return 'accent-color';
+    return null;
   }
-  for (let i = 0; i < AVATAR_SKINS.length; i++) {
-    if (!AVATAR_SKINS[i].locked && inRect(x, y, avRect(i))) return `shop-av-${i}` as MenuAction;
-  }
-  for (let j = 0; j < PLATFORM_SKINS.length; j++) {
-    if (inRect(x, y, pfRect(j))) return `shop-pf-${j}` as MenuAction;
-  }
-  return null;
+  return gridHit(x, y, true);
 }
 
 export function createMenu(scene: Scene): Menu {
@@ -1803,13 +1787,8 @@ export function createMenu(scene: Scene): Menu {
   // Taller than the lobby panels (1.36 × 1.456 ≈ BW:BH) so the full top 10
   // reads at a glance; its own BW×BH canvas keeps the text at lobby density.
   const board = makePanel('board', 1.36, 1.456, drawBoard, hitBoard, { cw: BW, ch: BH });
-  // Taller than the lobby panels (own CW×CH canvas) for the colour picker row.
-  const custom = makePanel('custom', 0.9, 0.756, drawCustom, hitCustom, { cw: CW, ch: CH });
-  const loadout = makePanel('loadout', 0.78, 0.475, drawLoadout, hitLoadout, {
-    cw: LW,
-    ch: LH,
-    drag: dragLoadout,
-  });
+  // The LOCKER (your inventory + colour sliders) reuses the 'custom' id/slot.
+  const custom = makePanel('custom', 0.9, 0.9 * (PAN_H / PAN_W), drawLocker, hitLocker, { cw: PAN_W, ch: PAN_H });
   const balls = makePanel('balls', 0.84, 0.72, drawBalls, () => null, {
     cw: BALL_W,
     ch: BALL_H,
@@ -1827,7 +1806,7 @@ export function createMenu(scene: Scene): Menu {
     cw: COIN_HUD_W,
     ch: COIN_HUD_H,
   });
-  const shop = makePanel('shop', 0.9, 0.9 * (SHOP_H / SHOP_W), drawShop, hitShop, { cw: SHOP_W, ch: SHOP_H });
+  const shop = makePanel('shop', 0.9, 0.9 * (PAN_H / PAN_W), drawShop, hitShop, { cw: PAN_W, ch: PAN_H });
 
   // Shallow arc in front of the player, tilted inward toward the centre.
   const y = 1.45;
@@ -1854,11 +1833,6 @@ export function createMenu(scene: Scene): Menu {
   balls.mesh.position.set(1.32, 1.18, -0.66);
   balls.mesh.rotation.y = -0.6;
   balls.mesh.visible = false;
-  // Raised a touch (was 0.78) so the slider and the CLOSE button beneath it sit
-  // higher — there's room under the trimmed CUSTOMISE plate above.
-  loadout.mesh.position.set(0.54, 0.86, -1.08);
-  loadout.mesh.rotation.y = -0.3;
-  loadout.mesh.visible = false;
   // The paper button sits just above the right (info) panel, sharing its tilt.
   gazetteBtn.mesh.position.set(0.92, 1.86, -1.05);
   gazetteBtn.mesh.rotation.y = -0.48;
@@ -1874,7 +1848,7 @@ export function createMenu(scene: Scene): Menu {
   news.mesh.position.set(0, 1.5, -1.16);
   news.mesh.visible = false;
 
-  const panels = [train, duel, info, board, custom, balls, loadout, gazetteBtn, coinHud, shop, news];
+  const panels = [train, duel, info, board, custom, balls, gazetteBtn, coinHud, shop, news];
   for (const p of panels) {
     p.redraw(null);
     group.add(p.mesh);
