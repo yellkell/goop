@@ -21,12 +21,13 @@
  */
 
 import { createSystem, InputComponent } from '@iwsdk/core';
-import { CylinderGeometry, Mesh, MeshStandardMaterial, Vector3 } from 'three';
+import { CylinderGeometry, Mesh, MeshStandardMaterial, Quaternion, Vector3 } from 'three';
 import { Panel } from '../panel.js';
 import { coinImage } from '../../menu/coinIcon.js';
 import { addCoins, coins as wallet, spendCoins } from '../../menu/wallet.js';
 import { pubSendEvent } from '../net.js';
 import { bus, pub } from '../state.js';
+import { PUB, SURFACES, type Surface } from '../config.js';
 import type { PubEvent, Vec3T } from '../protocol.js';
 
 const WRIST_TOUCH = 0.13; // how close a hand must come to a wrist to pull/bank
@@ -34,10 +35,37 @@ const COIN_GRAB = 0.11; // reach for picking a coin off the floor
 const COIN_R = 0.032;
 const COIN_THICK = 0.01;
 const GRAVITY = 9.8;
-const FLOOR_Y = COIN_THICK; // a coin rests just proud of the floor
 const MOVE_INTERVAL = 1 / 15; // stream a falling coin's position at 15 Hz
 const TAG_W = 0.1;
 const TAG_H = 0.13;
+
+/**
+ * Where a dropped coin may come to rest: the floor, plus the same bar/booth
+ * tops glasses use AND the four bar stools — so you can set a coin down on
+ * tables, chairs and the bar instead of only the floor. Read-only reuse of the
+ * glass SURFACES (never mutated, so glass behaviour is untouched).
+ */
+const STOOL_R = 0.17;
+const COIN_SURFACES: Surface[] = [
+  ...SURFACES,
+  ...[-1.6, -0.8, 0.8, 1.6].map((x) => ({
+    y: 0.69, // bar-stool seat top (environment.ts: puck at y≈0.65)
+    minX: x - STOOL_R,
+    maxX: x + STOOL_R,
+    minZ: PUB.bar.z + 0.45 - STOOL_R,
+    maxZ: PUB.bar.z + 0.45 + STOOL_R,
+  })),
+];
+
+/** Centre height a coin rests at when it lands at (x,z), having fallen from
+ *  `fromY`: the highest surface beneath it within reach, else the floor. */
+function coinRestY(x: number, z: number, fromY: number): number {
+  let top = 0; // the floor
+  for (const s of COIN_SURFACES) {
+    if (x >= s.minX && x <= s.maxX && z >= s.minZ && z <= s.maxZ && s.y <= fromY + 0.02 && s.y > top) top = s.y;
+  }
+  return top + COIN_THICK * 0.5;
+}
 
 /** A coin riding in a hand: a small gold disc that follows the grip. */
 interface HeldCoin {
@@ -106,6 +134,8 @@ function drawTag(tag: WristTag, count: number): void {
 const _a = new Vector3();
 const _b = new Vector3();
 const _cam = new Vector3();
+const _off = new Vector3();
+const _qh = new Quaternion();
 
 export class CoinSystem extends createSystem({}) {
   private held: { left: HeldCoin | null; right: HeldCoin | null } = { left: null, right: null };
@@ -115,6 +145,7 @@ export class CoinSystem extends createSystem({}) {
   private localTag: WristTag | null = null;
   private counter = 0;
   private moveTimer = 0;
+  private time = 0;
   private artReady = false;
 
   init(): void {
@@ -125,6 +156,7 @@ export class CoinSystem extends createSystem({}) {
   }
 
   update(delta: number): void {
+    this.time += delta;
     // Coin art may finish decoding after the first tags are drawn — force a
     // one-time repaint the frame it lands so the symbol appears.
     if (!this.artReady && coinImage()) {
@@ -218,10 +250,17 @@ export class CoinSystem extends createSystem({}) {
         }
       }
 
-      // A held coin rides in the hand.
+      // A held coin sits UP at the fingertips (not buried in the palm): offset
+      // forward toward the fingers and up, in the hand's own frame, and stood
+      // on edge so it reads as pinched between the fingers.
       if (this.held[hand]) {
-        this.held[hand]!.mesh.position.copy(_a);
-        this.held[hand]!.mesh.rotation.y += delta * 3;
+        const m = this.held[hand]!.mesh;
+        grip.getWorldQuaternion(_qh);
+        _off.set(0, 0.03, -0.07).applyQuaternion(_qh); // up + toward the fingertips
+        m.position.copy(_a).add(_off);
+        m.quaternion.copy(_qh);
+        m.rotateX(Math.PI / 2); // stand the disc up to face out of the hand
+        m.rotateZ(this.time * 2.2); // lazy spin for life
       }
       this.prevHand[hand].copy(_a);
     });
@@ -250,12 +289,15 @@ export class CoinSystem extends createSystem({}) {
     if (stream) this.moveTimer = MOVE_INTERVAL;
     for (const coin of this.floor.values()) {
       if (coin.owner !== 'me' || coin.resting) continue;
-      coin.vel.y -= GRAVITY * delta;
-      coin.mesh.position.addScaledVector(coin.vel, delta);
-      coin.mesh.rotation.x += delta * 4;
       const p = coin.mesh.position;
-      if (p.y <= FLOOR_Y) {
-        p.y = FLOOR_Y;
+      const prevY = p.y;
+      coin.vel.y -= GRAVITY * delta;
+      p.addScaledVector(coin.vel, delta);
+      coin.mesh.rotation.x += delta * 4;
+      // Land on the highest table / chair / bar top beneath it, else the floor.
+      const restY = coinRestY(p.x, p.z, prevY);
+      if (coin.vel.y <= 0 && p.y <= restY) {
+        p.y = restY;
         coin.vel.set(0, 0, 0);
         coin.resting = true;
         pubSendEvent({ e: 'COIN_REST', id: coin.id, pos: [p.x, p.y, p.z] });

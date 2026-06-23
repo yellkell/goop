@@ -89,18 +89,18 @@ export type MenuAction =
   | `pub-go-${string}`
   | 'open-custom'
   | 'custom-close'
-  | 'av-0' | 'av-1' | 'av-2' | 'av-3'
   /** Dragging the armour-colour hue bar (continuous — MenuSystem reads the UV). */
   | 'av-color'
   /** Reset the armour colour to the skin's default palette. */
   | 'av-uncolor'
   /** Reset the avatar-accent (neon) hue to the house ember default. */
   | 'accent-default'
-  /** Open / close the platform shop (reached from the customise panel). */
+  /** Open / close the cosmetics shop (reached from the customise panel). */
   | 'open-shop'
   | 'shop-close'
-  /** Tap a platform tile in the shop (buy if unowned, equip if owned). */
-  | `shop-${number}`
+  /** Tap an avatar tile (equip) or a platform tile (buy if unowned, else equip). */
+  | `shop-av-${number}`
+  | `shop-pf-${number}`
   /** Open / close the Gasket Gazette. */
   | 'open-gazette'
   | 'gazette-close';
@@ -585,68 +585,20 @@ function hitPubPicker(v: number): MenuAction | null {
 function drawCustom(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
   panelBg(ctx, false, UI.emberBright, 'CUSTOMISE', CW, CH);
 
-  const chipRow = (
-    label: string,
-    skins: Array<{ name: string; locked?: boolean; accent?: number; neon?: number }>,
-    selectedIdx: number,
-    y: number,
-    actionPrefix: 'av' | 'pf',
-  ): void => {
-    ctx.textAlign = 'left';
-    ctx.font = '700 22px system-ui, sans-serif';
-    ctx.fillStyle = UI.textDim;
-    ctx.fillText(label, 40, y);
-    const w = (CW - 80 - 3 * 10) / 4;
-    skins.forEach((s, i) => {
-      const x = 40 + i * (w + 10);
-      const cy = y + 16;
-      const hex = s.locked ? undefined : ((s.accent ?? s.neon ?? 0xffffff) as number);
-      const css = hex !== undefined ? `#${hex.toString(16).padStart(6, '0')}` : UI.steelDim;
-      const selected = i === selectedIdx;
-      const action = `${actionPrefix}-${i}` as MenuAction;
-      const hot = !s.locked && hoverAction === action;
-      plate(ctx, x, cy, w, 54, {
-        cut: 8,
-        fill: s.locked
-          ? 'rgba(60,62,70,0.25)'
-          : selected
-            ? 'rgba(20,22,30,0.92)'
-            : hot
-              ? 'rgba(20,22,30,0.9)'
-              : 'rgba(10,11,15,0.7)',
-        stroke: s.locked ? UI.steelDim : selected || hot ? css : UI.steel,
-        rivets: false,
-      });
-      ctx.textAlign = 'center';
-      ctx.font = `700 ${s.name.length > 7 ? 18 : 21}px system-ui, sans-serif`;
-      ctx.fillStyle = s.locked ? UI.steelDim : selected || hot ? css : UI.text;
-      ctx.fillText(s.name, x + w / 2, cy + 23);
-      ctx.font = '600 13px system-ui, sans-serif';
-      ctx.fillStyle = s.locked ? UI.steelDim : 'rgba(232,236,242,0.45)';
-      ctx.fillText(s.locked ? 'COMING SOON' : selected ? 'EQUIPPED' : 'select', x + w / 2, cy + 43);
-    });
-    ctx.textAlign = 'center';
-  };
-
-  chipRow('AVATAR', AVATAR_SKINS, AVATAR_SKINS.findIndex((s) => s.id === customization.avatar), 102, 'av');
-
-  // PLATFORM moved into its own shop (free recolours + paid ones). Button shows
-  // the equipped pad's name so you know what you're standing on at a glance.
+  // Both cosmetics — avatars AND platforms — now live in the SHOP. One button
+  // opens it; the line beneath shows what you've currently got on.
   ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
   ctx.font = '700 22px system-ui, sans-serif';
   ctx.fillStyle = UI.textDim;
-  ctx.fillText('PLATFORM', 40, 196);
-  const equipped = PLATFORM_SKINS.find((s) => s.id === customization.platform);
-  buttonPlate(
-    ctx,
-    40,
-    208,
-    CW - 80,
-    52,
-    `SHOP  ·  ${equipped?.name ?? 'EMBER'}`,
-    UI.amber,
-    hoverAction === 'open-shop',
-  );
+  ctx.fillText('SKINS', 40, 116);
+  buttonPlate(ctx, 40, 128, CW - 80, 66, 'OPEN SHOP', UI.amber, hoverAction === 'open-shop');
+  const av = AVATAR_SKINS.find((s) => s.id === customization.avatar);
+  const pf = PLATFORM_SKINS.find((s) => s.id === customization.platform);
+  ctx.textAlign = 'center';
+  ctx.font = '600 16px system-ui, sans-serif';
+  ctx.fillStyle = 'rgba(232,236,242,0.55)';
+  ctx.fillText(`wearing   ${av?.name ?? 'PANTHER'}   ·   ${pf?.name ?? 'EMBER'}`, CW / 2, 218);
 
   // --- ARMOUR COLOUR picker: a hue bar repainting the whole suit -------------
   const hue = customization.colorHue;
@@ -699,14 +651,7 @@ function drawCustom(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | nul
 function hitCustom(u: number, v: number): MenuAction | null {
   const x = u * CW;
   const y = (1 - v) * CH;
-  const w = (CW - 80 - 3 * 10) / 4;
-  const chipIdx = (px: number): number => Math.floor((px - 40) / (w + 10));
-  if (y >= 112 && y <= 178 && x >= 40 && x <= CW - 40) {
-    const i = chipIdx(x);
-    if (i >= 0 && i <= 3 && !AVATAR_SKINS[i].locked) return `av-${i}` as MenuAction;
-    return null;
-  }
-  if (y >= 208 && y <= 260 && x >= 40 && x <= CW - 40) return 'open-shop';
+  if (y >= 128 && y <= 194 && x >= 40 && x <= CW - 40) return 'open-shop';
   if (y >= 282 && y <= 320 && x >= CW - 136 && x <= CW - 36) return 'av-uncolor';
   if (
     y >= COLOR_BAR.y - 6 && y <= COLOR_BAR.y + COLOR_BAR.h + 6 &&
@@ -1691,84 +1636,146 @@ function drawCoinHud(ctx: CanvasRenderingContext2D): void {
   ctx.textBaseline = 'middle';
 }
 
+// The shop sells both cosmetics: AVATARS (everything we've got, plus a COMING
+// SOON tile) on top, PLATFORMS (free recolours + paid ones) below. Two tidy
+// grids of chips with the CLOSE button clear beneath them.
 const SHOP_W = 512;
-const SHOP_H = 560;
-const SHOP_ROW_Y0 = 112;
-const SHOP_ROW_STEP = 66;
-const SHOP_ROW_H = 56;
-const SHOP_CLOSE = { x: SHOP_W / 2 - 120, y: SHOP_H - 84, w: 240, h: 56 };
+const SHOP_H = 470;
+const SHOP_GAP = 8;
+const SHOP_AV_Y = 106;
+const SHOP_AV_H = 58;
+const SHOP_AV_COLS = 5; // four avatars + a COMING SOON tile
+const SHOP_PF_H = 58;
+const SHOP_PF_COLS = 3;
+const SHOP_PF_ROWS = [196, 262]; // two rows of three platforms
+const SHOP_CLOSE = { x: SHOP_W / 2 - 120, y: 344, w: 240, h: 54 };
 
-/** The platform shop — one tile per pad: a colour swatch, its name, and the
- *  status (EQUIPPED / EQUIP for owned, the price + BUY for purchasable). Your
- *  coin balance rides in the header. */
+interface ShopRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+function shopCell(col: number, cols: number): { x: number; w: number } {
+  const w = (SHOP_W - 80 - (cols - 1) * SHOP_GAP) / cols;
+  return { x: 40 + col * (w + SHOP_GAP), w };
+}
+
+function avRect(i: number): ShopRect {
+  const { x, w } = shopCell(i, SHOP_AV_COLS);
+  return { x, y: SHOP_AV_Y, w, h: SHOP_AV_H };
+}
+
+function pfRect(j: number): ShopRect {
+  const { x, w } = shopCell(j % SHOP_PF_COLS, SHOP_PF_COLS);
+  return { x, y: SHOP_PF_ROWS[Math.floor(j / SHOP_PF_COLS)], w, h: SHOP_PF_H };
+}
+
+function shopChip(ctx: CanvasRenderingContext2D, r: ShopRect, name: string, accentHex: string, selected: boolean, locked: boolean, hot: boolean): void {
+  const css = locked ? UI.steelDim : accentHex;
+  plate(ctx, r.x, r.y, r.w, r.h, {
+    cut: 8,
+    fill: locked
+      ? 'rgba(60,62,70,0.25)'
+      : selected
+        ? 'rgba(20,22,30,0.92)'
+        : hot
+          ? 'rgba(20,22,30,0.9)'
+          : 'rgba(10,11,15,0.7)',
+    stroke: locked ? UI.steelDim : selected || hot ? css : UI.steel,
+    rivets: false,
+  });
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  let fs = 19;
+  ctx.font = `700 ${fs}px system-ui, sans-serif`;
+  while (fs > 11 && ctx.measureText(name).width > r.w - 14) {
+    fs -= 1;
+    ctx.font = `700 ${fs}px system-ui, sans-serif`;
+  }
+  ctx.fillStyle = locked ? UI.steelDim : selected || hot ? css : UI.text;
+  ctx.fillText(name, r.x + r.w / 2, r.y + 22);
+}
+
+function shopSub(ctx: CanvasRenderingContext2D, r: ShopRect, text: string, color: string): void {
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = '700 12px system-ui, sans-serif';
+  ctx.fillStyle = color;
+  ctx.fillText(text, r.x + r.w / 2, r.y + r.h - 15);
+}
+
+/** A platform's price as the coin symbol + amount, centred in the chip footer. */
+function shopPrice(ctx: CanvasRenderingContext2D, r: ShopRect, price: number, affordable: boolean): void {
+  const str = String(price);
+  ctx.textBaseline = 'middle';
+  ctx.font = '800 16px system-ui, sans-serif';
+  const tw = ctx.measureText(str).width;
+  const sym = 17;
+  const sx = r.x + r.w / 2 - (sym + 4 + tw) / 2;
+  const cy = r.y + r.h - 15;
+  drawCoinSymbol(ctx, sx, cy - sym / 2, sym, sym);
+  ctx.textAlign = 'left';
+  ctx.fillStyle = affordable ? UI.amber : UI.steelDim;
+  ctx.fillText(str, sx + sym + 4, cy);
+}
+
+function shopSectionLabel(ctx: CanvasRenderingContext2D, text: string, y: number): void {
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.font = '700 20px system-ui, sans-serif';
+  ctx.fillStyle = UI.textDim;
+  ctx.fillText(text, 40, y);
+}
+
 function drawShop(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
-  panelBg(ctx, false, UI.amber, 'PLATFORMS', SHOP_W, SHOP_H);
+  panelBg(ctx, false, UI.amber, 'SHOP', SHOP_W, SHOP_H);
 
   // Balance, top-right of the header.
   drawCoinSymbol(ctx, SHOP_W - 150, 22, 34, 34);
   ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
   ctx.font = '800 30px system-ui, sans-serif';
   ctx.fillStyle = UI.amber;
-  ctx.fillText(String(coins.balance), SHOP_W - 108, 40);
+  ctx.fillText(String(coins.balance), SHOP_W - 108, 39);
 
-  PLATFORM_SKINS.forEach((skin, i) => {
-    const y = SHOP_ROW_Y0 + i * SHOP_ROW_STEP;
+  // --- AVATARS: all we've got (free to equip) + a COMING SOON tile ----------
+  shopSectionLabel(ctx, 'AVATARS', SHOP_AV_Y - 14);
+  for (let i = 0; i < SHOP_AV_COLS; i++) {
+    const r = avRect(i);
+    if (i >= AVATAR_SKINS.length) {
+      shopChip(ctx, r, 'SOON', UI.steelDim, false, true, false);
+      shopSub(ctx, r, 'COMING SOON', UI.steelDim);
+      continue;
+    }
+    const s = AVATAR_SKINS[i];
+    const selected = customization.avatar === s.id;
+    const hot = hoverAction === (`shop-av-${i}` as MenuAction);
+    shopChip(ctx, r, s.name, `#${s.accent.toString(16).padStart(6, '0')}`, selected, !!s.locked, hot);
+    shopSub(ctx, r, selected ? 'EQUIPPED' : 'EQUIP', selected ? UI.amber : 'rgba(232,236,242,0.5)');
+  }
+
+  // --- PLATFORMS: free recolours + the paid ones ----------------------------
+  shopSectionLabel(ctx, 'PLATFORMS', SHOP_PF_ROWS[0] - 14);
+  PLATFORM_SKINS.forEach((skin, j) => {
+    const r = pfRect(j);
     const owned = platformOwned(skin.id);
     const equipped = customization.platform === skin.id;
-    const affordable = canAfford(skin.price ?? 0);
-    const hot = hoverAction === (`shop-${i}` as MenuAction);
-    const css = `#${skin.neon.toString(16).padStart(6, '0')}`;
-
-    plate(ctx, 40, y, SHOP_W - 80, SHOP_ROW_H, {
-      cut: 10,
-      fill: equipped ? 'rgba(20,22,30,0.92)' : hot ? 'rgba(20,22,30,0.9)' : 'rgba(10,11,15,0.7)',
-      stroke: equipped || hot ? css : UI.steel,
-      rivets: false,
-    });
-
-    // Colour swatch.
-    ctx.fillStyle = css;
-    ctx.fillRect(58, y + 14, 28, 28);
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = UI.steel;
-    ctx.strokeRect(58, y + 14, 28, 28);
-
-    // Name.
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.font = '700 24px system-ui, sans-serif';
-    ctx.fillStyle = owned ? UI.text : affordable ? UI.text : UI.steelDim;
-    ctx.fillText(skin.name, 104, y + SHOP_ROW_H / 2);
-
-    // Status / price, right-aligned.
-    const rx = SHOP_W - 64;
-    if (equipped) {
-      ctx.textAlign = 'right';
-      ctx.font = '800 18px system-ui, sans-serif';
-      ctx.fillStyle = UI.amber;
-      ctx.fillText('EQUIPPED', rx, y + SHOP_ROW_H / 2);
-    } else if (owned) {
-      ctx.textAlign = 'right';
-      ctx.font = '800 18px system-ui, sans-serif';
-      ctx.fillStyle = hot ? css : UI.textDim;
-      ctx.fillText('EQUIP', rx, y + SHOP_ROW_H / 2);
-    } else {
-      // Price (symbol + amount) and a BUY / can't-afford tag.
-      ctx.textAlign = 'right';
-      ctx.font = '800 22px system-ui, sans-serif';
-      ctx.fillStyle = affordable ? UI.text : UI.steelDim;
-      ctx.fillText(String(skin.price ?? 0), rx, y + SHOP_ROW_H / 2);
-      drawCoinSymbol(ctx, rx - 24 - ctx.measureText(String(skin.price ?? 0)).width, y + SHOP_ROW_H / 2 - 13, 26, 26);
-      ctx.textAlign = 'left';
-      ctx.font = '700 13px system-ui, sans-serif';
-      ctx.fillStyle = affordable ? (hot ? css : 'rgba(232,236,242,0.5)') : UI.steelDim;
-      ctx.fillText(affordable ? 'BUY' : 'NEED MORE', 104, y + SHOP_ROW_H - 8);
-    }
+    const hot = hoverAction === (`shop-pf-${j}` as MenuAction);
+    shopChip(ctx, r, skin.name, `#${skin.neon.toString(16).padStart(6, '0')}`, equipped, false, hot);
+    if (equipped) shopSub(ctx, r, 'EQUIPPED', UI.amber);
+    else if (owned) shopSub(ctx, r, 'EQUIP', 'rgba(232,236,242,0.5)');
+    else shopPrice(ctx, r, skin.price ?? 0, canAfford(skin.price ?? 0));
   });
 
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   buttonPlate(ctx, SHOP_CLOSE.x, SHOP_CLOSE.y, SHOP_CLOSE.w, SHOP_CLOSE.h, 'CLOSE', UI.amber, hoverAction === 'shop-close');
+}
+
+function inRect(x: number, y: number, r: ShopRect): boolean {
+  return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
 }
 
 function hitShop(u: number, v: number): MenuAction | null {
@@ -1777,9 +1784,11 @@ function hitShop(u: number, v: number): MenuAction | null {
   if (x >= SHOP_CLOSE.x && x <= SHOP_CLOSE.x + SHOP_CLOSE.w && y >= SHOP_CLOSE.y && y <= SHOP_CLOSE.y + SHOP_CLOSE.h) {
     return 'shop-close';
   }
-  for (let i = 0; i < PLATFORM_SKINS.length; i++) {
-    const ry = SHOP_ROW_Y0 + i * SHOP_ROW_STEP;
-    if (y >= ry && y <= ry + SHOP_ROW_H && x >= 40 && x <= SHOP_W - 40) return `shop-${i}` as MenuAction;
+  for (let i = 0; i < AVATAR_SKINS.length; i++) {
+    if (!AVATAR_SKINS[i].locked && inRect(x, y, avRect(i))) return `shop-av-${i}` as MenuAction;
+  }
+  for (let j = 0; j < PLATFORM_SKINS.length; j++) {
+    if (inRect(x, y, pfRect(j))) return `shop-pf-${j}` as MenuAction;
   }
   return null;
 }

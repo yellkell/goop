@@ -153,8 +153,10 @@ and three things to actually do:
 - **Coins** — your bolt-dollar balance (earned in the arena) rides above your
   **left** wrist as the "$" symbol with the count over it — **private**, only
   you see your total. Bring your right hand to that wrist and pull the trigger
-  to draw a coin out into it; let go and it drops to the floor, where anyone
-  can pick it up. Carry a coin back to your left wrist and release to bank it.
+  to draw a coin out into it (held up at the fingertips); let go and it drops —
+  landing on whatever's beneath it, a table, a bar stool or the bar top as
+  readily as the floor — where anyone can pick it up. Carry a coin back to your
+  left wrist and release to bank it.
   A coin is a bearer token — pulling debits your wallet, banking credits
   whoever's holding it — and only the physical coins are networked (relayed
   events, no server state), so a balance never crosses the wire and the room

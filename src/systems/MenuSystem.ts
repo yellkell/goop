@@ -189,7 +189,9 @@ export class MenuSystem extends createSystem({}) {
           break;
       }
     }
-    if (this.mirror) this.mirror.group.visible = modalCustom;
+    // The mirror stands beside both the customise plate AND the shop, so avatar
+    // changes preview live wherever you pick them.
+    if (this.mirror) this.mirror.group.visible = customization.open;
 
     // Lobby / queueing: hover + click the panels.
     let hover: PanelId | null = null;
@@ -501,12 +503,6 @@ export class MenuSystem extends createSystem({}) {
       case 'shop-close':
         customization.shopOpen = false;
         break;
-      case 'av-0':
-      case 'av-1':
-      case 'av-2':
-      case 'av-3':
-        setAvatarSkin(AVATAR_SKINS[Number(action.slice(3))].id);
-        break;
       case 'av-uncolor':
         setAvatarColor(-1); // back to the skin's own palette
         break;
@@ -515,9 +511,15 @@ export class MenuSystem extends createSystem({}) {
         saveAccentHue();
         break;
       default:
-        // shop-N: tap a platform tile — equip it if owned, else try to buy it.
-        if (action.startsWith('shop-')) {
-          const skin = PLATFORM_SKINS[Number(action.slice(5))];
+        // shop-av-N: equip an avatar. shop-pf-N: equip a platform if owned,
+        // else try to buy it.
+        if (action.startsWith('shop-av-')) {
+          const skin = AVATAR_SKINS[Number(action.slice(8))];
+          if (skin && !skin.locked) setAvatarSkin(skin.id);
+          break;
+        }
+        if (action.startsWith('shop-pf-')) {
+          const skin = PLATFORM_SKINS[Number(action.slice(8))];
           if (skin) this.buyOrEquipPlatform(skin.id, skin.price ?? 0);
           break;
         }
