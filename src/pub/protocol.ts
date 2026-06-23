@@ -101,8 +101,11 @@ export type FireballNet = [number, number, number, number, number, number];
 export type PubEvent =
   | { e: 'DART_HIT'; segment: string; score: number }
   | { e: 'DARTS_RESET' }
-  /** Fighter streaming both fireballs (~20 Hz) so the crowd sees the duel. */
-  | { e: 'FIGHT_FB'; balls: [FireballNet, FireballNet] }
+  /** Fighter streaming both fireballs (~20 Hz) so the crowd sees the duel. The
+   *  optional `shards` carry a SPLIT recall's extra returning balls (positions
+   *  only; size + damage are the fixed ATTACH.split constants) so the foe sees
+   *  the three-ball fan and can take recall-through hits off each. */
+  | { e: 'FIGHT_FB'; balls: [FireballNet, FireballNet]; shards?: Vec3T[] }
   /**
    * Victim-authoritative: YOUR ball `ball` hit me — it's spent. `ret` marks a
    * RETURN-PASS connect (a recalled ball caught me on its way home): it keeps

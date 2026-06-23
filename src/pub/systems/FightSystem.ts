@@ -119,6 +119,27 @@ interface LocalBall {
   /** Size scale (grow > 1, shrink < 1) + damage scale carried by the effect. */
   scl: number;
   dmgScale: number;
+  /** Fan slot for a split recall (0 = the main ball; shards take 1..N-1). */
+  shardIndex: number;
+}
+
+/** A split recall's extra returning ball — homes to its fist, fanning out. */
+interface ShardBall {
+  visual: FireVisual;
+  pos: Vector3;
+  hand: Hand;
+  shardIndex: number;
+  heat: number;
+  trailAcc: number;
+}
+
+/** A foe's streamed split shard, rendered + checked for recall-through hits. */
+interface GhostShard {
+  visual: FireVisual;
+  pos: Vector3;
+  heat: number;
+  trailAcc: number;
+  hitCooldown: number;
 }
 
 interface RemoteBall {
@@ -154,6 +175,9 @@ const _grip = new Vector3();
 const _gripQ = new Quaternion();
 const _vel = new Vector3();
 const _dir = new Vector3();
+const _target = new Vector3();
+const _perp1 = new Vector3();
+const _perp2 = new Vector3();
 const _aim = new Vector3();
 const _offset = new Vector3();
 const _camQ = new Quaternion();
@@ -168,6 +192,10 @@ export class FightSystem extends createSystem({}) {
   private time = 0;
   private streamTimer = 0;
   private myBalls: [LocalBall, LocalBall] | null = null;
+  /** My live split shards (extra returning balls from a split recall). */
+  private myShards: ShardBall[] = [];
+  /** Each foe's streamed split shards (rendered + hit-checked locally). */
+  private remoteShards = new Map<string, GhostShard[]>();
   /** This fighter's ball loadout per fist (refreshed when a pair is created). */
   private loadout: [number, number] = [0, 0];
   private trackers: [VelocityTracker, VelocityTracker] = [new VelocityTracker(), new VelocityTracker()];
@@ -217,7 +245,7 @@ export class FightSystem extends createSystem({}) {
       bus.on('gameEvent', ({ from, ev }) => {
         switch (ev.e) {
           case 'FIGHT_FB':
-            this.onRemoteBalls(from, ev.balls);
+            this.onRemoteBalls(from, ev.balls, ev.shards);
             break;
           case 'FIGHT_HIT':
             // My ball connected on their side.
@@ -343,6 +371,7 @@ export class FightSystem extends createSystem({}) {
       this.solveMyBody();
       this.ensureMyBalls();
       this.updateMyBalls(delta, fighting);
+      this.updateMyShards(delta);
       // Only hold fighters to their platform while a round is actually LIVE.
       // During the pre-bell countdown and the between-round pause the leash
       // was still armed, so a half-step after winning round 1 was read as
@@ -361,6 +390,7 @@ export class FightSystem extends createSystem({}) {
         for (const b of balls) b.visual.dispose();
         for (const b of balls) this.scene.remove(b.visual.group);
         this.remoteBalls.delete(id);
+        this.dropRemoteShards(id);
         continue;
       }
       const cool = this.teamFor(id) === 1;
@@ -375,6 +405,20 @@ export class FightSystem extends createSystem({}) {
           }
         }
         this.driveFireLook(b.visual, b.visual.group.position, b.state, b, delta, cool);
+      }
+    }
+
+    // Foes' split shards: render the streamed fan (hit-checked in checkIncomingHits).
+    for (const [id, shards] of this.remoteShards) {
+      if (f.phase === 'idle' || !f.sides.includes(id)) {
+        this.dropRemoteShards(id);
+        continue;
+      }
+      const cool = this.teamFor(id) === 1;
+      for (const g of shards) {
+        g.hitCooldown = Math.max(0, g.hitCooldown - delta);
+        g.visual.group.position.copy(g.pos);
+        this.driveFireLook(g.visual, g.pos, RETURNING, g, delta, cool);
       }
     }
   }
@@ -656,6 +700,7 @@ export class FightSystem extends createSystem({}) {
         attach: 0,
         scl: 1,
         dmgScale: 1,
+        shardIndex: 0,
       };
     };
     this.myBalls = [mk(0), mk(1)];
@@ -665,12 +710,23 @@ export class FightSystem extends createSystem({}) {
   }
 
   private disposeMyBalls(): void {
+    this.clearMyShards();
     if (!this.myBalls) return;
     for (const b of this.myBalls) {
       this.scene.remove(b.visual.group);
       b.visual.dispose();
     }
     this.myBalls = null;
+  }
+
+  private dropRemoteShards(id: string): void {
+    const shards = this.remoteShards.get(id);
+    if (!shards) return;
+    for (const g of shards) {
+      this.scene.remove(g.visual.group);
+      g.visual.dispose();
+    }
+    this.remoteShards.delete(id);
   }
 
   private resetMyBalls(): void {
@@ -682,6 +738,7 @@ export class FightSystem extends createSystem({}) {
       b.recallLock = 0;
       this.revertBall(b);
     }
+    this.clearMyShards();
   }
 
   private spendLocalBall(ball: LocalBall): void {
@@ -700,7 +757,24 @@ export class FightSystem extends createSystem({}) {
    */
   private applyAttachment(ball: LocalBall, hand: Hand): void {
     const type = this.loadout[hand];
-    if (type !== ATTACH.grow && type !== ATTACH.shrink) return;
+    if (!type) return;
+    if (type === ATTACH.split) {
+      // Three lighter, smaller balls fanning home — the main one plus two shards.
+      ball.attach = ATTACH.split;
+      ball.shardIndex = 0;
+      ball.scl = ATTACH.splitSize;
+      ball.dmgScale = 1 / ATTACH.splitCount;
+      ball.visual.group.scale.setScalar(ATTACH.splitSize);
+      const team = this.teamFor(pub.myId);
+      for (let i = 1; i < ATTACH.splitCount; i++) {
+        const visual = createFireVisual(team);
+        visual.group.scale.setScalar(ATTACH.splitSize);
+        visual.group.position.copy(ball.pos);
+        this.scene.add(visual.group);
+        this.myShards.push({ visual, pos: ball.pos.clone(), hand, shardIndex: i, heat: 0.8, trailAcc: 0 });
+      }
+      return;
+    }
     const t = Math.min(1, Math.max(0, ball.pos.distanceTo(_grip) / ATTACH.fullRange));
     if (type === ATTACH.grow) {
       ball.scl = 1 + (ATTACH.growSize - 1) * t;
@@ -713,12 +787,69 @@ export class FightSystem extends createSystem({}) {
     ball.visual.group.scale.setScalar(ball.scl);
   }
 
-  /** Strip any attachment back off a ball (caught, spent or round reset). */
+  /** Strip any attachment back off a ball (caught, spent or round reset). Its
+   *  shards self-clean next frame (they only live while the main ball splits). */
   private revertBall(ball: LocalBall): void {
     ball.attach = 0;
     ball.scl = 1;
     ball.dmgScale = 1;
+    ball.shardIndex = 0;
     ball.visual.group.scale.setScalar(1);
+  }
+
+  /** Move `pos` toward the fist `grip`; a split ball/shard fans around the path,
+   *  the fan collapsing to the fist as it closes (arena parity). Returns dist. */
+  private homeToward(pos: Vector3, grip: Vector3, split: boolean, shardIndex: number, delta: number): number {
+    _target.copy(grip);
+    if (split) {
+      _dir.copy(grip).sub(pos);
+      const d = _dir.length();
+      if (d > 1e-3) {
+        _dir.multiplyScalar(1 / d);
+        _perp1.set(0, 1, 0).cross(_dir);
+        if (_perp1.lengthSq() < 1e-4) _perp1.set(1, 0, 0);
+        _perp1.normalize();
+        _perp2.copy(_dir).cross(_perp1).normalize();
+        const ang = (shardIndex * Math.PI * 2) / ATTACH.splitCount;
+        const fan = ATTACH.splitSpread * Math.min(1, d / ATTACH.splitSpreadRange);
+        _target.addScaledVector(_perp1, Math.cos(ang) * fan).addScaledVector(_perp2, Math.sin(ang) * fan);
+      }
+    }
+    _dir.copy(_target).sub(pos);
+    const dist = _dir.length();
+    const speed = Math.min(FIREBALL.returnSpeed, 3 + dist * 7);
+    pos.addScaledVector(_dir.normalize(), Math.min(speed * delta, dist));
+    return pos.distanceTo(grip);
+  }
+
+  /** Simulate my live split shards: home to their fist, despawn once caught or
+   *  once the main ball is no longer a split recall. */
+  private updateMyShards(delta: number): void {
+    if (!this.myShards.length) return;
+    const cool = this.teamFor(pub.myId) === 1;
+    for (let i = this.myShards.length - 1; i >= 0; i--) {
+      const s = this.myShards[i];
+      const main = this.myBalls?.[s.hand];
+      const alive = !!main && main.state === RETURNING && main.attach === ATTACH.split;
+      this.handPose(s.hand);
+      const dist = alive ? this.homeToward(s.pos, _grip, true, s.shardIndex, delta) : 0;
+      if (!alive || dist <= FIREBALL.catchRadius) {
+        this.scene.remove(s.visual.group);
+        s.visual.dispose();
+        this.myShards.splice(i, 1);
+        continue;
+      }
+      s.visual.group.position.copy(s.pos);
+      this.driveFireLook(s.visual, s.pos, RETURNING, s, delta, cool);
+    }
+  }
+
+  private clearMyShards(): void {
+    for (const s of this.myShards) {
+      this.scene.remove(s.visual.group);
+      s.visual.dispose();
+    }
+    this.myShards.length = 0;
   }
 
   private handPose(hand: Hand): void {
@@ -824,10 +955,7 @@ export class FightSystem extends createSystem({}) {
           break;
         }
         case RETURNING: {
-          _dir.copy(_grip).sub(ball.pos);
-          const dist = _dir.length();
-          const speed = Math.min(FIREBALL.returnSpeed, 3 + dist * 7);
-          ball.pos.addScaledVector(_dir.normalize(), Math.min(speed * delta, dist));
+          this.homeToward(ball.pos, _grip, ball.attach === ATTACH.split, ball.shardIndex, delta);
           break;
         }
         case DEAD:
@@ -889,8 +1017,6 @@ export class FightSystem extends createSystem({}) {
     if (!fighting) return;
     const side = this.mySide();
     const oppId = pub.fight.sides[side === 0 ? 1 : 0];
-    const balls = oppId ? this.remoteBalls.get(oppId) : undefined;
-    if (!balls) return;
 
     this.player.head.getWorldPosition(_head);
     // Head, chest and pelvis spheres — the SAME three IK volumes (and radii)
@@ -900,6 +1026,31 @@ export class FightSystem extends createSystem({}) {
       [this.myChest, BODY_IK.chestRadius, FIREBALL.damage],
       [this.myPelvis, BODY_IK.pelvisRadius, FIREBALL.damage],
     ];
+
+    // A foe's split shards passing through me on their way home — each lands one
+    // recall-through hit for its share of the damage (no main ball to spend).
+    const shards = oppId ? this.remoteShards.get(oppId) : undefined;
+    if (shards) {
+      for (const g of shards) {
+        if (g.hitCooldown > 0) continue;
+        for (const [centre, radius, baseDamage] of spheres) {
+          if (g.pos.distanceTo(centre) <= radius + FIREBALL.radius * ATTACH.splitSize) {
+            g.hitCooldown = 0.8;
+            const damage = Math.max(1, Math.round(baseDamage / ATTACH.splitCount));
+            this.myHp = Math.max(0, this.myHp - damage);
+            spawnFireImpact(this.world, g.pos, 1, 1.2);
+            sfx.hitTaken();
+            pulseHand(this.world.session, 'left', 0.8, 120);
+            pulseHand(this.world.session, 'right', 0.8, 120);
+            pubSendEvent({ e: 'FIGHT_HP', hp: this.myHp });
+            break;
+          }
+        }
+      }
+    }
+
+    const balls = oppId ? this.remoteBalls.get(oppId) : undefined;
+    if (!balls) return;
 
     for (const idx of [0, 1] as const) {
       const enemy = balls[idx];
@@ -997,11 +1148,15 @@ export class FightSystem extends createSystem({}) {
     if (this.streamTimer < STREAM_INTERVAL) return;
     this.streamTimer = 0;
     const pack = (b: LocalBall): FireballNet => [b.pos.x, b.pos.y, b.pos.z, b.state, b.scl, b.dmgScale];
-    pubSendEvent({ e: 'FIGHT_FB', balls: [pack(this.myBalls[0]), pack(this.myBalls[1])] });
+    const shards = this.myShards.length
+      ? this.myShards.map((s) => [s.pos.x, s.pos.y, s.pos.z] as [number, number, number])
+      : undefined;
+    pubSendEvent({ e: 'FIGHT_FB', balls: [pack(this.myBalls[0]), pack(this.myBalls[1])], shards });
   }
 
-  private onRemoteBalls(from: string, balls: [FireballNet, FireballNet]): void {
+  private onRemoteBalls(from: string, balls: [FireballNet, FireballNet], shards?: [number, number, number][]): void {
     if (from === pub.myId) return;
+    this.syncRemoteShards(from, shards);
     let rec = this.remoteBalls.get(from);
     if (!rec) {
       const team = this.teamFor(from);
@@ -1047,6 +1202,7 @@ export class FightSystem extends createSystem({}) {
   }
 
   private dropRemote(id: string): void {
+    this.dropRemoteShards(id);
     const balls = this.remoteBalls.get(id);
     if (!balls) return;
     for (const b of balls) {
@@ -1054,6 +1210,36 @@ export class FightSystem extends createSystem({}) {
       b.visual.dispose();
     }
     this.remoteBalls.delete(id);
+  }
+
+  /** Reconcile a foe's streamed split shards with our ghost copies (the fan we
+   *  render + hit-check). No shards on the wire → none on the floor. */
+  private syncRemoteShards(from: string, shards?: [number, number, number][]): void {
+    if (from === pub.myId) return;
+    if (!shards || !shards.length) {
+      this.dropRemoteShards(from);
+      return;
+    }
+    let list = this.remoteShards.get(from);
+    if (!list) {
+      list = [];
+      this.remoteShards.set(from, list);
+    }
+    const team = this.teamFor(from);
+    while (list.length < shards.length) {
+      const visual = createFireVisual(team);
+      visual.group.scale.setScalar(ATTACH.splitSize);
+      this.scene.add(visual.group);
+      list.push({ visual, pos: new Vector3(), heat: 0.8, trailAcc: 0, hitCooldown: 0 });
+    }
+    while (list.length > shards.length) {
+      const g = list.pop()!;
+      this.scene.remove(g.visual.group);
+      g.visual.dispose();
+    }
+    for (let i = 0; i < shards.length; i++) {
+      list[i].pos.set(shards[i][0], shards[i][1], shards[i][2]);
+    }
   }
 
   /** Shared heat/trail/ember styling for any ball, local or streamed. */
