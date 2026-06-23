@@ -64,7 +64,13 @@ export class MusicSystem extends createSystem({}) {
 
   init(): void {
     // The room (or another punter) chose a station: switch to match.
-    this.cleanupFuncs.push(bus.on('music', (s) => this.setStation(s)));
+    this.cleanupFuncs.push(
+      bus.on('music', (s) => this.setStation(s)),
+      // A coin fed into the jukebox buys one pick — advance off → 0 → 1 → … → off.
+      bus.on('coinInserted', (target) => {
+        if (target === 'jukebox') this.flip();
+      }),
+    );
     // Adopt whatever's already on (if welcome landed before us).
     this.setStation(pub.music);
     this.drawMarquee(); // paint the screen once even if the station didn't change
@@ -98,18 +104,15 @@ export class MusicSystem extends createSystem({}) {
       handAimed[hand] = true;
       aimed = true;
     }
-    this.setLit(aimed);
+    // Light up on aim OR while a coin is held at the slot (the INSERT COIN cue).
+    this.setLit(aimed || pub.coinHover === 'jukebox');
 
-    // Walk-up control: a trigger pull while a hand is aimed at it flips station.
+    // Picking a track now costs a coin (see the coinInserted handler) — the
+    // trigger is kept only to unblock a play() the autoplay policy stalled.
     let triggered = false;
     for (const hand of HANDS) {
       const gp = this.input.xr.gamepads[hand];
-      if (!gp || !gp.getButtonDown(InputComponent.Trigger)) continue;
-      triggered = true; // any trigger is a fresh gesture (may unblock autoplay)
-      if (handAimed[hand]) {
-        this.flip();
-        break;
-      }
+      if (gp?.getButtonDown(InputComponent.Trigger)) triggered = true;
     }
     if (this.pendingPlay && triggered) this.resume();
 
@@ -216,7 +219,7 @@ export class MusicSystem extends createSystem({}) {
       this.marqueeSub = 'add songs to src/pub/songs';
     } else if (this.station < 0) {
       this.marqueeMain = 'JUKEBOX';
-      this.marqueeSub = 'pull trigger to play';
+      this.marqueeSub = 'insert coin to play';
     } else {
       this.marqueeMain = `♪ ${TRACKS[this.station].name}`;
       this.marqueeSub =

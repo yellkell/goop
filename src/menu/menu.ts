@@ -1640,15 +1640,15 @@ function drawCoinHud(ctx: CanvasRenderingContext2D): void {
 // SOON tile) on top, PLATFORMS (free recolours + paid ones) below. Two tidy
 // grids of chips with the CLOSE button clear beneath them.
 const SHOP_W = 512;
-const SHOP_H = 470;
+const SHOP_H = 492;
 const SHOP_GAP = 8;
-const SHOP_AV_Y = 106;
-const SHOP_AV_H = 58;
+const SHOP_AV_Y = 104;
+const SHOP_AV_H = 56;
 const SHOP_AV_COLS = 5; // four avatars + a COMING SOON tile
-const SHOP_PF_H = 58;
+const SHOP_PF_H = 56;
 const SHOP_PF_COLS = 3;
-const SHOP_PF_ROWS = [196, 262]; // two rows of three platforms
-const SHOP_CLOSE = { x: SHOP_W / 2 - 120, y: 344, w: 240, h: 54 };
+const SHOP_PF_ROWS = [196, 260, 324]; // three rows of three platforms
+const SHOP_CLOSE = { x: SHOP_W / 2 - 120, y: 406, w: 240, h: 54 };
 
 interface ShopRect {
   x: number;

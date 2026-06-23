@@ -32,6 +32,7 @@ import type { PubEvent, Vec3T } from '../protocol.js';
 
 const WRIST_TOUCH = 0.13; // how close a hand must come to a wrist to pull/bank
 const COIN_GRAB = 0.11; // reach for picking a coin off the floor
+const INSERT_R = 0.42; // hold a coin this close to a machine's slot to feed it
 const COIN_R = 0.032;
 const COIN_THICK = 0.01;
 const GRAVITY = 9.8;
@@ -167,7 +168,62 @@ export class CoinSystem extends createSystem({}) {
     this.camera.getWorldPosition(_cam);
     this.updateLocalTags();
     this.handleHands(delta);
+    this.updateCoinHover();
     this.simulateMyCoins(delta);
+  }
+
+  // --- coin-operated machines (snake cabinet + jukebox) ---------------------
+
+  /** Insert-slot anchors, resolved once from the built scene. */
+  private slotCache: { id: string; pos: Vector3 }[] | null = null;
+  private slots(): { id: string; pos: Vector3 }[] {
+    if (this.slotCache) return this.slotCache;
+    const refs = pub.refs;
+    if (!refs) return [];
+    const juke = new Vector3();
+    refs.jukebox.getWorldPosition(juke);
+    juke.y += 1.0;
+    this.slotCache = [
+      { id: 'snake', pos: new Vector3(refs.arcadePos[0], 1.0, refs.arcadePos[2]) },
+      { id: 'jukebox', pos: juke },
+    ];
+    return this.slotCache;
+  }
+
+  /** The machine slot within reach of `at`, or null. */
+  private nearestSlot(at: Vector3): string | null {
+    let best: string | null = null;
+    let bestD = INSERT_R;
+    for (const s of this.slots()) {
+      const d = s.pos.distanceTo(at);
+      if (d <= bestD) {
+        best = s.id;
+        bestD = d;
+      }
+    }
+    return best;
+  }
+
+  /** Light a machine's INSERT COIN cue while a held coin hovers at its slot. */
+  private updateCoinHover(): void {
+    let hover: string | null = null;
+    const grips = this.player.gripSpaces;
+    for (const hand of ['left', 'right'] as const) {
+      if (!this.held[hand] || !grips?.[hand]) continue;
+      grips[hand]!.getWorldPosition(_a);
+      const s = this.nearestSlot(_a);
+      if (s) {
+        hover = s;
+        break;
+      }
+    }
+    pub.coinHover = hover;
+  }
+
+  private disposeCoinMesh(mesh: Mesh): void {
+    this.scene.remove(mesh);
+    (mesh.material as MeshStandardMaterial).dispose();
+    mesh.geometry.dispose();
   }
 
   // --- wrist readouts -------------------------------------------------------
@@ -228,13 +284,18 @@ export class CoinSystem extends createSystem({}) {
           }
         }
       } else if (justUp && held) {
+        const slot = this.nearestSlot(_a);
         if (atWrist) {
           // Bank it.
           addCoins(1);
-          this.scene.remove(held.mesh);
-          (held.mesh.material as MeshStandardMaterial).dispose();
-          held.mesh.geometry.dispose();
+          this.disposeCoinMesh(held.mesh);
           this.held[hand] = null;
+        } else if (slot) {
+          // Feed it into the machine — the coin is spent (not banked, not
+          // dropped); the machine pays out a go.
+          this.disposeCoinMesh(held.mesh);
+          this.held[hand] = null;
+          bus.emit('coinInserted', slot);
         } else {
           // Drop it — hand velocity becomes its launch speed.
           const vel = _a.clone().sub(this.prevHand[hand]).divideScalar(Math.max(delta, 1e-3));

@@ -12,7 +12,7 @@
  * kept in localStorage.
  */
 
-import { createSystem, InputComponent } from '@iwsdk/core';
+import { createSystem } from '@iwsdk/core';
 import { CanvasTexture, MeshBasicMaterial, SRGBColorSpace, Vector3 } from 'three';
 import { uiClick, wallThud } from '../../audio/sfx.js';
 import { pubSendEvent, pubSendRaw } from '../net.js';
@@ -56,6 +56,8 @@ export class SnakeSystem extends createSystem({}) {
   private pendingClaim = false;
   private keyDir: Cell | null = null;
   private keyStart = false;
+  /** Whether the last attract redraw showed the coin-hover highlight. */
+  private hoverShown = false;
 
   init(): void {
     this.canvas = document.createElement('canvas');
@@ -86,6 +88,10 @@ export class SnakeSystem extends createSystem({}) {
       bus.on('snakeHi', () => {
         if (this.phase === 'attract') this.drawAttract();
       }),
+      // A coin fed into the cabinet buys one game.
+      bus.on('coinInserted', (target) => {
+        if (target === 'snake') this.insertCoin();
+      }),
       bus.on('gameEvent', ({ from, ev }) => {
         if (ev.e !== 'SNAKE_STATE' || from === pub.myId) return;
         this.phase = 'watching';
@@ -111,11 +117,14 @@ export class SnakeSystem extends createSystem({}) {
     switch (this.phase) {
       case 'attract': {
         this.attractTimer += delta;
-        if (this.attractTimer > 0.5) {
+        const hovering = pub.coinHover === 'snake';
+        if (this.attractTimer > 0.5 || hovering !== this.hoverShown) {
           this.attractTimer = 0;
+          this.hoverShown = hovering;
           this.drawAttract();
         }
-        if (this.nearCabinet() && this.startPressed()) this.tryClaim();
+        // Desktop dev: Enter still drops a free coin when you're stood close.
+        if (this.keyStart && this.nearCabinet()) this.insertCoin();
         break;
       }
       case 'playing': {
@@ -151,12 +160,11 @@ export class SnakeSystem extends createSystem({}) {
     return _head.distanceTo(_cab) < REACH;
   }
 
-  private startPressed(): boolean {
-    if (this.keyStart) return true;
-    for (const hand of ['left', 'right'] as const) {
-      if (this.input.xr.gamepads[hand]?.getButtonDown(InputComponent.Trigger)) return true;
-    }
-    return false;
+  /** A coin went in: claim the machine if it's free and we're stood at it. */
+  private insertCoin(): void {
+    if (this.phase !== 'attract') return;
+    if (pub.snakePlayer && pub.snakePlayer !== pub.myId) return; // occupied
+    this.tryClaim();
   }
 
   private tryClaim(): void {
@@ -338,12 +346,25 @@ export class SnakeSystem extends createSystem({}) {
     ctx.fillStyle = '#9ee8a0';
     ctx.fillText(`HI-SCORE  ${hi.score}  ${hi.name.slice(0, 10).toUpperCase()}`, W / 2, 116);
     const occupied = pub.snakePlayer && pub.snakePlayer !== pub.myId;
-    if (Math.floor(performance.now() / 600) % 2 === 0) {
-      ctx.fillStyle = occupied ? '#e8352a' : '#ffb000';
-      ctx.fillText(occupied ? 'MACHINE IN USE' : 'PULL TRIGGER TO PLAY', W / 2, 170);
+    const blink = Math.floor(performance.now() / 600) % 2 === 0;
+    const hovering = pub.coinHover === 'snake';
+    if (occupied) {
+      if (blink) {
+        ctx.fillStyle = '#e8352a';
+        ctx.fillText('MACHINE IN USE', W / 2, 170);
+      }
+    } else if (hovering || blink) {
+      // INSERT COIN — steady bright green while a coin is held at the slot.
+      ctx.fillStyle = hovering ? '#39ff14' : '#ffb000';
+      ctx.fillText('INSERT COIN', W / 2, 170);
+      if (hovering) {
+        ctx.strokeStyle = '#39ff14';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(W / 2 - 96, 154, 192, 32);
+      }
     }
     ctx.fillStyle = '#3a7a4a';
-    ctx.fillText('JOYSTICK STEERS', W / 2, 210);
+    ctx.fillText('ONE COIN · ONE GAME', W / 2, 210);
     this.texture.needsUpdate = true;
   }
 

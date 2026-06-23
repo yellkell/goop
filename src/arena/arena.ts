@@ -16,15 +16,18 @@
 import {
   AdditiveBlending,
   BoxGeometry,
+  CanvasTexture,
   Color,
   CylinderGeometry,
   Group,
   HemisphereLight,
+  LinearFilter,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
   PlaneGeometry,
   PointLight,
+  SRGBColorSpace,
   type Object3D,
 } from 'three';
 import type { World } from '@iwsdk/core';
@@ -179,8 +182,50 @@ function makePlatform(color: number): Group {
   fins.visible = false;
   group.add(fins);
 
+  // XD: a white grin painted on the deck (X eyes + a capital-D mouth), shown
+  // only for the 'xdface' skin. A flat decal just above the slab's top face.
+  const face = new Mesh(
+    new PlaneGeometry(1.18, 1.18),
+    new MeshBasicMaterial({ map: xdFaceTexture(), transparent: true, depthWrite: false }),
+  );
+  face.rotation.x = -Math.PI / 2; // lay it flat, texture-up pointing -Z (at the foe)
+  face.position.y = 0.004;
+  face.renderOrder = 2;
+  face.userData.skinTag = 'xdface';
+  face.visible = false;
+  group.add(face);
+
   // EMBER: the classic look — banding + bolts, no extra furniture.
   return group;
+}
+
+/** A white "XD" grin (X eyes, D mouth) on transparent — painted on the deck of
+ *  the black premium platform. Built once and shared by every pedestal. */
+let xdFaceTex: CanvasTexture | undefined;
+function xdFaceTexture(): CanvasTexture {
+  if (xdFaceTex) return xdFaceTex;
+  const s = 512;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = s;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#f6f8ff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = '900 190px system-ui, sans-serif';
+  // X eyes.
+  ctx.fillText('X', s * 0.31, s * 0.36);
+  ctx.fillText('X', s * 0.69, s * 0.36);
+  // D mouth — the letter laid on its back so the flat edge tops a big grin.
+  ctx.save();
+  ctx.translate(s * 0.5, s * 0.66);
+  ctx.rotate(Math.PI / 2);
+  ctx.font = '900 250px system-ui, sans-serif';
+  ctx.fillText('D', 0, 0);
+  ctx.restore();
+  xdFaceTex = new CanvasTexture(canvas);
+  xdFaceTex.colorSpace = SRGBColorSpace;
+  xdFaceTex.minFilter = LinearFilter;
+  return xdFaceTex;
 }
 
 /** Recolour a platform's neon rim + slab emissive to a team tint. */

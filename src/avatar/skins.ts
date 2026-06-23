@@ -72,8 +72,12 @@ export const PLATFORM_SKINS: PlatformSkin[] = [
   // Shop: two basic recolours…
   { id: 'toxic', name: 'TOXIC', neon: PALETTE.venom, price: 100 },
   { id: 'plasma', name: 'PLASMA', neon: PALETTE.violet, price: 100 },
-  // …and the fancier premium pad — gold piping AND a gold-tinted slab.
+  // …the fancier premium pad — gold piping AND a gold-tinted slab.
   { id: 'goldrush', name: 'GOLD RUSH', neon: 0xffc23a, slab: 0xb8902c, price: 1000 },
+  // …and the top-shelf flex: a jet-black deck with a white XD grin painted on
+  // it (X eyes, a capital-D mouth). The face mesh is built into every platform,
+  // tagged with this id and shown only when it's worn.
+  { id: 'xdface', name: 'XD', neon: 0xf4f6fb, slab: 0x080808, price: 5000 },
 ];
 
 /** How the OPPONENT looks when they haven't picked (bot bouts): team blue. */

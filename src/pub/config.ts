@@ -166,6 +166,9 @@ export const EXIT_ZONE = { minX: -4.8, maxX: -4.0, minZ: HALF_D - 0.55, maxZ: HA
 export const TELEPORT_AREAS = [
   // Pub floor, this side of the bar.
   { minX: -(HALF_W - 0.2), maxX: HALF_W - 0.2, minZ: -1.85, maxZ: HALF_D - 0.08 },
+  // BEHIND the bar — the barkeep's aisle, now open to punters who fancy
+  // stepping back there (pull a pose at the taps, grab a glass off the shelf).
+  { minX: -2.5, maxX: 2.5, minZ: -(HALF_D - 0.2), maxZ: -2.55 },
   // The corners FLANKING the bar (the counter only runs x ±2.6): the arcade
   // alcove west, the darts-wall corner east — both were unreachable.
   { minX: -(HALF_W - 0.2), maxX: -2.85, minZ: -(HALF_D - 0.25), maxZ: -1.85 },

@@ -46,11 +46,13 @@ in-your-face boxing feel.
 
 Every bout, brawl and training run banks **coins** (the riveted bolt-dollar
 "$") alongside your XP — a flat amount per completed game. Your balance shows
-beside the newspaper button in the lobby. Spend it in the **platform shop**
-(open it from CUSTOMISE): the three launch pads are free, two recolours
-(TOXIC, PLASMA) cost the equivalent of ten games, and the premium **GOLD
-RUSH** pad — gold piping and a gold-tinted slab — costs a hundred. The wallet
-is shared with the pub (same browser), where coins become physical.
+beside the newspaper button in the lobby. Spend it in the **shop** (open it
+from CUSTOMISE): the four avatars are free to equip, the three launch pads are
+free, two platform recolours (TOXIC, PLASMA) cost the equivalent of ten games,
+the premium **GOLD RUSH** pad (gold piping + slab) a hundred, and the top-shelf
+**XD** pad — a jet-black deck with a white XD grin painted on it — five hundred.
+The wallet is shared with the pub (same browser), where coins become physical —
+and feed the snake cabinet and jukebox.
 
 ## The rules of the platform
 
@@ -174,11 +176,18 @@ and three things to actually do:
   match ends, while spectators still hear everyone (so a fight is fun to watch).
   Left **Y** mutes your mic; a punter's name tag swells while they're talking.
   See `src/pub/voice/` and `relayVoice`/`canHear` in `server/pub.mjs`.
-- **IRON SNAKE** — an arcade cabinet in the corner. One player at a time
-  (trigger to claim, then steer with the cabinet's own joystick — put your
-  hand on the red ball and push; arrows/Enter on desktop), everyone sees the
-  screen live, and the high score is persisted by the server in
-  `server/pub-data.json`.
+- **IRON SNAKE** — an arcade cabinet in the corner. It's **coin-operated**:
+  pull a coin off your wrist and hold it up to the cabinet's slot (the screen
+  reads INSERT COIN and lights up) — release within reach to drop it in and
+  start a game (one coin, one go; Enter on desktop). One player at a time, then
+  steer with the cabinet's own joystick — put your hand on the red ball and
+  push. Everyone sees the screen live, and the high score is persisted by the
+  server in `server/pub-data.json`.
+- **The jukebox** is coin-operated too: hold a coin to its slot and release to
+  feed it — each coin advances the room's track (off → 1 → 2 → … → off). The
+  marquee reads INSERT COIN until you pay.
+- **Behind the bar** — you can now teleport into the barkeep's aisle behind the
+  counter if you fancy pulling a pose at the taps.
 - **The fight hall** — through the door in the west wall: the full FIRE
   FIGHT duel on display. Both arena platforms (ember vs blue corners), claim
   consoles (pull the trigger at one to take that platform — you're planted

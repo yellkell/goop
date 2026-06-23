@@ -86,6 +86,8 @@ interface Events {
   banned: undefined;
   /** Reply to an admin action we issued (ban succeeded / was refused). */
   adminResult: { ok: boolean; msg: string };
+  /** A coin was fed into a machine ('snake' / 'jukebox') — it pays for a go. */
+  coinInserted: string;
 }
 
 type Handler<T> = (payload: T) => void;
@@ -159,5 +161,8 @@ export const pub = {
   fight: defaultFight(),
   /** Selected jukebox station, −1 = off (server-synced; whole room shares it). */
   music: -1,
+  /** A coin-operated machine the local player is currently holding a coin up
+   *  to ('snake' / 'jukebox' / null) — the machine lights its INSERT COIN cue. */
+  coinHover: null as string | null,
   refs: null as PubRefs | null,
 };
