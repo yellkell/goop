@@ -52,6 +52,19 @@ export const PROGRESSION = {
 };
 
 /**
+ * The bolt-dollar currency — a riveted "$" earned at the SAME moments as XP
+ * (every match, bot bout, arcade brawl and training run; see net/leaderboard).
+ * A flat amount per completed game, win or loss, so the shop prices read as
+ * round "games of play": a basic platform recolour costs 10 games, the fancier
+ * one 100. The wallet itself lives in src/menu/wallet.ts (a localStorage number
+ * shared by the arena and the pub, since both pages are same-origin).
+ */
+export const CURRENCY = {
+  /** Coins banked per completed game (any mode, win or loss). */
+  perGame: 10,
+};
+
+/**
  * Where the IRON BALLS PUB social area lives. It builds side by side with
  * the arena in this same app (see vite.config.ts rollup inputs: pub.html),
  * so the lobby button is one page hop away. Override with ?pub=<url>.

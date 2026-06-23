@@ -41,7 +41,16 @@ import {
   type PanelId,
 } from '../menu/menu.js';
 import { createNameKeyboard, type NameKeyboard } from '../menu/keyboard.js';
-import { customization, myAvatarSkin, setAvatarColor, setAvatarSkin, setPlatformSkin } from '../menu/customization.js';
+import {
+  customization,
+  myAvatarSkin,
+  ownPlatform,
+  platformOwned,
+  setAvatarColor,
+  setAvatarSkin,
+  setPlatformSkin,
+} from '../menu/customization.js';
+import { canAfford, spendCoins } from '../menu/wallet.js';
 import { buildBoxer, setAvatarAccent, solveTorso, type BoxerRig } from '../avatar/boxer.js';
 import {
   AVATAR_SKINS,
@@ -152,7 +161,10 @@ export class MenuSystem extends createSystem({}) {
 
     // Customisation and the gazette are both modal: the lobby arc swaps out for
     // the open panel. The leaderboard ('board') hangs behind you — always up.
-    const modalCustom = customization.open;
+    // The shop is a sub-modal of customisation: while it's up the customise
+    // plate (and its mirror/loadout) step aside for the shop face.
+    const shopOpen = customization.open && customization.shopOpen;
+    const modalCustom = customization.open && !shopOpen;
     const modalNews = app.gazetteOpen;
     for (const p of this.menu.panels) {
       switch (p.id) {
@@ -163,13 +175,16 @@ export class MenuSystem extends createSystem({}) {
         case 'balls':
           p.mesh.visible = modalCustom;
           break;
+        case 'shop':
+          p.mesh.visible = shopOpen;
+          break;
         case 'news':
           p.mesh.visible = modalNews;
           break;
         default:
-          // The arc (train/duel/info) AND the paper button: the lobby's face,
-          // gone while any modal is open.
-          p.mesh.visible = !modalCustom && !modalNews;
+          // The arc (train/duel/info), the paper button AND the coin readout:
+          // the lobby's face, gone while any modal is open.
+          p.mesh.visible = !customization.open && !modalNews;
           break;
       }
     }
@@ -458,10 +473,18 @@ export class MenuSystem extends createSystem({}) {
         break;
       case 'open-custom':
         customization.open = true;
+        customization.shopOpen = false;
         this.ensureMirror();
         break;
       case 'custom-close':
         customization.open = false;
+        customization.shopOpen = false;
+        break;
+      case 'open-shop':
+        customization.shopOpen = true;
+        break;
+      case 'shop-close':
+        customization.shopOpen = false;
         break;
       case 'av-0':
       case 'av-1':
@@ -476,12 +499,13 @@ export class MenuSystem extends createSystem({}) {
         app.accentHue = DEFAULT_ACCENT_HUE; // neon back to the house ember
         saveAccentHue();
         break;
-      case 'pf-0':
-      case 'pf-1':
-      case 'pf-2':
-        setPlatformSkin(PLATFORM_SKINS[Number(action.slice(3))].id);
-        break;
       default:
+        // shop-N: tap a platform tile — equip it if owned, else try to buy it.
+        if (action.startsWith('shop-')) {
+          const skin = PLATFORM_SKINS[Number(action.slice(5))];
+          if (skin) this.buyOrEquipPlatform(skin.id, skin.price ?? 0);
+          break;
+        }
         // kp-0 … kp-9: append a digit (max five) on the join keypad.
         if (action.startsWith('kp-') && app.codeEntry.length < 5) {
           const d = action.slice(3);
@@ -503,6 +527,19 @@ export class MenuSystem extends createSystem({}) {
         break;
     }
     this.applyState();
+  }
+
+  /**
+   * Shop tap on a platform tile: if it's already owned, equip it; otherwise
+   * buy it (debit the wallet, mark it owned) and equip it. Can't afford it →
+   * nothing changes (the wallet refuses the spend).
+   */
+  private buyOrEquipPlatform(id: string, price: number): void {
+    if (!platformOwned(id)) {
+      if (!canAfford(price) || !spendCoins(price)) return; // can't afford — no-op
+      ownPlatform(id);
+    }
+    setPlatformSkin(id); // applyOwnSkins repaints the pad next frame
   }
 
   /** Leave for the pub page. Navigating WHILE an immersive session is live

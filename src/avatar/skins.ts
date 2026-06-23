@@ -32,7 +32,25 @@ export interface PlatformSkin {
   locked?: boolean;
   /** Neon rim piping + slab emissive tint. */
   neon: number;
+  /**
+   * Shop price in coins (the bolt-dollar currency). Omitted = free / owned by
+   * default (the three launch skins). 100 = a basic recolour (≈10 games of
+   * play), 1000 = the fancier premium pad (≈100 games).
+   */
+  price?: number;
+  /**
+   * Premium platforms repaint the diamond-plate SLAB base too (not just the
+   * neon), for a look the plain recolours don't get. Omitted = the default
+   * gunmetal steel (DEFAULT_SLAB_TINT).
+   */
+  slab?: number;
 }
+
+/** The makePlatform() slab base tint — restored when a non-premium skin is worn. */
+export const DEFAULT_SLAB_TINT = 0x9aa0ab;
+
+/** Platform skins owned from the start (no purchase needed). */
+export const FREE_PLATFORMS = ['azure', 'inferno', 'ember'];
 
 export const AVATAR_SKINS: AvatarSkin[] = [
   // ids are stable (saved prefs + per-skin geometry tags key off them); the
@@ -47,10 +65,15 @@ export const AVATAR_SKINS: AvatarSkin[] = [
 ];
 
 export const PLATFORM_SKINS: PlatformSkin[] = [
+  // The three launch skins — free, owned from the start.
   { id: 'azure', name: 'AZURE', neon: 0x4fb7ff },
   { id: 'inferno', name: 'INFERNO', neon: 0xff3b30 },
   { id: 'ember', name: 'EMBER', neon: PALETTE.ember },
-  { id: 'soon-pf', name: 'SOON', locked: true, neon: 0 },
+  // Shop: two basic recolours…
+  { id: 'toxic', name: 'TOXIC', neon: PALETTE.venom, price: 100 },
+  { id: 'plasma', name: 'PLASMA', neon: PALETTE.violet, price: 100 },
+  // …and the fancier premium pad — gold piping AND a gold-tinted slab.
+  { id: 'goldrush', name: 'GOLD RUSH', neon: 0xffc23a, slab: 0xb8902c, price: 1000 },
 ];
 
 /** How the OPPONENT looks when they haven't picked (bot bouts): team blue. */
@@ -154,6 +177,8 @@ export function applyPlatformSkin(root: Object3D, skin: PlatformSkin): void {
     switch (m.userData.role) {
       case 'slab':
         m.emissive.setHex(skin.neon);
+        // Premium pads repaint the steel; plain recolours restore the default.
+        m.color.setHex(skin.slab ?? DEFAULT_SLAB_TINT);
         break;
       case 'neon-core':
         m.color.copy(new Color(skin.neon).lerp(_white, 0.45));

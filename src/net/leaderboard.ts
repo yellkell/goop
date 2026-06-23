@@ -17,7 +17,8 @@
 
 import { FIREBASE_ENABLED, firebaseConfig } from './firebaseConfig.js';
 import { xpForArcade, xpForBot, xpForMatch, xpForTraining } from '../menu/progression.js';
-import type { ArcadeMode } from '../config.js';
+import { addCoins } from '../menu/wallet.js';
+import { CURRENCY, type ArcadeMode } from '../config.js';
 
 export interface LbRow {
   /** The player's doc id — identifies them when their row is clicked. */
@@ -338,6 +339,7 @@ export function reportResult(win: boolean, oppElo: number): void {
   const expected = 1 / (1 + Math.pow(10, (oppElo - profile.elo) / 400));
   profile.elo = Math.max(100, Math.round(profile.elo + ELO_K * ((win ? 1 : 0) - expected)));
   profile.xp += xpForMatch(win); // every real bout feeds the rank ladder
+  addCoins(CURRENCY.perGame); // …and the coin wallet, alongside the XP
   writeMine({ score: profile.score, elo: profile.elo, xp: profile.xp });
   void refreshLeaderboard(true);
 }
@@ -350,6 +352,7 @@ export function reportResult(win: boolean, oppElo: number): void {
 export function reportBotResult(win: boolean): void {
   if (win) profile.score += SCORE_BOT_WIN;
   profile.xp += xpForBot();
+  addCoins(CURRENCY.perGame);
   writeMine({ score: profile.score, xp: profile.xp });
   void refreshLeaderboard(true);
 }
@@ -360,6 +363,7 @@ export function reportBotResult(win: boolean): void {
  */
 export function reportArcade(mode: ArcadeMode, win: boolean): void {
   profile.xp += xpForArcade();
+  addCoins(CURRENCY.perGame);
   const gain = win ? ARCADE_WIN : ARCADE_PLAY;
   const fields: Record<string, unknown> = { xp: profile.xp };
   if (mode === '2v2') {
@@ -377,6 +381,7 @@ export function reportArcade(mode: ArcadeMode, win: boolean): void {
 export function reportTraining(score: number): void {
   const newBest = score > profile.training;
   profile.xp += xpForTraining();
+  addCoins(CURRENCY.perGame);
   if (newBest) profile.training = score;
   writeMine({ training: profile.training, xp: profile.xp });
   void refreshLeaderboard(true);

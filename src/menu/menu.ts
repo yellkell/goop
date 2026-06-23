@@ -19,8 +19,10 @@ import {
   type Scene,
 } from 'three';
 import { app, DEFAULT_ACCENT_HUE, saveBallAttach } from './appState.js';
-import { customization } from './customization.js';
+import { customization, platformOwned } from './customization.js';
 import { rankBadge } from './rankBadges.js';
+import { coinImage } from './coinIcon.js';
+import { canAfford, coins } from './wallet.js';
 import { tierForXp } from './progression.js';
 import { AVATAR_SKINS, PLATFORM_SKINS } from '../avatar/skins.js';
 import { ATTACH, GAME_TITLE, hueToColor } from '../config.js';
@@ -45,6 +47,10 @@ export type PanelId =
   | 'custom'
   | 'loadout'
   | 'balls'
+  /** The platform shop (a sub-modal of customisation). */
+  | 'shop'
+  /** The coin-wallet readout that sits beside the paper button. */
+  | 'coins'
   /** The little circular paper button hanging above the right panel. */
   | 'gazette'
   /** The Gasket Gazette front page itself (opens modal over the lobby). */
@@ -89,7 +95,11 @@ export type MenuAction =
   | 'av-uncolor'
   /** Reset the avatar-accent (neon) hue to the house ember default. */
   | 'accent-default'
-  | 'pf-0' | 'pf-1' | 'pf-2'
+  /** Open / close the platform shop (reached from the customise panel). */
+  | 'open-shop'
+  | 'shop-close'
+  /** Tap a platform tile in the shop (buy if unowned, equip if owned). */
+  | `shop-${number}`
   /** Open / close the Gasket Gazette. */
   | 'open-gazette'
   | 'gazette-close';
@@ -615,7 +625,24 @@ function drawCustom(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | nul
   };
 
   chipRow('AVATAR', AVATAR_SKINS, AVATAR_SKINS.findIndex((s) => s.id === customization.avatar), 102, 'av');
-  chipRow('PLATFORM', PLATFORM_SKINS, PLATFORM_SKINS.findIndex((s) => s.id === customization.platform), 204, 'pf');
+
+  // PLATFORM moved into its own shop (free recolours + paid ones). Button shows
+  // the equipped pad's name so you know what you're standing on at a glance.
+  ctx.textAlign = 'left';
+  ctx.font = '700 22px system-ui, sans-serif';
+  ctx.fillStyle = UI.textDim;
+  ctx.fillText('PLATFORM', 40, 196);
+  const equipped = PLATFORM_SKINS.find((s) => s.id === customization.platform);
+  buttonPlate(
+    ctx,
+    40,
+    208,
+    CW - 80,
+    52,
+    `SHOP  ·  ${equipped?.name ?? 'EMBER'}`,
+    UI.amber,
+    hoverAction === 'open-shop',
+  );
 
   // --- ARMOUR COLOUR picker: a hue bar repainting the whole suit -------------
   const hue = customization.colorHue;
@@ -675,11 +702,7 @@ function hitCustom(u: number, v: number): MenuAction | null {
     if (i >= 0 && i <= 3 && !AVATAR_SKINS[i].locked) return `av-${i}` as MenuAction;
     return null;
   }
-  if (y >= 214 && y <= 280 && x >= 40 && x <= CW - 40) {
-    const i = chipIdx(x);
-    if (i >= 0 && i <= 3 && !PLATFORM_SKINS[i].locked) return `pf-${i}` as MenuAction;
-    return null;
-  }
+  if (y >= 208 && y <= 260 && x >= 40 && x <= CW - 40) return 'open-shop';
   if (y >= 282 && y <= 320 && x >= CW - 136 && x <= CW - 36) return 'av-uncolor';
   if (
     y >= COLOR_BAR.y - 6 && y <= COLOR_BAR.y + COLOR_BAR.h + 6 &&
@@ -1588,6 +1611,144 @@ function hitNews(u: number, v: number): MenuAction | null {
   return null;
 }
 
+// --- THE COIN WALLET + PLATFORM SHOP ----------------------------------------
+// A small readout sits beside the paper button: the bolt-dollar symbol and your
+// balance. Spend it in the shop (reached from CUSTOMISE) on new platforms — the
+// three launch pads are free, a couple of recolours cost 100, the gold pad 1000.
+
+/** Draw the riveted "$" symbol at (x,y) sized w×h — the decoded PNG once it's
+ *  loaded, with a stencilled "$" as the fallback before then. */
+function drawCoinSymbol(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
+  const img = coinImage();
+  if (img) {
+    ctx.drawImage(img, x, y, w, h);
+  } else {
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = `900 ${Math.round(h * 0.9)}px Georgia, serif`;
+    ctx.fillStyle = UI.amber;
+    ctx.fillText('$', x + w / 2, y + h / 2);
+    ctx.restore();
+  }
+}
+
+const COIN_HUD_W = 256;
+const COIN_HUD_H = 128;
+
+/** The lobby coin readout: symbol on the left, balance on the right, on a
+ *  smoked-steel chip — sized and styled to sit beside the gazette button. */
+function drawCoinHud(ctx: CanvasRenderingContext2D): void {
+  ctx.clearRect(0, 0, COIN_HUD_W, COIN_HUD_H);
+  plate(ctx, 6, 30, COIN_HUD_W - 12, COIN_HUD_H - 60, {
+    cut: 14,
+    fill: 'rgba(9,10,14,0.82)',
+    stroke: UI.steel,
+    rivets: false,
+  });
+  drawCoinSymbol(ctx, 22, 40, 48, 48);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.font = '800 46px system-ui, sans-serif';
+  ctx.fillStyle = UI.text;
+  ctx.fillText(String(coins.balance), 84, 65);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+}
+
+const SHOP_W = 512;
+const SHOP_H = 560;
+const SHOP_ROW_Y0 = 112;
+const SHOP_ROW_STEP = 66;
+const SHOP_ROW_H = 56;
+const SHOP_CLOSE = { x: SHOP_W / 2 - 120, y: SHOP_H - 84, w: 240, h: 56 };
+
+/** The platform shop — one tile per pad: a colour swatch, its name, and the
+ *  status (EQUIPPED / EQUIP for owned, the price + BUY for purchasable). Your
+ *  coin balance rides in the header. */
+function drawShop(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
+  panelBg(ctx, false, UI.amber, 'PLATFORMS', SHOP_W, SHOP_H);
+
+  // Balance, top-right of the header.
+  drawCoinSymbol(ctx, SHOP_W - 150, 22, 34, 34);
+  ctx.textAlign = 'left';
+  ctx.font = '800 30px system-ui, sans-serif';
+  ctx.fillStyle = UI.amber;
+  ctx.fillText(String(coins.balance), SHOP_W - 108, 40);
+
+  PLATFORM_SKINS.forEach((skin, i) => {
+    const y = SHOP_ROW_Y0 + i * SHOP_ROW_STEP;
+    const owned = platformOwned(skin.id);
+    const equipped = customization.platform === skin.id;
+    const affordable = canAfford(skin.price ?? 0);
+    const hot = hoverAction === (`shop-${i}` as MenuAction);
+    const css = `#${skin.neon.toString(16).padStart(6, '0')}`;
+
+    plate(ctx, 40, y, SHOP_W - 80, SHOP_ROW_H, {
+      cut: 10,
+      fill: equipped ? 'rgba(20,22,30,0.92)' : hot ? 'rgba(20,22,30,0.9)' : 'rgba(10,11,15,0.7)',
+      stroke: equipped || hot ? css : UI.steel,
+      rivets: false,
+    });
+
+    // Colour swatch.
+    ctx.fillStyle = css;
+    ctx.fillRect(58, y + 14, 28, 28);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = UI.steel;
+    ctx.strokeRect(58, y + 14, 28, 28);
+
+    // Name.
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.font = '700 24px system-ui, sans-serif';
+    ctx.fillStyle = owned ? UI.text : affordable ? UI.text : UI.steelDim;
+    ctx.fillText(skin.name, 104, y + SHOP_ROW_H / 2);
+
+    // Status / price, right-aligned.
+    const rx = SHOP_W - 64;
+    if (equipped) {
+      ctx.textAlign = 'right';
+      ctx.font = '800 18px system-ui, sans-serif';
+      ctx.fillStyle = UI.amber;
+      ctx.fillText('EQUIPPED', rx, y + SHOP_ROW_H / 2);
+    } else if (owned) {
+      ctx.textAlign = 'right';
+      ctx.font = '800 18px system-ui, sans-serif';
+      ctx.fillStyle = hot ? css : UI.textDim;
+      ctx.fillText('EQUIP', rx, y + SHOP_ROW_H / 2);
+    } else {
+      // Price (symbol + amount) and a BUY / can't-afford tag.
+      ctx.textAlign = 'right';
+      ctx.font = '800 22px system-ui, sans-serif';
+      ctx.fillStyle = affordable ? UI.text : UI.steelDim;
+      ctx.fillText(String(skin.price ?? 0), rx, y + SHOP_ROW_H / 2);
+      drawCoinSymbol(ctx, rx - 24 - ctx.measureText(String(skin.price ?? 0)).width, y + SHOP_ROW_H / 2 - 13, 26, 26);
+      ctx.textAlign = 'left';
+      ctx.font = '700 13px system-ui, sans-serif';
+      ctx.fillStyle = affordable ? (hot ? css : 'rgba(232,236,242,0.5)') : UI.steelDim;
+      ctx.fillText(affordable ? 'BUY' : 'NEED MORE', 104, y + SHOP_ROW_H - 8);
+    }
+  });
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  buttonPlate(ctx, SHOP_CLOSE.x, SHOP_CLOSE.y, SHOP_CLOSE.w, SHOP_CLOSE.h, 'CLOSE', UI.amber, hoverAction === 'shop-close');
+}
+
+function hitShop(u: number, v: number): MenuAction | null {
+  const x = u * SHOP_W;
+  const y = (1 - v) * SHOP_H;
+  if (x >= SHOP_CLOSE.x && x <= SHOP_CLOSE.x + SHOP_CLOSE.w && y >= SHOP_CLOSE.y && y <= SHOP_CLOSE.y + SHOP_CLOSE.h) {
+    return 'shop-close';
+  }
+  for (let i = 0; i < PLATFORM_SKINS.length; i++) {
+    const ry = SHOP_ROW_Y0 + i * SHOP_ROW_STEP;
+    if (y >= ry && y <= ry + SHOP_ROW_H && x >= 40 && x <= SHOP_W - 40) return `shop-${i}` as MenuAction;
+  }
+  return null;
+}
+
 export function createMenu(scene: Scene): Menu {
   const group = new Group();
   group.name = 'lobby-menu';
@@ -1617,6 +1778,12 @@ export function createMenu(scene: Scene): Menu {
     ch: GZ,
   });
   const news = makePanel('news', 0.86, 0.86 * (NH / NW), drawNews, hitNews, { cw: NW, ch: NH });
+  // The coin readout beside the paper button, and the platform shop it links to.
+  const coinHud = makePanel('coins', 0.24, 0.24 * (COIN_HUD_H / COIN_HUD_W), (ctx) => drawCoinHud(ctx), () => null, {
+    cw: COIN_HUD_W,
+    ch: COIN_HUD_H,
+  });
+  const shop = makePanel('shop', 0.9, 0.9 * (SHOP_H / SHOP_W), drawShop, hitShop, { cw: SHOP_W, ch: SHOP_H });
 
   // Shallow arc in front of the player, tilted inward toward the centre.
   const y = 1.45;
@@ -1651,11 +1818,19 @@ export function createMenu(scene: Scene): Menu {
   // The paper button sits just above the right (info) panel, sharing its tilt.
   gazetteBtn.mesh.position.set(0.92, 1.86, -1.05);
   gazetteBtn.mesh.rotation.y = -0.48;
+  // The coin readout sits just to the RIGHT of the paper button, same height +
+  // tilt — symbol and balance together, as asked.
+  coinHud.mesh.position.set(1.18, 1.86, -0.94);
+  coinHud.mesh.rotation.y = -0.48;
+  // The platform shop opens where the customise plate sits (it replaces it).
+  shop.mesh.position.set(0.5, 1.5, -1.1);
+  shop.mesh.rotation.y = -0.3;
+  shop.mesh.visible = false;
   // The front page opens dead centre, facing you — modal over the lobby arc.
   news.mesh.position.set(0, 1.5, -1.16);
   news.mesh.visible = false;
 
-  const panels = [train, duel, info, board, custom, balls, loadout, gazetteBtn, news];
+  const panels = [train, duel, info, board, custom, balls, loadout, gazetteBtn, coinHud, shop, news];
   for (const p of panels) {
     p.redraw(null);
     group.add(p.mesh);
