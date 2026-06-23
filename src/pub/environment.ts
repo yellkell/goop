@@ -324,10 +324,10 @@ export function buildPub(world: World): PubRefs {
     root.add(bottle);
   }
 
-  // The hand-made IRON BALLS PUB sign mounted on the back-bar wall (PNG if
-  // present, procedural neon fallback otherwise — see signs.ts). buildSign
+  // The hand-made IRON BALLS PUB nixie-tube sign on the back-bar wall (the webp
+  // if present, procedural neon fallback otherwise — see signs.ts). buildSign
   // letterbox-fits the art to its true aspect, so the box size just caps it.
-  const sign = buildSign('signs/iron-balls-pub.png', 1.6, 1.6);
+  const sign = buildSign('signs/iron-balls-pub.webp', 1.6, 1.6);
   sign.position.set(0, 1.95, -D + 0.03);
   root.add(sign);
 
@@ -964,7 +964,7 @@ function buildFightHall(root: Group): {
   // (PNG, neon fallback) above a health/status panel — no "FIRE FIGHT" text.
   // West: high on the far wall, facing back toward the door (+x).
   // buildSign letterbox-fits the art, so these boxes just cap the size.
-  const fightSign1 = buildSign('signs/iron-balls-pub.png', 2.4, 2.4);
+  const fightSign1 = buildSign('signs/iron-balls-pub.webp', 2.4, 2.4);
   fightSign1.position.set(hall.minX + 0.04, 3.45, 0);
   fightSign1.rotation.y = Math.PI / 2;
   root.add(fightSign1);
@@ -977,7 +977,7 @@ function buildFightHall(root: Group): {
 
   // East: above the door you came in by, facing into the hall (−x).
   const doorMidZ = (FIGHT.door.z0 + FIGHT.door.z1) / 2;
-  const fightSign2 = buildSign('signs/iron-balls-pub.png', 2.0, 2.0);
+  const fightSign2 = buildSign('signs/iron-balls-pub.webp', 2.0, 2.0);
   fightSign2.position.set(hall.maxX - 0.04, 3.8, doorMidZ);
   fightSign2.rotation.y = -Math.PI / 2;
   root.add(fightSign2);
