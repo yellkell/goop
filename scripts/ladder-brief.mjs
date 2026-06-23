@@ -79,8 +79,10 @@ const rows = players.map((p, i) => {
     xp: p.xp,
     elo: p.elo,
     score: p.score,
-    duoWins: p.duo,
-    ffaWins: p.ffa,
+    // POINTS, not win/match counts: the 2v2 + FFA boards bank +11 per win and
+    // +1 just for turning up, so these are running point totals.
+    duoPoints: p.duo,
+    ffaPoints: p.ffa,
     isNew: !before, // not in the last edition's snapshot — new to the ladder
     xpGained: xpDelta,
     gamesApprox: games,
@@ -105,6 +107,17 @@ const brief = {
   weekday: new Date(now).toLocaleDateString('en-US', { weekday: 'long' }),
   edition: (prev?.edition ?? 0) + 1,
   firstEdition: !prev,
+  // Read this before quoting any number: the boards are scored in POINTS, not
+  // bouts. Don't turn a point total into a match count.
+  legend: {
+    note: 'xp, score, elo, duoPoints and ffaPoints are POINT totals and ratings — NOT counts of matches played or won. The ONLY measure of how many bouts a player fought is gamesApprox (per player) and summary.totalGamesApprox (overall), and even those are estimates inferred from XP gained. Never describe a score/xp/elo/points figure as a number of matches, wins or bouts.',
+    xp: 'cumulative experience points across every mode (drives the rank ladder) — points, not a match count',
+    score: 'ranked 1v1 board POINTS (+20 per real win, +2 per bot win) — not a win or match tally',
+    elo: 'hidden skill RATING, everyone starts at 1000 — a rating, not a count',
+    duoPoints: '2v2 board POINTS (+11 per win, +1 per game) — not a win count',
+    ffaPoints: 'FFA board POINTS (+11 per win, +1 per game) — not a win count',
+    gamesApprox: 'ESTIMATED bouts fought since the last edition (round(xpGained / 25)) — THIS is the matches-played figure',
+  },
   // Cole's favourite kind of day: nobody threw a single iron ball.
   nobodyFought: totalGames === 0 && movers.length === 0,
   summary: {
