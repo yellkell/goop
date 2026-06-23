@@ -193,14 +193,18 @@ export function createScoreboard(scene: Scene): Scoreboard {
 
   // Arcade stacks: a teammate above your bar, extra opponents above theirs.
   // Hidden in 1v1 / training, so the classic two-board layout is unchanged.
+  // Each board's readout sits in the top ~two-thirds of its plate, so a tight
+  // 0.54 m step stacks the bars close together (the overlap is empty margin)
+  // instead of leaving a big gap and floating the top bar near the ceiling.
+  const STACK_STEP = 0.54;
   const extraLeft = makeBoard(1.5, 0.72);
-  extraLeft.mesh.position.set(-1.0, 2.86, -ARENA_GAP - 1.1);
+  extraLeft.mesh.position.set(-1.0, 2.0 + STACK_STEP, -ARENA_GAP - 1.1);
   extraLeft.mesh.rotation.y = 0.18;
   const extraRightA = makeBoard(1.5, 0.72);
-  extraRightA.mesh.position.set(1.0, 2.86, -ARENA_GAP - 1.1);
+  extraRightA.mesh.position.set(1.0, 2.0 + STACK_STEP, -ARENA_GAP - 1.1);
   extraRightA.mesh.rotation.y = -0.18;
   const extraRightB = makeBoard(1.5, 0.72);
-  extraRightB.mesh.position.set(1.0, 3.72, -ARENA_GAP - 1.1);
+  extraRightB.mesh.position.set(1.0, 2.0 + 2 * STACK_STEP, -ARENA_GAP - 1.1);
   extraRightB.mesh.rotation.y = -0.18;
   const extras = [extraLeft, extraRightA, extraRightB];
   for (const e of extras) e.mesh.visible = false;

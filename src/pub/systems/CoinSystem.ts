@@ -31,8 +31,8 @@ import { PUB, SURFACES, type Surface } from '../config.js';
 import type { PubEvent, Vec3T } from '../protocol.js';
 
 const WRIST_TOUCH = 0.13; // how close a hand must come to a wrist to pull/bank
-const COIN_GRAB = 0.11; // reach for picking a coin off the floor
-const INSERT_R = 0.42; // hold a coin this close to a machine's slot to feed it
+const COIN_GRAB = 0.2; // reach for picking a coin off the floor (forgiving, prop-like)
+const INSERT_R = 0.7; // hold a coin roughly this close to a machine to feed it
 const COIN_R = 0.032;
 const COIN_THICK = 0.01;
 const GRAVITY = 9.8;
@@ -361,6 +361,7 @@ export class CoinSystem extends createSystem({}) {
         p.y = restY;
         coin.vel.set(0, 0, 0);
         coin.resting = true;
+        coin.mesh.rotation.set(0, Math.random() * Math.PI * 2, 0); // lie flat on the surface
         pubSendEvent({ e: 'COIN_REST', id: coin.id, pos: [p.x, p.y, p.z] });
       } else if (stream) {
         pubSendEvent({ e: 'COIN_MOVE', id: coin.id, pos: [p.x, p.y, p.z] });
@@ -381,7 +382,10 @@ export class CoinSystem extends createSystem({}) {
         const coin = this.floor.get(ev.id);
         if (coin) {
           coin.mesh.position.set(ev.pos[0], ev.pos[1], ev.pos[2]);
-          if (ev.e === 'COIN_REST') coin.resting = true;
+          if (ev.e === 'COIN_REST') {
+            coin.resting = true;
+            coin.mesh.rotation.set(0, coin.mesh.rotation.y, 0); // settle flat
+          }
         } else {
           this.remotePlace(ev.id, ev.pos);
         }
