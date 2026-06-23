@@ -33,7 +33,7 @@
 import { createSystem, InputComponent } from '@iwsdk/core';
 import { MeshStandardMaterial, Quaternion, Vector3 } from 'three';
 import type { XROrigin } from '@iwsdk/xr-input';
-import { BODY_IK, FIREBALL, teamColor } from '../../config.js';
+import { ATTACH, BODY_IK, FIREBALL, teamColor } from '../../config.js';
 import { buildBoxer, solveTorso, type BoxerRig } from '../../avatar/boxer.js';
 import { applyAvatarSkin, platformSkin } from '../../avatar/skins.js';
 import { customization, myAvatarSkin } from '../../menu/customization.js';
@@ -114,6 +114,11 @@ interface LocalBall {
   heat: number;
   trailAcc: number;
   recallLock: number;
+  /** Equipped ball-loadout effect on THIS recall (ATTACH.*; 0 = none). */
+  attach: number;
+  /** Size scale (grow > 1, shrink < 1) + damage scale carried by the effect. */
+  scl: number;
+  dmgScale: number;
 }
 
 interface RemoteBall {
@@ -127,6 +132,22 @@ interface RemoteBall {
   /** One connect per return leg — the recall-through guard (arena parity). */
   returnHit: number;
   hasTarget: boolean;
+  /** Loadout size + damage scale streamed from the owner (1 = a plain ball). */
+  scl: number;
+  dmgScale: number;
+}
+
+/** The local player's ball loadout per fist ([left, right]; 0 none / 1 split /
+ *  2 grow / 3 shrink) — the SAME 'ff-ballattach' the arena menu writes, so your
+ *  chosen attachments carry into a pub bout. */
+function loadBallAttach(): [number, number] {
+  try {
+    const parts = (localStorage.getItem('ff-ballattach') ?? '').split(',').map((s) => parseInt(s, 10));
+    const clamp = (n: number): number => (Number.isFinite(n) && n >= 0 && n <= 3 ? n : 0);
+    return [clamp(parts[0]), clamp(parts[1])];
+  } catch {
+    return [0, 0];
+  }
 }
 
 const _grip = new Vector3();
@@ -147,6 +168,8 @@ export class FightSystem extends createSystem({}) {
   private time = 0;
   private streamTimer = 0;
   private myBalls: [LocalBall, LocalBall] | null = null;
+  /** This fighter's ball loadout per fist (refreshed when a pair is created). */
+  private loadout: [number, number] = [0, 0];
   private trackers: [VelocityTracker, VelocityTracker] = [new VelocityTracker(), new VelocityTracker()];
   /** Remote fighters' streamed balls, keyed by player id. */
   private remoteBalls = new Map<string, [RemoteBall, RemoteBall]>();
@@ -613,6 +636,7 @@ export class FightSystem extends createSystem({}) {
 
   private ensureMyBalls(): void {
     if (this.myBalls) return;
+    this.loadout = loadBallAttach(); // your arena ball loadout walks into the pub
     const team = this.teamFor(pub.myId); // a fighter's own fire is always ember
     const mk = (hand: Hand): LocalBall => {
       const visual = createFireVisual(team);
@@ -629,6 +653,9 @@ export class FightSystem extends createSystem({}) {
         heat: 0.8,
         trailAcc: 0,
         recallLock: 0,
+        attach: 0,
+        scl: 1,
+        dmgScale: 1,
       };
     };
     this.myBalls = [mk(0), mk(1)];
@@ -653,6 +680,7 @@ export class FightSystem extends createSystem({}) {
       b.spin = 0;
       b.elapsed = 0;
       b.recallLock = 0;
+      this.revertBall(b);
     }
   }
 
@@ -660,6 +688,37 @@ export class FightSystem extends createSystem({}) {
     ball.state = DEAD;
     ball.vel.set(0, 0, 0);
     ball.recallLock = FIREBALL.recallLockout;
+    this.revertBall(ball);
+  }
+
+  /**
+   * Apply the equipped ball-loadout effect the instant a still-FLYING ball is
+   * recalled — grow/shrink scale the ball's size and damage with how far out it
+   * was, exactly like the arena. (Split is not networked yet, so it's left as a
+   * plain recall.) The size + damage scale ride the FIGHT_FB stream so the foe
+   * sees the right ball and takes the right hit.
+   */
+  private applyAttachment(ball: LocalBall, hand: Hand): void {
+    const type = this.loadout[hand];
+    if (type !== ATTACH.grow && type !== ATTACH.shrink) return;
+    const t = Math.min(1, Math.max(0, ball.pos.distanceTo(_grip) / ATTACH.fullRange));
+    if (type === ATTACH.grow) {
+      ball.scl = 1 + (ATTACH.growSize - 1) * t;
+      ball.dmgScale = (FIREBALL.damage - ATTACH.damageSwing * t) / FIREBALL.damage;
+    } else {
+      ball.scl = 1 - (1 - ATTACH.shrinkSize) * t;
+      ball.dmgScale = (FIREBALL.damage + ATTACH.damageSwing * t) / FIREBALL.damage;
+    }
+    ball.attach = type;
+    ball.visual.group.scale.setScalar(ball.scl);
+  }
+
+  /** Strip any attachment back off a ball (caught, spent or round reset). */
+  private revertBall(ball: LocalBall): void {
+    ball.attach = 0;
+    ball.scl = 1;
+    ball.dmgScale = 1;
+    ball.visual.group.scale.setScalar(1);
   }
 
   private handPose(hand: Hand): void {
@@ -699,9 +758,11 @@ export class FightSystem extends createSystem({}) {
             pulseHand(this.world.session, HANDS[hand], 0.4, 60);
           }
         } else if (ball.state === FLYING || (ball.state === DEAD && ball.recallLock <= 0)) {
+          const wasFlying = ball.state === FLYING;
           ball.state = RETURNING;
           ball.recallLock = 0;
           sfx.recall();
+          if (wasFlying) this.applyAttachment(ball, hand); // grow/shrink on a live recall
         }
       }
 
@@ -719,6 +780,7 @@ export class FightSystem extends createSystem({}) {
       if (ball.state === RETURNING && ball.pos.distanceTo(_grip) <= FIREBALL.catchRadius) {
         ball.state = pressedNow ? ORBIT : HOVER;
         ball.spin = 0;
+        this.revertBall(ball); // back to a plain ball once it's home
         sfx.catchBall();
         pulseHand(this.world.session, HANDS[hand], 0.5, 70);
       }
@@ -855,9 +917,11 @@ export class FightSystem extends createSystem({}) {
       // Parry: my orbiting/returning ball knocks it out of the air.
       if (this.tryParry(enemy, idx, ePos)) continue;
 
-      // Body: head/chest/pelvis.
-      for (const [centre, radius, damage] of spheres) {
-        if (ePos.distanceTo(centre) <= radius + FIREBALL.radius) {
+      // Body: head/chest/pelvis. A grow/shrink ball is bigger/smaller to clip,
+      // and its loadout damage scale rides along (grow hits softer, shrink harder).
+      for (const [centre, radius, baseDamage] of spheres) {
+        if (ePos.distanceTo(centre) <= radius + FIREBALL.radius * enemy.scl) {
+          const damage = Math.round(baseDamage * enemy.dmgScale);
           enemy.hitCooldown = 0.8;
           this.myHp = Math.max(0, this.myHp - damage);
           // Taking a hit is the loudest moment: oversized fiery burst, hard
@@ -889,7 +953,7 @@ export class FightSystem extends createSystem({}) {
     for (const hand of [0, 1] as const) {
       const mine = this.myBalls[hand];
       if (mine.state !== ORBIT && mine.state !== RETURNING) continue;
-      const reach = FIREBALL.radius * 2 + FIREBALL.deflectBonus;
+      const reach = FIREBALL.radius * (mine.scl + enemy.scl) + FIREBALL.deflectBonus;
       if (mine.pos.distanceTo(ePos) > reach) continue;
       enemy.hitCooldown = 0.6;
       enemy.state = DEAD;
@@ -908,7 +972,7 @@ export class FightSystem extends createSystem({}) {
     if (!this.myBalls) return false;
     for (const mine of this.myBalls) {
       if (mine.state !== FLYING) continue;
-      const reach = FIREBALL.radius * 2 + FIREBALL.deflectBonus;
+      const reach = FIREBALL.radius * (mine.scl + enemy.scl) + FIREBALL.deflectBonus;
       if (mine.pos.distanceTo(ePos) > reach) continue;
       // Both balls die where they met — iron on iron, sparks in both colours.
       this.spendLocalBall(mine);
@@ -932,7 +996,7 @@ export class FightSystem extends createSystem({}) {
     this.streamTimer += delta;
     if (this.streamTimer < STREAM_INTERVAL) return;
     this.streamTimer = 0;
-    const pack = (b: LocalBall): FireballNet => [b.pos.x, b.pos.y, b.pos.z, b.state];
+    const pack = (b: LocalBall): FireballNet => [b.pos.x, b.pos.y, b.pos.z, b.state, b.scl, b.dmgScale];
     pubSendEvent({ e: 'FIGHT_FB', balls: [pack(this.myBalls[0]), pack(this.myBalls[1])] });
   }
 
@@ -953,15 +1017,21 @@ export class FightSystem extends createSystem({}) {
           hitCooldown: 0,
           returnHit: 0,
           hasTarget: false,
+          scl: 1,
+          dmgScale: 1,
         };
       };
       rec = [mk(), mk()];
       this.remoteBalls.set(from, rec);
     }
     for (const idx of [0, 1] as const) {
-      const [x, y, z, state] = balls[idx];
+      const [x, y, z, state, scl, dmg] = balls[idx];
       const prev = rec[idx].state;
       rec[idx].target.set(x, y, z);
+      // The owner's ball-loadout size + damage scale (default 1 for a plain ball).
+      rec[idx].scl = typeof scl === 'number' ? scl : 1;
+      rec[idx].dmgScale = typeof dmg === 'number' ? dmg : 1;
+      rec[idx].visual.group.scale.setScalar(rec[idx].scl);
       if (!rec[idx].hasTarget) {
         rec[idx].visual.group.position.set(x, y, z);
         rec[idx].hasTarget = true;

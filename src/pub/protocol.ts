@@ -90,10 +90,12 @@ export interface FightNet {
 }
 
 /**
- * A fighter's fireball on the wire: position + state index
- * (0 hover, 1 orbit, 2 flying, 3 returning, 4 dead).
+ * A fighter's fireball on the wire: position (x,y,z) + state index
+ * (0 hover, 1 orbit, 2 flying, 3 returning, 4 dead) + the ball-loadout SIZE
+ * scale and DAMAGE scale (1 = a plain ball; a recalled grow/shrink ball carries
+ * `scl`≠1 so the foe sees it the right size and takes the right damage).
  */
-export type FireballNet = [number, number, number, number];
+export type FireballNet = [number, number, number, number, number, number];
 
 /** Fan-out game events (relayed verbatim; some also mutate server state). */
 export type PubEvent =
