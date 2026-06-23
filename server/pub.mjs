@@ -427,7 +427,7 @@ wss.on('connection', (ws, req) => {
   let myId = null;
 
   ws.on('message', (raw, isBinary) => {
-    // Binary frames are spatial voice — relay them with the bubble applied.
+    // Binary frames are spatial voice — fanned out to the whole room (open mic).
     if (isBinary) {
       if (myId) relayVoice(myId, raw);
       return;
