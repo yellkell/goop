@@ -170,6 +170,8 @@ export class PropSystem extends createSystem({
   private offlineRestock = 0;
   /** The prop the empty hand is currently aimed at — it glows until grabbed. */
   private highlighted: PropRec | null = null;
+  /** Eased glow on the dart-crate walls while a hand can pull a dart (0..1). */
+  private dartGlow = 0;
 
   init(): void {
     this.queries.grabbedProps.subscribers.qualify.add((e: Entity) => this.onGrab(e));
@@ -256,6 +258,7 @@ export class PropSystem extends createSystem({
 
     const didRangeGrab = this.updateRangeGrab();
     if (!didRangeGrab) this.tryDartBoxDispense();
+    this.updateDartBoxGlow(delta);
 
     for (const rec of recs) {
       switch (rec.mode) {
@@ -447,6 +450,36 @@ export class PropSystem extends createSystem({
       if (!rec) continue;
       this.grabDartFromBox(rec, hand, grip);
     }
+  }
+
+  /** Glow the whole dart crate amber when an empty hand is in reach to pull a
+   *  dart — the box's own "you can grab here" cue, like the pints lighting up. */
+  private updateDartBoxGlow(delta: number): void {
+    const mat = pub.refs?.dartBoxMat;
+    if (!mat) return;
+    const k = 1 - Math.exp(-12 * delta);
+    this.dartGlow += ((this.boxActionable() ? 1 : 0) - this.dartGlow) * k;
+    mat.emissiveIntensity = this.dartGlow * 0.9;
+  }
+
+  /** An empty hand is near enough the stocked crate to pull a dart from it. */
+  private boxActionable(): boolean {
+    const player = this.player;
+    const box = pub.refs?.dartBox;
+    if (!player || !box || !this.nextBoxDart()) return false;
+    const [cx, cy, cz] = box.center;
+    const [hx, hy, hz] = box.half;
+    const m = 0.18; // forgiving margin so it lights as a hand approaches
+    for (const hand of HANDS) {
+      if (this.handBusy(hand)) continue;
+      const grip = player.gripSpaces[hand];
+      if (!grip) continue;
+      grip.getWorldPosition(_a);
+      if (Math.abs(_a.x - cx) <= hx + m && Math.abs(_a.y - cy) <= hy + m && Math.abs(_a.z - cz) <= hz + m) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private inDartBox(pos: Vector3): boolean {

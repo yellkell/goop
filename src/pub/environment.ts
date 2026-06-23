@@ -457,6 +457,10 @@ export function buildPub(world: World): PubRefs {
     half: [0.3, 0.22, 0.24] as [number, number, number],
   };
   const crateWood = new MeshStandardMaterial({ map: woodTexture('#7a4a24', [2, 1]), roughness: 0.86, metalness: 0.03 });
+  // Shared by all four crate walls — PropSystem lifts its emissive to make the
+  // whole box glow amber when a hand can pull a dart from it.
+  crateWood.emissive.setHex(0xff9024);
+  crateWood.emissiveIntensity = 0;
   const crateDarkWood = new MeshStandardMaterial({ map: woodTexture('#3b2414', [1.5, 1]), roughness: 0.9, metalness: 0.02 });
   const tallLeg = new Mesh(new CylinderGeometry(0.04, 0.11, 1.13, 8), gunmetal(0.3));
   tallLeg.position.set(boxX, 0.565, boxZ);
@@ -610,6 +614,7 @@ export function buildPub(world: World): PubRefs {
     dartCatchers: [northWall],
     dartRackSlots: rackSlots,
     dartBox,
+    dartBoxMat: crateWood,
     glassSlots,
     dartsBoardPanel,
     dartsResetButton,

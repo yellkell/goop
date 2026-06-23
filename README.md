@@ -159,7 +159,8 @@ and three things to actually do:
   landing flat on whatever's beneath it, a table, a bar stool or the bar top as
   readily as the floor. A loose coin is picked up like a pint or dart: touch it
   and grab, or **range-grab** one you aim at from up to a metre away. Carry a
-  coin back to your left wrist and release to bank it.
+  coin back to your left wrist and release to bank it. A loose coin glows warm
+  when a hand can grab it, the way the pints and darts light up.
   A coin is a bearer token — pulling debits your wallet, banking credits
   whoever's holding it — and only the physical coins are networked (relayed
   events, no server state), so a balance never crosses the wire and the room
@@ -167,7 +168,8 @@ and three things to actually do:
 - **House darts** — communal board (ported from the old vrstreet project and
   fixed: the meshes now carry fat invisible grab proxies so they are actually
   grabbable), regulation scoring off the board texture's UVs, score popups,
-  and a server-owned leaderboard.
+  and a server-owned leaderboard. The always-stocked dart crate glows amber
+  when a hand is in reach to pull one.
 - **Directional voice chat** — open-mic spatial voice for the whole room.
   Each punter's voice comes from where their iron skull stands (HRTF panner on
   their head, listener on your camera) and falls off with distance, so the bar

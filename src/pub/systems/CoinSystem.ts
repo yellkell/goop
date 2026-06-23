@@ -106,6 +106,21 @@ function buildCoinMesh(): Mesh {
   return new Mesh(geo, mat);
 }
 
+/** Glow a coin warm (or back to its rest sheen) — its "you can grab me" cue,
+ *  matching how the pints and darts light up. */
+function setCoinGlow(mesh: Mesh, on: boolean): void {
+  const m = mesh.material as MeshStandardMaterial & { userData: { glowBase?: number } };
+  if (on) {
+    if (m.userData.glowBase === undefined) m.userData.glowBase = m.emissiveIntensity;
+    m.emissive.setHex(0xfff2dc);
+    m.emissiveIntensity = 1.15;
+  } else if (m.userData.glowBase !== undefined) {
+    m.emissive.setHex(0x4a3200);
+    m.emissiveIntensity = m.userData.glowBase;
+    m.userData.glowBase = undefined;
+  }
+}
+
 function makeTag(): WristTag {
   const panel = new Panel(TAG_W, TAG_H, 1024);
   return { panel, shown: -1 };
@@ -156,6 +171,8 @@ export class CoinSystem extends createSystem({}) {
   private moveTimer = 0;
   private time = 0;
   private artReady = false;
+  /** The floor coin currently glowing as a grab target (or null). */
+  private litCoin: FloorCoin | null = null;
 
   init(): void {
     // Your wallet is your own business — the only coin traffic we listen to is
@@ -177,7 +194,23 @@ export class CoinSystem extends createSystem({}) {
     this.updateLocalTags();
     this.handleHands(delta);
     this.updateCoinHover();
+    this.updateGrabHighlight();
     this.simulateMyCoins(delta);
+  }
+
+  /** Glow whichever floor coin an empty hand could grab right now (touch or
+   *  aim), so coins light up when grabbable just like the pints and darts. */
+  private updateGrabHighlight(): void {
+    let target: FloorCoin | null = null;
+    for (const hand of ['left', 'right'] as const) {
+      if (this.held[hand]) continue; // a full hand isn't shopping for a coin
+      target = this.grabCandidate(hand);
+      if (target) break;
+    }
+    if (target === this.litCoin) return;
+    if (this.litCoin && this.floor.has(this.litCoin.id)) setCoinGlow(this.litCoin.mesh, false);
+    this.litCoin = target;
+    if (target) setCoinGlow(target.mesh, true);
   }
 
   // --- coin-operated machines (snake cabinet + jukebox) ---------------------
@@ -293,8 +326,11 @@ export class CoinSystem extends createSystem({}) {
         } else {
           // Everywhere else: touch-grab a coin underhand, or RANGE-grab one you
           // aim at from up to a metre away — pints-and-darts style.
-          const picked = this.pickFloorCoin(_a) ?? this.rangeGrabCoin(hand);
+          const picked = this.grabCandidate(hand);
           if (picked) {
+            this.floor.delete(picked.id);
+            if (this.litCoin === picked) this.litCoin = null;
+            setCoinGlow(picked.mesh, false);
             pubSendEvent({ e: 'COIN_TAKE', id: picked.id });
             this.held[hand] = { mesh: picked.mesh, id: picked.id };
           }
@@ -343,8 +379,8 @@ export class CoinSystem extends createSystem({}) {
     });
   }
 
-  /** The nearest loose coin within reach of `at`, or null. */
-  private pickFloorCoin(at: Vector3): FloorCoin | null {
+  /** The nearest loose coin within touch reach of `at` (not removed). */
+  private findTouchCoin(at: Vector3): FloorCoin | null {
     let best: FloorCoin | null = null;
     let bestD = COIN_GRAB;
     for (const coin of this.floor.values()) {
@@ -354,13 +390,12 @@ export class CoinSystem extends createSystem({}) {
         bestD = d;
       }
     }
-    if (best) this.floor.delete(best.id);
     return best;
   }
 
-  /** Range grab: the settled coin this hand is aiming at within a forgiving
-   *  cone (≤1 m), picked nearest the aim — mirrors PropSystem's range grab. */
-  private rangeGrabCoin(hand: 'left' | 'right'): FloorCoin | null {
+  /** The settled coin this hand is aiming at within a forgiving cone (≤1 m),
+   *  picked nearest the aim — mirrors PropSystem's range grab (not removed). */
+  private findRangeCoin(hand: 'left' | 'right'): FloorCoin | null {
     const ray = this.player.raySpaces?.[hand];
     if (!ray) return null;
     ray.getWorldPosition(_rayO);
@@ -382,8 +417,18 @@ export class CoinSystem extends createSystem({}) {
         best = coin;
       }
     }
-    if (best) this.floor.delete(best.id);
     return best;
+  }
+
+  /** The coin `hand` could grab right now — touch first, else range — or null. */
+  private grabCandidate(hand: 'left' | 'right'): FloorCoin | null {
+    const grip = this.player.gripSpaces?.[hand];
+    if (grip) {
+      grip.getWorldPosition(_a);
+      const touch = this.findTouchCoin(_a);
+      if (touch) return touch;
+    }
+    return this.findRangeCoin(hand);
   }
 
   // --- physics for the coins I own ------------------------------------------
@@ -456,6 +501,7 @@ export class CoinSystem extends createSystem({}) {
   private removeFloorCoin(id: string): void {
     const coin = this.floor.get(id);
     if (!coin) return;
+    if (this.litCoin?.id === id) this.litCoin = null;
     this.scene.remove(coin.mesh);
     (coin.mesh.material as MeshStandardMaterial).dispose();
     coin.mesh.geometry.dispose();

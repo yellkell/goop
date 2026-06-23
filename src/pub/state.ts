@@ -4,7 +4,7 @@
  * the rest of the codebase uses for app-level state.
  */
 
-import type { Group, Mesh, Object3D } from 'three';
+import type { Group, Mesh, MeshStandardMaterial, Object3D } from 'three';
 import type { BoxerRig } from '../avatar/boxer.js';
 import type { BoardRow, FightNet, PoseTuple, PropNet, PubEvent, SnakeHi } from './protocol.js';
 import type { Panel } from './panel.js';
@@ -34,6 +34,9 @@ export interface PubRefs {
   dartRackSlots: [number, number, number][];
   /** World-space dispenser volume: grip inside this box to pull a house dart. */
   dartBox: { center: [number, number, number]; half: [number, number, number] };
+  /** The crate-wall material — its emissive lifts to glow the box when a hand
+   *  can pull a dart (set by PropSystem). */
+  dartBoxMat: MeshStandardMaterial;
   glassSlots: [number, number, number][];
   dartsBoardPanel: Panel;
   /** The red RESET push-button beneath the leaderboard — wipes the chalkboard.
