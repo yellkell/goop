@@ -688,10 +688,13 @@ export class FightSystem extends createSystem({}) {
       } else if (f.sides[side] === null && f.phase === 'idle' && !this.amFighter()) {
         pubSendRaw({ t: 'claim-fight', side });
         sfx.uiClick();
-        // Take your corner: feet on the platform, DOWN in the pit, facing
-        // your opponent. (Any later teleport restores stands level.)
+        // Take your corner: feet on the platform, DOWN in the pit, facing your
+        // opponent across the pit. Side 0 sits at +z with its rival at −z (so it
+        // faces −z = yaw 0); side 1 is the mirror. Facing the rival on arrival
+        // means no 180° physical turn — your real body stays centred in its
+        // playspace. (Any later teleport restores stands level.)
         const z = side === 0 ? FIGHT.platformZ : -FIGHT.platformZ;
-        teleportPlayer(this.player as XROrigin, FIGHT.centerX, z, side === 0 ? Math.PI : 0);
+        teleportPlayer(this.player as XROrigin, FIGHT.centerX, z, side === 0 ? 0 : Math.PI);
         (this.player as XROrigin).position.y = -FIGHT.pitDepth;
       }
       return;
