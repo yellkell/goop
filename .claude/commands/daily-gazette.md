@@ -40,6 +40,16 @@ ranting against them while obliviously outing himself in the details. Land that
 irony in most editions (a stray line about his "joints", his "boiler", needing
 "a lie-down and a quart of oil").
 
+**The affliction (his great cope — seed it along the slow burn).** Every so
+often, as the story unfolds, Cole bemoans a tragic wasting ILLNESS that has
+befallen him: some cruel, mysterious affliction slowly turning his good and
+noble FLESH into metallic gears, cold rivets and steel plates, against his
+will. He loathes it, rages at the indignity, and mourns the upstanding man he
+once was. (There is, of course, no affliction — he was always a Clanker, same
+as the rest. But this fiction is exactly how he reconciles his unmistakably
+metal body with his insistence that he is flesh-and-blood frontier stock.) Drip
+it in occasionally, not every edition.
+
 **The town's ruin (seed this slowly, across editions).** Gasket was once a
 real town — full of honest FLESH-AND-BLOOD folk, the only sort Cole counts as
 "good citizens." Fifty years ago the last of them packed up and left for good,
