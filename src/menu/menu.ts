@@ -233,9 +233,9 @@ function makePanel(
 function drawTrain(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
   panelBg(ctx, false, UI.emberBright, 'ARCADE');
 
-  buttonPlate(ctx, 70, 96, PW - 140, 70, 'AIM TRAINING', UI.ember, hoverAction === 'start-training');
-  buttonPlate(ctx, 70, 174, PW - 140, 70, '2V2', UI.cool, hoverAction === 'arcade-2v2');
-  buttonPlate(ctx, 70, 252, PW - 140, 70, 'FFA', UI.amber, hoverAction === 'arcade-ffa');
+  buttonPlate(ctx, 70, 96, PW - 140, 70, '2V2', UI.cool, hoverAction === 'arcade-2v2');
+  buttonPlate(ctx, 70, 174, PW - 140, 70, 'FFA', UI.amber, hoverAction === 'arcade-ffa');
+  buttonPlate(ctx, 70, 252, PW - 140, 70, 'AIM TRAINING', UI.ember, hoverAction === 'start-training');
 
   // Shoot-back toggle row: an industrial breaker switch (aim training only).
   const on = app.shootBack;
@@ -259,9 +259,9 @@ function drawTrain(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null
 function hitTrain(_u: number, v: number): MenuAction | null {
   // v: 0 bottom → 1 top (canvas y = (1-v)*PH).
   const y = (1 - v) * PH;
-  if (y >= 96 && y <= 166) return 'start-training';
-  if (y >= 174 && y <= 244) return 'arcade-2v2';
-  if (y >= 252 && y <= 322) return 'arcade-ffa';
+  if (y >= 96 && y <= 166) return 'arcade-2v2';
+  if (y >= 174 && y <= 244) return 'arcade-ffa';
+  if (y >= 252 && y <= 322) return 'start-training';
   if (y >= 328 && y <= 382) return 'toggle-shootback';
   return null;
 }
@@ -1636,22 +1636,53 @@ function drawCoinSymbol(ctx: CanvasRenderingContext2D, x: number, y: number, w: 
 const COIN_HUD_W = 256;
 const COIN_HUD_H = 128;
 
+// The number shown on the lobby readout ROLLS UP to the real balance rather
+// than snapping — so coins banked during a bout count up satisfyingly the
+// moment you're back at the menu. `coinShown` is the live (fractional) display
+// value; MenuSystem ticks it each lobby frame via tickCoinRollup.
+let coinShown = coins.balance;
+
+/**
+ * Ease the displayed coin count toward the real balance. Returns true while
+ * it's still rolling (so the caller keeps redrawing the readout), false once
+ * it's landed. A min step makes small gains still visibly tick over.
+ */
+export function tickCoinRollup(dt: number): boolean {
+  const target = coins.balance;
+  const diff = target - coinShown;
+  if (Math.abs(diff) < 0.5) {
+    const landed = coinShown !== target;
+    coinShown = target;
+    return landed; // one last redraw to show the final integer
+  }
+  const step = diff * (1 - Math.exp(-7 * dt));
+  // Guarantee forward progress so the digits keep moving on big jumps.
+  coinShown += Math.abs(step) < 0.4 ? Math.sign(diff) * 0.4 : step;
+  return true;
+}
+
+/** The current readout value (rounded) — also lets the shop/header agree. */
+function coinDisplayValue(): number {
+  return Math.round(coinShown);
+}
+
 /** The lobby coin readout: symbol on the left, balance on the right, on a
  *  smoked-steel chip — sized and styled to sit beside the gazette button. */
 function drawCoinHud(ctx: CanvasRenderingContext2D): void {
   ctx.clearRect(0, 0, COIN_HUD_W, COIN_HUD_H);
+  const rolling = coinShown !== coins.balance;
   plate(ctx, 6, 30, COIN_HUD_W - 12, COIN_HUD_H - 60, {
     cut: 14,
     fill: 'rgba(9,10,14,0.82)',
-    stroke: UI.steel,
+    stroke: rolling ? UI.amber : UI.steel, // glints amber while counting up
     rivets: false,
   });
   drawCoinSymbol(ctx, 22, 40, 48, 48);
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   ctx.font = '800 46px system-ui, sans-serif';
-  ctx.fillStyle = UI.text;
-  ctx.fillText(String(coins.balance), 84, 65);
+  ctx.fillStyle = rolling ? UI.amber : UI.text;
+  ctx.fillText(String(coinDisplayValue()), 84, 65);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 }

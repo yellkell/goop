@@ -36,7 +36,6 @@ const COIN_THICK = 0.01;
 const GRAVITY = 9.8;
 const FLOOR_Y = COIN_THICK; // a coin rests just proud of the floor
 const MOVE_INTERVAL = 1 / 15; // stream a falling coin's position at 15 Hz
-const BAL_INTERVAL = 2; // re-announce my balance every couple of seconds
 const TAG_W = 0.1;
 const TAG_H = 0.13;
 
@@ -114,21 +113,15 @@ export class CoinSystem extends createSystem({}) {
   private prevHand: { left: Vector3; right: Vector3 } = { left: new Vector3(), right: new Vector3() };
   private floor = new Map<string, FloorCoin>();
   private localTags: [WristTag, WristTag] | null = null;
-  private punterTags = new Map<string, [WristTag, WristTag]>();
-  private punterBal = new Map<string, number>();
   private counter = 0;
   private moveTimer = 0;
-  private balTimer = 0;
-  private lastBal = -1;
   private artReady = false;
 
   init(): void {
-    this.cleanupFuncs.push(
-      bus.on('gameEvent', ({ from, ev }) => this.onEvent(from, ev)),
-      // Re-announce my balance to anyone who just walked in.
-      bus.on('joined', () => this.broadcastBalance(true)),
-      bus.on('left', (id) => this.dropPunterTags(id)),
-    );
+    // Your wallet is your own business — the only coin traffic we listen to is
+    // the physical coins others drop and pick up. Nobody broadcasts a balance,
+    // so nobody can see anyone else's stash.
+    this.cleanupFuncs.push(bus.on('gameEvent', ({ from, ev }) => this.onEvent(from, ev)));
   }
 
   update(delta: number): void {
@@ -137,18 +130,12 @@ export class CoinSystem extends createSystem({}) {
     if (!this.artReady && coinImage()) {
       this.artReady = true;
       if (this.localTags) for (const t of this.localTags) t.shown = -1;
-      for (const tags of this.punterTags.values()) for (const t of tags) t.shown = -1;
     }
 
     this.camera.getWorldPosition(_cam);
     this.updateLocalTags();
-    this.updatePunterTags();
     this.handleHands(delta);
     this.simulateMyCoins(delta);
-
-    // Keep the room (and late joiners) in sync with my wallet.
-    this.balTimer -= delta;
-    if (this.balTimer <= 0 || wallet.balance !== this.lastBal) this.broadcastBalance(false);
   }
 
   // --- wrist readouts -------------------------------------------------------
@@ -169,39 +156,6 @@ export class CoinSystem extends createSystem({}) {
       tag.panel.mesh.lookAt(_cam);
       if (tag.shown !== wallet.balance) drawTag(tag, wallet.balance);
     }
-  }
-
-  private updatePunterTags(): void {
-    // Drop tags for anyone who's left.
-    for (const id of [...this.punterTags.keys()]) {
-      if (!pub.punters.has(id)) this.dropPunterTags(id);
-    }
-    for (const punter of pub.punters.values()) {
-      let tags = this.punterTags.get(punter.id);
-      if (!tags) {
-        tags = [makeTag(), makeTag()];
-        for (const t of tags) this.scene.add(t.panel.mesh);
-        this.punterTags.set(punter.id, tags);
-      }
-      const bal = this.punterBal.get(punter.id) ?? 0;
-      for (let i = 0; i < 2; i++) {
-        const glove = punter.rig.gloves[i];
-        tags[i].panel.mesh.position.copy(glove.position);
-        tags[i].panel.mesh.position.y += 0.05;
-        tags[i].panel.mesh.lookAt(_cam);
-        if (tags[i].shown !== bal) drawTag(tags[i], bal);
-      }
-    }
-  }
-
-  private dropPunterTags(id: string): void {
-    const tags = this.punterTags.get(id);
-    if (!tags) return;
-    for (const t of tags) {
-      this.scene.remove(t.panel.mesh);
-      t.panel.dispose();
-    }
-    this.punterTags.delete(id);
   }
 
   // --- the hands: pull, hold, drop, pick up, bank ---------------------------
@@ -240,7 +194,6 @@ export class CoinSystem extends createSystem({}) {
             mesh.position.copy(_a);
             this.scene.add(mesh);
             this.held[hand] = { mesh, id: this.newId() };
-            this.broadcastBalance(true);
           }
         }
       } else if (justUp && held) {
@@ -251,7 +204,6 @@ export class CoinSystem extends createSystem({}) {
           (held.mesh.material as MeshStandardMaterial).dispose();
           held.mesh.geometry.dispose();
           this.held[hand] = null;
-          this.broadcastBalance(true);
         } else {
           // Drop it — hand velocity becomes its launch speed.
           const vel = _a.clone().sub(this.prevHand[hand]).divideScalar(Math.max(delta, 1e-3));
@@ -319,9 +271,6 @@ export class CoinSystem extends createSystem({}) {
   private onEvent(from: string, ev: PubEvent): void {
     if (from === pub.myId) return;
     switch (ev.e) {
-      case 'COIN_BAL':
-        this.punterBal.set(from, ev.n ?? 0);
-        break;
       case 'COIN_DROP':
         this.remotePlace(ev.id, ev.pos);
         break;
@@ -361,13 +310,6 @@ export class CoinSystem extends createSystem({}) {
     (coin.mesh.material as MeshStandardMaterial).dispose();
     coin.mesh.geometry.dispose();
     this.floor.delete(id);
-  }
-
-  private broadcastBalance(force: boolean): void {
-    this.balTimer = BAL_INTERVAL;
-    if (!force && wallet.balance === this.lastBal) return;
-    this.lastBal = wallet.balance;
-    pubSendEvent({ e: 'COIN_BAL', n: wallet.balance });
   }
 
   private newId(): string {

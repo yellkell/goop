@@ -129,9 +129,8 @@ export type PubEvent =
    * Pure relayed events — the pub server forwards anything it doesn't
    * recognise verbatim (handleEvent's default case), so coins need NO server
    * state. A coin is a bearer token: debited from your wallet when you pull it
-   * off your wrist, credited to whoever banks it at theirs. */
-  /** My current wallet balance — shown above my wrist for the whole room. */
-  | { e: 'COIN_BAL'; n: number }
+   * off your wrist, credited to whoever banks it at theirs. Balances are
+   * PRIVATE — only the physical coins are networked, never anyone's total. */
   /** I dropped coin `id` into the room at `pos` with velocity `vel`; I now
    *  simulate its fall and stream COIN_MOVE / COIN_REST until it lands. */
   | { e: 'COIN_DROP'; id: string; pos: Vec3T; vel: Vec3T }

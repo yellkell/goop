@@ -34,6 +34,7 @@ import {
   flashProfileKeyboardHint,
   resetNewsScroll,
   scrollNews,
+  tickCoinRollup,
   type ActionButton,
   type ActionPanel,
   type Menu,
@@ -280,6 +281,12 @@ export class MenuSystem extends createSystem({}) {
     if (this.redrawTimer <= 0) {
       this.redrawTimer = 0.5;
       this.menu.redrawAll(this.hovered, this.hoveredAction);
+    }
+
+    // Coins banked during a bout roll up the moment you're back at the menu —
+    // redraw just the readout each frame while the digits are still climbing.
+    if (tickCoinRollup(delta)) {
+      this.menu.panels.find((p) => p.id === 'coins')?.redraw(null);
     }
   }
 

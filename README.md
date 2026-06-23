@@ -144,14 +144,15 @@ and three things to actually do:
   across the room; everything is networked with single-owner simulation, so
   every punter sees the same glass in the same place — and a thrown glass
   (or dart) can be CAUGHT mid-air by anyone, transferring ownership.
-- **Coins** — your bolt-dollar balance (earned in the arena) rides above each
-  wrist as the "$" symbol with the count over it, and everyone can see
-  everyone's stash. Touch a wrist with your other hand and pull the trigger to
+- **Coins** — your bolt-dollar balance (earned in the arena) rides above your
+  own wrists as the "$" symbol with the count over it — **private**, only you
+  see your total. Touch a wrist with your other hand and pull the trigger to
   draw a coin out into that hand; let go and it drops to the floor, where
   anyone can pick it up. Carry a coin to your other wrist and release to bank
   it. A coin is a bearer token — pulling debits your wallet, banking credits
-  whoever's holding it — networked as relayed events (no server state), so the
-  room conserves coins on its own. See `src/pub/systems/CoinSystem.ts`.
+  whoever's holding it — and only the physical coins are networked (relayed
+  events, no server state), so a balance never crosses the wire and the room
+  still conserves coins on its own. See `src/pub/systems/CoinSystem.ts`.
 - **House darts** — communal board (ported from the old vrstreet project and
   fixed: the meshes now carry fat invisible grab proxies so they are actually
   grabbable), regulation scoring off the board texture's UVs, score popups,
