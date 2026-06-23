@@ -57,6 +57,7 @@ export type PanelId =
   | 'news';
 
 export type MenuAction =
+  | 'start-tutorial'
   | 'start-training'
   | 'arcade-2v2'
   | 'arcade-ffa'
@@ -233,18 +234,20 @@ function makePanel(
 function drawTrain(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
   panelBg(ctx, false, UI.emberBright, 'ARCADE');
 
-  buttonPlate(ctx, 70, 96, PW - 140, 70, '2V2', UI.cool, hoverAction === 'arcade-2v2');
-  buttonPlate(ctx, 70, 174, PW - 140, 70, 'FFA', UI.amber, hoverAction === 'arcade-ffa');
-  buttonPlate(ctx, 70, 252, PW - 140, 70, 'AIM TRAINING', UI.ember, hoverAction === 'start-training');
+  // TUTORIAL sits at the top — the very first thing a new boxer should tap.
+  buttonPlate(ctx, 70, 88, PW - 140, 58, 'TUTORIAL', UI.emberBright, hoverAction === 'start-tutorial');
+  buttonPlate(ctx, 70, 154, PW - 140, 58, '2V2', UI.cool, hoverAction === 'arcade-2v2');
+  buttonPlate(ctx, 70, 220, PW - 140, 58, 'FFA', UI.amber, hoverAction === 'arcade-ffa');
+  buttonPlate(ctx, 70, 286, PW - 140, 58, 'AIM TRAINING', UI.ember, hoverAction === 'start-training');
 
   // Shoot-back toggle row: an industrial breaker switch (aim training only).
   const on = app.shootBack;
   const toggleHot = hoverAction === 'toggle-shootback';
-  ctx.font = '700 24px system-ui, sans-serif';
+  ctx.font = '700 22px system-ui, sans-serif';
   ctx.textAlign = 'left';
   ctx.fillStyle = toggleHot ? UI.emberBright : UI.textDim;
-  ctx.fillText('targets shoot back', 64, 356);
-  const pw = 104, ph = 44, px = PW - 64 - pw, py = 334;
+  ctx.fillText('targets shoot back', 64, 366);
+  const pw = 96, ph = 38, px = PW - 64 - pw, py = 348;
   plate(ctx, px, py, pw, ph, {
     cut: 10,
     fill: on ? 'rgba(79,183,255,0.25)' : toggleHot ? 'rgba(255,176,0,0.16)' : 'rgba(150,150,170,0.12)',
@@ -259,10 +262,11 @@ function drawTrain(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null
 function hitTrain(_u: number, v: number): MenuAction | null {
   // v: 0 bottom → 1 top (canvas y = (1-v)*PH).
   const y = (1 - v) * PH;
-  if (y >= 96 && y <= 166) return 'arcade-2v2';
-  if (y >= 174 && y <= 244) return 'arcade-ffa';
-  if (y >= 252 && y <= 322) return 'start-training';
-  if (y >= 328 && y <= 382) return 'toggle-shootback';
+  if (y >= 88 && y <= 146) return 'start-tutorial';
+  if (y >= 154 && y <= 212) return 'arcade-2v2';
+  if (y >= 220 && y <= 278) return 'arcade-ffa';
+  if (y >= 286 && y <= 344) return 'start-training';
+  if (y >= 348 && y <= 388) return 'toggle-shootback';
   return null;
 }
 

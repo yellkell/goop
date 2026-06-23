@@ -75,6 +75,14 @@ export const app: {
   mySlot: number;
   /** Human-readable connection status for the lobby info panel. */
   netStatus: string;
+  /**
+   * The guided BASICS TUTORIAL is running. It rides a normal vs-bot bout, but
+   * a standalone TutorialSystem (the ONLY reader of this flag) layers pop-ups,
+   * a half-health bot and a paced lesson script on top WITHOUT touching any
+   * combat system. False in every normal bout, so the regular game is
+   * untouched — set true only by the lobby's TUTORIAL button.
+   */
+  tutorial: boolean;
   /** Aim Training option: targets shoot back so you can train dodging. */
   shootBack: boolean;
   /** How many boxers are in the quick-match queue right now (−1 = unknown,
@@ -105,6 +113,7 @@ export const app: {
 } = {
   state: 'menu',
   mode: 'bot',
+  tutorial: false,
   side: 0,
   arcade: '1v1',
   mySlot: 0,

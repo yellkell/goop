@@ -23,6 +23,12 @@ in-your-face boxing feel.
 
 ## Modes
 
+- **TUTORIAL** — the guided basics for a brand-new boxer: activate, throw,
+  recall, block and move, taught one paced pop-up at a time, then a quick
+  graduation knockdown against a half-health bot. It rides an ordinary vs-bot
+  duel that a standalone `TutorialSystem` paces with pop-ups and a calmed,
+  weakened opponent — it adds nothing to any combat system, so the regular
+  game is untouched.
 - **AIM TRAINING** — the heart of the game. Bullseye discs and humanoid
   cutouts pop up across the gap; land your fire while they're up. Streaks
   multiply your score and the cadence ramps. Flip **targets shoot back** on

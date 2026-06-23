@@ -347,6 +347,14 @@ export class MenuSystem extends createSystem({}) {
       return;
     }
     switch (action) {
+      case 'start-tutorial':
+        // The guided basics: a normal vs-bot duel that TutorialSystem paces
+        // with pop-ups and a half-health bot. No callsign needed first.
+        app.tutorial = true;
+        app.arcade = '1v1';
+        app.mode = 'bot';
+        app.state = 'playing';
+        break;
       case 'start-training':
         app.arcade = '1v1';
         app.state = 'training';

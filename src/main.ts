@@ -22,6 +22,7 @@ import { BotSystem } from './systems/BotSystem.js';
 import { NetworkSystem } from './systems/NetworkSystem.js';
 import { MeshSystem } from './systems/MeshSystem.js';
 import { TrainingSystem } from './systems/TrainingSystem.js';
+import { TutorialSystem } from './systems/TutorialSystem.js';
 import { FireballSystem } from './systems/FireballSystem.js';
 import { CollisionSystem } from './systems/CollisionSystem.js';
 import { BoundarySystem } from './systems/BoundarySystem.js';
@@ -87,6 +88,9 @@ World.create(container, {
   world.registerSystem(OpponentSystem);
   // Aim Training: targets, scoring, return fire.
   world.registerSystem(TrainingSystem);
+  // The guided basics tutorial — rides a bot bout, paces it with pop-ups. Runs
+  // before FireballSystem so its command-bus tweaks land before the balls sim.
+  world.registerSystem(TutorialSystem);
   // The fireballs themselves, then collision (so it sees final positions).
   world.registerSystem(FireballSystem);
   world.registerSystem(CollisionSystem);
