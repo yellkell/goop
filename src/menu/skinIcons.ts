@@ -58,39 +58,50 @@ function drawBear(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: numb
   ctx.fill();
 }
 
-/** Panther head: sleek skull with two pointed ears + a notched chin. */
+/** Panther head: a rounded cat skull with short, broad, wide-set ears and
+ *  angled almond eyes — feline, not lupine. */
 function drawPanther(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number): void {
+  // Ears — short and broad-based, set wide apart and tipped out (cat, not wolf).
+  for (const s of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(cx + s * r * 0.74, cy - r * 0.34);
+    ctx.lineTo(cx + s * r * 0.5, cy - r * 0.86);
+    ctx.lineTo(cx + s * r * 0.16, cy - r * 0.46);
+    ctx.closePath();
+    ctx.fill();
+  }
+  // Skull — round cheeks tapering to a small chin.
   ctx.beginPath();
-  // Left ear.
-  ctx.moveTo(cx - r * 0.72, cy - r * 0.1);
-  ctx.lineTo(cx - r * 0.5, cy - r * 0.98);
-  ctx.lineTo(cx - r * 0.08, cy - r * 0.5);
-  // Right ear.
-  ctx.lineTo(cx + r * 0.08, cy - r * 0.5);
-  ctx.lineTo(cx + r * 0.5, cy - r * 0.98);
-  ctx.lineTo(cx + r * 0.72, cy - r * 0.1);
+  ctx.moveTo(cx - r * 0.82, cy - r * 0.42);
+  ctx.quadraticCurveTo(cx - r * 0.92, cy + r * 0.24, cx - r * 0.36, cy + r * 0.64);
+  ctx.quadraticCurveTo(cx, cy + r * 0.9, cx + r * 0.36, cy + r * 0.64);
+  ctx.quadraticCurveTo(cx + r * 0.92, cy + r * 0.24, cx + r * 0.82, cy - r * 0.42);
+  ctx.quadraticCurveTo(cx, cy - r * 0.16, cx - r * 0.82, cy - r * 0.42);
   ctx.closePath();
   ctx.fill();
-  // Jaw.
-  ctx.beginPath();
-  ctx.moveTo(cx - r * 0.72, cy - r * 0.2);
-  ctx.quadraticCurveTo(cx - r * 0.7, cy + r * 0.55, cx, cy + r * 0.95);
-  ctx.quadraticCurveTo(cx + r * 0.7, cy + r * 0.55, cx + r * 0.72, cy - r * 0.2);
-  ctx.closePath();
-  ctx.fill();
-  // Eyes carved out.
+  // Almond cat-eyes, angled up at the outer corner, carved darker.
   ctx.save();
   ctx.globalAlpha = 0.5;
   ctx.fillStyle = '#06070b';
   for (const s of [-1, 1]) {
     ctx.beginPath();
-    ctx.moveTo(cx + s * r * 0.18, cy - r * 0.02);
-    ctx.lineTo(cx + s * r * 0.46, cy - r * 0.12);
-    ctx.lineTo(cx + s * r * 0.22, cy + r * 0.12);
+    ctx.moveTo(cx + s * r * 0.14, cy + r * 0.04);
+    ctx.quadraticCurveTo(cx + s * r * 0.34, cy - r * 0.2, cx + s * r * 0.52, cy - r * 0.04);
+    ctx.quadraticCurveTo(cx + s * r * 0.34, cy + r * 0.12, cx + s * r * 0.14, cy + r * 0.04);
     ctx.closePath();
     ctx.fill();
   }
+  // A small muzzle: nose triangle + a soft snout shadow.
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + r * 0.4, r * 0.2, r * 0.16, 0, 0, Math.PI * 2);
+  ctx.fill();
   ctx.restore();
+  ctx.beginPath();
+  ctx.moveTo(cx, cy + r * 0.36);
+  ctx.lineTo(cx - r * 0.08, cy + r * 0.26);
+  ctx.lineTo(cx + r * 0.08, cy + r * 0.26);
+  ctx.closePath();
+  ctx.fill();
 }
 
 /** Eagle: a head between two swept, spread wings. */
@@ -132,13 +143,13 @@ function drawShield(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: nu
   ctx.quadraticCurveTo(cx - w, top + h * 0.82, cx - w, top + h * 0.42);
   ctx.closePath();
   ctx.fill();
-  // Cross knocked through it.
+  // Cross knocked through it — upper crossbar, long stem below (right way up).
   ctx.save();
   ctx.globalAlpha = 0.4;
   ctx.fillStyle = '#06070b';
   const bar = r * 0.2;
-  ctx.fillRect(cx - bar / 2, top + r * 0.18, bar, h * 0.62);
-  ctx.fillRect(cx - w * 0.62, cy - bar / 2, w * 1.24, bar);
+  ctx.fillRect(cx - bar / 2, top + h * 0.14, bar, h * 0.64);
+  ctx.fillRect(cx - w * 0.6, top + h * 0.3, w * 1.2, bar);
   ctx.restore();
 }
 
