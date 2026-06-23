@@ -270,9 +270,12 @@ export class CoinSystem extends createSystem({}) {
       grip.getWorldPosition(_a); // this hand
       const atWrist = hand === 'right' && _a.distanceTo(_b) <= WRIST_TOUCH;
 
-      // Coins use the GRAB (squeeze) button, like the pints and darts.
-      const pressed = gp.getButtonPressed(InputComponent.Squeeze);
-      const justDown = gp.getButtonDown(InputComponent.Squeeze);
+      // Coins grab on EITHER the squeeze (like pints/darts) or the trigger —
+      // one combined "hold", same as the arena's fireball controls.
+      const pressed =
+        gp.getButtonPressed(InputComponent.Squeeze) || gp.getButtonPressed(InputComponent.Trigger);
+      const justDown =
+        gp.getButtonDown(InputComponent.Squeeze) || gp.getButtonDown(InputComponent.Trigger);
       const justUp = this.prevSq[hand] && !pressed;
       this.prevSq[hand] = pressed;
 
