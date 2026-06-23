@@ -145,11 +145,11 @@ and three things to actually do:
   every punter sees the same glass in the same place — and a thrown glass
   (or dart) can be CAUGHT mid-air by anyone, transferring ownership.
 - **Coins** — your bolt-dollar balance (earned in the arena) rides above your
-  own wrists as the "$" symbol with the count over it — **private**, only you
-  see your total. Touch a wrist with your other hand and pull the trigger to
-  draw a coin out into that hand; let go and it drops to the floor, where
-  anyone can pick it up. Carry a coin to your other wrist and release to bank
-  it. A coin is a bearer token — pulling debits your wallet, banking credits
+  **left** wrist as the "$" symbol with the count over it — **private**, only
+  you see your total. Bring your right hand to that wrist and pull the trigger
+  to draw a coin out into it; let go and it drops to the floor, where anyone
+  can pick it up. Carry a coin back to your left wrist and release to bank it.
+  A coin is a bearer token — pulling debits your wallet, banking credits
   whoever's holding it — and only the physical coins are networked (relayed
   events, no server state), so a balance never crosses the wire and the room
   still conserves coins on its own. See `src/pub/systems/CoinSystem.ts`.

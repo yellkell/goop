@@ -1,11 +1,11 @@
 /**
  * Coins in the pub — the bolt-dollar currency made physical.
  *
- * Every punter wears their balance above each wrist (the riveted "$" symbol
- * with the count over it). Touch one wrist with your OTHER hand and pull the
- * trigger to draw a coin out into that hand; let go to drop it and it falls to
- * the floor, where anyone can pick it up (trigger near it). Bring a held coin
- * up to your other wrist and release to bank it — it vanishes into your wallet.
+ * You wear your balance above your LEFT wrist (the riveted "$" symbol with the
+ * count over it) — private, only you see it. Bring your RIGHT hand to that
+ * wrist and pull the trigger to draw a coin out into it; let go to drop it and
+ * it falls to the floor, where anyone can pick it up (trigger near it). Bring a
+ * held coin back to your left wrist and release to bank it into your wallet.
  *
  * A coin is a BEARER TOKEN: pulling one debits a coin from your wallet there
  * and then; banking one credits whoever's holding it. So a coin abandoned on
@@ -112,7 +112,7 @@ export class CoinSystem extends createSystem({}) {
   private prevTrig: { left: boolean; right: boolean } = { left: false, right: false };
   private prevHand: { left: Vector3; right: Vector3 } = { left: new Vector3(), right: new Vector3() };
   private floor = new Map<string, FloorCoin>();
-  private localTags: [WristTag, WristTag] | null = null;
+  private localTag: WristTag | null = null;
   private counter = 0;
   private moveTimer = 0;
   private artReady = false;
@@ -129,7 +129,7 @@ export class CoinSystem extends createSystem({}) {
     // one-time repaint the frame it lands so the symbol appears.
     if (!this.artReady && coinImage()) {
       this.artReady = true;
-      if (this.localTags) for (const t of this.localTags) t.shown = -1;
+      if (this.localTag) this.localTag.shown = -1;
     }
 
     this.camera.getWorldPosition(_cam);
@@ -142,20 +142,17 @@ export class CoinSystem extends createSystem({}) {
 
   private updateLocalTags(): void {
     const grips = this.player.gripSpaces;
-    if (!grips?.left || !grips.right) return;
-    if (!this.localTags) {
-      this.localTags = [makeTag(), makeTag()];
-      for (const t of this.localTags) this.scene.add(t.panel.mesh);
+    if (!grips?.left) return;
+    if (!this.localTag) {
+      this.localTag = makeTag();
+      this.scene.add(this.localTag.panel.mesh);
     }
-    const sides = [grips.left, grips.right] as const;
-    for (let i = 0; i < 2; i++) {
-      const tag = this.localTags[i];
-      sides[i].getWorldPosition(_a);
-      tag.panel.mesh.position.copy(_a);
-      tag.panel.mesh.position.y += 0.05;
-      tag.panel.mesh.lookAt(_cam);
-      if (tag.shown !== wallet.balance) drawTag(tag, wallet.balance);
-    }
+    const tag = this.localTag;
+    grips.left.getWorldPosition(_a); // the wallet rides on the LEFT wrist
+    tag.panel.mesh.position.copy(_a);
+    tag.panel.mesh.position.y += 0.05;
+    tag.panel.mesh.lookAt(_cam);
+    if (tag.shown !== wallet.balance) drawTag(tag, wallet.balance);
   }
 
   // --- the hands: pull, hold, drop, pick up, bank ---------------------------
@@ -164,16 +161,18 @@ export class CoinSystem extends createSystem({}) {
     const grips = this.player.gripSpaces;
     if (!grips?.left || !grips.right) return;
 
+    // The wallet lives on the LEFT wrist, so only the RIGHT hand reaches it to
+    // pull a coin out or bank one back. (Either hand can still pick coins off
+    // the floor — that's not a wrist gesture.)
+    grips.left.getWorldPosition(_b); // the left wrist (the wallet)
+
     (['left', 'right'] as const).forEach((hand) => {
-      const other = hand === 'left' ? 'right' : 'left';
       const gp = this.input.xr.gamepads[hand];
       const grip = grips[hand]!;
-      const otherGrip = grips[other]!;
       if (!gp) return;
 
       grip.getWorldPosition(_a); // this hand
-      otherGrip.getWorldPosition(_b); // the other wrist
-      const atWrist = _a.distanceTo(_b) <= WRIST_TOUCH;
+      const atWrist = hand === 'right' && _a.distanceTo(_b) <= WRIST_TOUCH;
 
       const pressed = gp.getButtonPressed(InputComponent.Trigger);
       const justDown = gp.getButtonDown(InputComponent.Trigger);
