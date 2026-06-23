@@ -68,7 +68,7 @@ import { pubSendEvent, pubSendRaw } from '../net.js';
 import type { FightNet, FireballNet } from '../protocol.js';
 import { bus, pub } from '../state.js';
 import { Panel } from '../panel.js';
-import { UI, fitStencilText, hazardStrip, metalText, plate, segmentBar, stencilFont } from '../../ui/industrial.js';
+import { UI, fitStencilText, metalText, plate, segmentBar, stencilFont } from '../../ui/industrial.js';
 import { teleportPlayer } from './TeleportSystem.js';
 
 const HANDS = ['left', 'right'] as const;
@@ -284,6 +284,8 @@ export class FightSystem extends createSystem({}) {
   private lastCountdown = -1;
   /** Throttle glove-touches so one bump pops a single GG. */
   private fistBumpCooldown = 0;
+  /** Cooldown on the B-button GG salute (a deliberate one-shot). */
+  private selfGgCooldown = 0;
   private fistPose: [Vector3, Vector3] = [new Vector3(), new Vector3()];
   private prevFistPose: [Vector3, Vector3] = [new Vector3(), new Vector3()];
   private hasPrevFistPose = false;
@@ -577,6 +579,7 @@ export class FightSystem extends createSystem({}) {
 
     this.updateMatchBoard();
     this.tryFistBump(delta);
+    this.trySelfGg(delta);
 
     if (this.amFighter() && live) {
       this.solveMyBody();
@@ -865,6 +868,24 @@ export class FightSystem extends createSystem({}) {
   }
 
   /** The celebratory GG: a spark, a big floating GG and the metal donk. */
+  /** Press B (right controller) to throw a solo GG salute over your own glove —
+   *  the arena's B-button GG, ported. Broadcast so the whole room sees it; a
+   *  long cooldown keeps it a deliberate gesture, not a spammed pop. */
+  private trySelfGg(delta: number): void {
+    this.selfGgCooldown = Math.max(0, this.selfGgCooldown - delta);
+    if (this.selfGgCooldown > 0 || !this.amFighter()) return;
+    if (!(this.input.xr.gamepads.right?.getButtonDown(InputComponent.B_Button) ?? false)) return;
+    const grip = this.player.gripSpaces.right;
+    if (!grip) return;
+    grip.getWorldPosition(_ggMid);
+    _ggMid.y += 0.05;
+    this.popGg(_ggMid);
+    pubSendEvent({ e: 'FIGHT_GG', pos: [_ggMid.x, _ggMid.y, _ggMid.z] });
+    // Share the bump guard so my own broadcast echoing back can't double-pop.
+    this.fistBumpCooldown = 1.25;
+    this.selfGgCooldown = 10;
+  }
+
   private popGg(pos: Vector3): void {
     spawnGestureCue(this.world, pos, 0.32);
     _ggLift.copy(pos);
@@ -1592,7 +1613,9 @@ export class FightSystem extends createSystem({}) {
     }
 
     if (!this.matchBoard) {
-      this.matchBoard = new Panel(2.8, 1.0);
+      // Wide plate echoing quick match's layout: YOU (left) + clock + RIVAL
+      // (right) side by side, hung behind the opponent.
+      this.matchBoard = new Panel(3.4, 1.05);
       this.scene.add(this.matchBoard.mesh);
       this.boardSide = -1;
     }
@@ -1654,44 +1677,45 @@ export class FightSystem extends createSystem({}) {
       : f.winner === pub.myId ? UI.emberBright
       : UI.cool;
 
-    // Painted on a TRANSPARENT canvas so the only backing is one sleek
-    // smoked-glass plate — the arena scoreboard's language, not an opaque slab.
+    // Painted on a TRANSPARENT canvas in quick match's layout: two flanking
+    // boards — YOU (ember, left) and RIVAL (blue, right) — with the round clock
+    // and the verdict headline between them.
     board.drawBare((ctx, w, h) => {
-      plate(ctx, 6, 6, w - 12, h - 12, { cut: 30, fill: UI.ink, stroke: UI.steel, rivets: false });
       ctx.textBaseline = 'middle';
 
-      // Header band: hazard chip + headline (left), round clock (right), under a
-      // neon rule tinted to the moment.
-      hazardStrip(ctx, 44, 40, 76, 24, UI.amber);
-      ctx.textAlign = 'left';
-      const headlinePx = fitStencilText(ctx, headline, w - 330, 60, 34);
-      metalText(ctx, headline, 146, 58, headlinePx, headlineColour, 'left');
-      ctx.textAlign = 'right';
-      ctx.font = stencilFont(62);
-      ctx.fillStyle = UI.text;
-      ctx.fillText(clk, w - 46, 58);
-      ctx.strokeStyle = headlineColour;
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(44, 100);
-      ctx.lineTo(w - 44, 100);
-      ctx.stroke();
-
-      // Two stacked fighter readouts: YOU (ember) over RIVAL (blue), each a
-      // stencilled name + chamfered round pips + a segmented health bar.
-      const rows: [string, string, number, number][] = [
-        [myName, UI.emberBright, myHp, f.score[side]],
-        [oppName, UI.cool, oppHp, f.score[opp]],
+      // The two flanking fighter boards: name + chamfered round pips + a
+      // segmented health bar, each on its own chamfered plate (the arena's pair).
+      const boardW = w * 0.36;
+      const boardY = h * 0.2;
+      const boardH = h * 0.66;
+      const cols: [number, string, string, number, number, 'left' | 'right'][] = [
+        [w * 0.02, myName, UI.emberBright, myHp, f.score[side], 'left'],
+        [w * 0.62, oppName, UI.cool, oppHp, f.score[opp], 'right'],
       ];
-      rows.forEach(([name, colour, hp, pips], i) => {
-        const top = 168 + i * 184;
+      for (const [x, name, colour, hp, pips] of cols) {
+        plate(ctx, x, boardY, boardW, boardH, { cut: 26, fill: UI.ink, stroke: UI.steel, rivets: false });
         ctx.textAlign = 'left';
-        ctx.font = stencilFont(46);
+        ctx.font = stencilFont(44);
         ctx.fillStyle = colour;
-        ctx.fillText(name.toUpperCase().slice(0, 14), 48, top);
-        this.drawPips(ctx, w - 48, top, pips, colour);
-        segmentBar(ctx, 48, top + 34, w - 96, 58, hp, colour);
-      });
+        ctx.fillText(name.toUpperCase().slice(0, 12), x + 28, boardY + 56);
+        this.drawPips(ctx, x + boardW - 26, boardY + 52, pips, colour);
+        segmentBar(ctx, x + 28, boardY + 92, boardW - 56, 58, hp, colour);
+      }
+
+      // Centre column: the verdict headline above a big round clock on its own
+      // plate, tinted to the moment.
+      const cx = w * 0.5;
+      ctx.textAlign = 'center';
+      const headlinePx = fitStencilText(ctx, headline, w * 0.22, 64, 40);
+      metalText(ctx, headline, cx, h * 0.22, headlinePx, headlineColour, 'center');
+      const tW = w * 0.2;
+      const tH = h * 0.42;
+      const tX = cx - tW / 2;
+      const tY = h * 0.44;
+      plate(ctx, tX, tY, tW, tH, { cut: 20, fill: UI.ink, stroke: headlineColour, rivets: false });
+      ctx.font = stencilFont(64);
+      ctx.fillStyle = UI.text;
+      ctx.fillText(clk, cx, tY + tH / 2);
     });
   }
 
