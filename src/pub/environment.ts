@@ -760,6 +760,9 @@ function buildFightHall(root: Group): {
   });
   const cage = FIGHT.cage;
   const pit = FIGHT.pitDepth;
+  // The pit floor is dug a little below the platform tops so the octagons stand
+  // proud of it (fighters still stand at -pit; only the surrounding floor drops).
+  const floorY = pit + FIGHT.standProud;
   const strip = (sw: number, sd: number, x: number, z: number, y: number): void => {
     const f = new Mesh(new PlaneGeometry(sw, sd), floorMat);
     f.rotation.x = -Math.PI / 2;
@@ -771,13 +774,13 @@ function buildFightHall(root: Group): {
   strip(hall.maxX - cage.maxX, d, (cage.maxX + hall.maxX) / 2, 0, 0);
   strip(cage.maxX - cage.minX, cage.minZ - hall.minZ, (cage.minX + cage.maxX) / 2, (hall.minZ + cage.minZ) / 2, 0);
   strip(cage.maxX - cage.minX, hall.maxZ - cage.maxZ, (cage.minX + cage.maxX) / 2, (cage.maxZ + hall.maxZ) / 2, 0);
-  // The pit floor.
-  strip(cage.maxX - cage.minX, cage.maxZ - cage.minZ, (cage.minX + cage.maxX) / 2, 0, -pit);
+  // The pit floor (dug to floorY so the platforms stand proud of it).
+  strip(cage.maxX - cage.minX, cage.maxZ - cage.minZ, (cage.minX + cage.maxX) / 2, 0, -floorY);
   // Pit walls, facing inward, with a hazard lip along the rim.
   const pitWallMat = new MeshStandardMaterial({ map: steelWallTexture([6, 0.6]), metalness: 0.7, roughness: 0.55 });
   const pitWall = (pw: number, x: number, z: number, ry: number): void => {
-    const wall = new Mesh(new PlaneGeometry(pw, pit), pitWallMat);
-    wall.position.set(x, -pit / 2, z);
+    const wall = new Mesh(new PlaneGeometry(pw, floorY), pitWallMat);
+    wall.position.set(x, -floorY / 2, z);
     wall.rotation.y = ry;
     root.add(wall);
   };
@@ -880,18 +883,20 @@ function buildFightHall(root: Group): {
   for (const side of [0, 1] as const) {
     const z = side === 0 ? FIGHT.platformZ : -FIGHT.platformZ;
     const accent = teamColor(side);
-    // Platforms live INSIDE the pit, their tops flush with the pit floor —
-    // fighters stand a level below the crowd, stadium-style. The slab carries
-    // a low corner-coloured underglow that FightSystem re-tints to whichever
-    // platform skin the claimant picked in customisation (dressRims).
+    // Platforms live INSIDE the pit, standing proud of the (lower) pit floor —
+    // fighters stand a level below the crowd, stadium-style. The slab is tall
+    // enough to rise from the dug floor up to the standing top (-pitDepth). It
+    // carries a low corner-coloured underglow that FightSystem re-tints to
+    // whichever platform skin the claimant picked in customisation (dressRims).
+    const slabH = FIGHT.platformThickness + FIGHT.standProud;
     const slabMat = gunmetal(0.3);
     slabMat.emissive.setHex(accent);
     slabMat.emissiveIntensity = 0.22;
     const slab = new Mesh(
-      octagonSlab(OCTAGON_VERTICES as [number, number][], FIGHT.platformThickness),
+      octagonSlab(OCTAGON_VERTICES as [number, number][], slabH),
       slabMat,
     );
-    slab.position.set(FIGHT.centerX, -FIGHT.pitDepth - FIGHT.platformThickness, z);
+    slab.position.set(FIGHT.centerX, -FIGHT.pitDepth - slabH, z);
     // The octagon's straight front edge faces −z; side 0 (south) must face north.
     if (side === 0) slab.rotation.y = 0;
     else slab.rotation.y = Math.PI;

@@ -160,6 +160,13 @@ interface RemoteBall {
   /** Loadout size + damage scale streamed from the owner (1 = a plain ball). */
   scl: number;
   dmgScale: number;
+  /**
+   * Throw-blend window (seconds): on a fresh throw the ball eases onto the
+   * owner's authoritative trajectory at the gentle NET.throwBlend rate instead
+   * of the stiff NET.smoothing rate, so the launch doesn't snap. Quick-match
+   * parity — see NET.throwBlend in config.ts.
+   */
+  blend: number;
 }
 
 /** The local player's ball loadout per fist ([left, right]; 0 none / 1 split /
@@ -313,6 +320,8 @@ export class FightSystem extends createSystem({}) {
   }
 
   private rimKey = '';
+  /** Each slab's native deck colour, captured before any skin re-tint. */
+  private slabBase: number[] = [];
 
   /**
    * Dress each platform rim AND slab in its claimant's PLATFORM skin the moment
@@ -334,11 +343,20 @@ export class FightSystem extends createSystem({}) {
     this.rimKey = key;
     ([0, 1] as const).forEach((side) => {
       const pf = pfFor(side);
-      const colour = pf ? platformSkin(pf).neon : teamColor(side);
+      const skin = pf ? platformSkin(pf) : null;
+      const colour = skin ? skin.neon : teamColor(side);
       const mat = rims[side].material as MeshStandardMaterial;
       mat.color.setHex(colour);
       mat.emissive.setHex(colour);
-      if (slabs) (slabs[side].material as MeshStandardMaterial).emissive.setHex(colour);
+      if (slabs) {
+        const sm = slabs[side].material as MeshStandardMaterial;
+        if (this.slabBase[side] === undefined) this.slabBase[side] = sm.color.getHex();
+        sm.emissive.setHex(colour);
+        // Premium pads carry an explicit deck tint (gold deck, XD black) — apply
+        // it so the arena's slab look follows the claimant in; otherwise keep the
+        // hall's native gunmetal deck.
+        sm.color.setHex(skin?.slab ?? this.slabBase[side]);
+      }
     });
   }
 
@@ -398,11 +416,18 @@ export class FightSystem extends createSystem({}) {
         continue;
       }
       const cool = this.teamFor(id) === 1;
-      const k = 1 - Math.exp(-NET.smoothing * delta);
       for (const b of balls) {
         b.hitCooldown = Math.max(0, b.hitCooldown - delta);
+        // Throw-blend (quick-match parity): for a short window after a throw the
+        // ball eases onto the owner's authoritative line at the gentle
+        // NET.throwBlend rate, otherwise it tracks tightly at NET.smoothing.
+        const rate = b.blend > 0 ? NET.throwBlend : NET.smoothing;
+        b.blend = Math.max(0, b.blend - delta);
+        const k = 1 - Math.exp(-rate * delta);
         if (b.hasTarget) {
-          if (b.visual.group.position.distanceToSquared(b.target) > 9) {
+          // A real teleport (round reset, a respawn) still snaps — but never
+          // during the blend window, where a big gap is the launch easing in.
+          if (b.blend <= 0 && b.visual.group.position.distanceToSquared(b.target) > 9) {
             b.visual.group.position.copy(b.target);
           } else {
             b.visual.group.position.lerp(b.target, k);
@@ -1178,6 +1203,7 @@ export class FightSystem extends createSystem({}) {
           hasTarget: false,
           scl: 1,
           dmgScale: 1,
+          blend: 0,
         };
       };
       rec = [mk(), mk()];
@@ -1200,6 +1226,9 @@ export class FightSystem extends createSystem({}) {
       if (!(prev === DEAD && state === FLYING && rec[idx].hitCooldown > 0)) {
         rec[idx].state = state;
       }
+      // Fresh throw: open the throw-blend window so the launch eases onto the
+      // owner's line instead of snapping (~3/throwBlend ≈ 0.35 s to settle).
+      if (rec[idx].state === FLYING && prev !== FLYING) rec[idx].blend = 0.35;
       // A fresh return leg re-arms the recall-through hit.
       if (rec[idx].state === RETURNING && prev !== RETURNING) rec[idx].returnHit = 0;
     }

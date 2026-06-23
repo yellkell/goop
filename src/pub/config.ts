@@ -121,8 +121,13 @@ export const FIGHT = {
   platformZ: 1.5,
   platformThickness: 0.14,
   /** The duel floor is DUG IN: the cage rect drops this far below the hall
-   *  floor, with bench stands around the rim — a little stadium. */
+   *  floor, with bench stands around the rim — a little stadium. This is the
+   *  PLATFORM-TOP depth (where fighters stand); the pit floor itself is dug a
+   *  touch deeper (by standProud) so the octagons stand proud of it. */
   pitDepth: 0.7,
+  /** How far the platform tops rise above the surrounding pit floor — the
+   *  octagons read as raised decks, not slabs flush with the ground. */
+  standProud: 0.22,
   /** Ball-killing cage, 5 yards out from each platform rim. */
   cage: {
     minX: HALL_CX - PLATFORM_HALF_W - CAGE_YARDS,
