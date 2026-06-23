@@ -36,6 +36,16 @@ in-your-face boxing feel.
   ducks with them. Mic permission is asked when you queue; declining still
   lets you hear them.
 
+## Coins & the platform shop
+
+Every bout, brawl and training run banks **coins** (the riveted bolt-dollar
+"$") alongside your XP — a flat amount per completed game. Your balance shows
+beside the newspaper button in the lobby. Spend it in the **platform shop**
+(open it from CUSTOMISE): the three launch pads are free, two recolours
+(TOXIC, PLASMA) cost the equivalent of ten games, and the premium **GOLD
+RUSH** pad — gold piping and a gold-tinted slab — costs a hundred. The wallet
+is shared with the pub (same browser), where coins become physical.
+
 ## The rules of the platform
 
 You see your platform beneath you — and its **rim barrier**. Guardian-style
@@ -134,6 +144,14 @@ and three things to actually do:
   across the room; everything is networked with single-owner simulation, so
   every punter sees the same glass in the same place — and a thrown glass
   (or dart) can be CAUGHT mid-air by anyone, transferring ownership.
+- **Coins** — your bolt-dollar balance (earned in the arena) rides above each
+  wrist as the "$" symbol with the count over it, and everyone can see
+  everyone's stash. Touch a wrist with your other hand and pull the trigger to
+  draw a coin out into that hand; let go and it drops to the floor, where
+  anyone can pick it up. Carry a coin to your other wrist and release to bank
+  it. A coin is a bearer token — pulling debits your wallet, banking credits
+  whoever's holding it — networked as relayed events (no server state), so the
+  room conserves coins on its own. See `src/pub/systems/CoinSystem.ts`.
 - **House darts** — communal board (ported from the old vrstreet project and
   fixed: the meshes now carry fat invisible grab proxies so they are actually
   grabbable), regulation scoring off the board texture's UVs, score popups,

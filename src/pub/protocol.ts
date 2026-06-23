@@ -124,7 +124,23 @@ export type PubEvent =
       score: number;
       dead: boolean;
     }
-  | { e: 'SNAKE_OVER'; score: number };
+  | { e: 'SNAKE_OVER'; score: number }
+  /* --- Coin trading (the bolt-dollar currency on your wrist) ---------------
+   * Pure relayed events — the pub server forwards anything it doesn't
+   * recognise verbatim (handleEvent's default case), so coins need NO server
+   * state. A coin is a bearer token: debited from your wallet when you pull it
+   * off your wrist, credited to whoever banks it at theirs. */
+  /** My current wallet balance — shown above my wrist for the whole room. */
+  | { e: 'COIN_BAL'; n: number }
+  /** I dropped coin `id` into the room at `pos` with velocity `vel`; I now
+   *  simulate its fall and stream COIN_MOVE / COIN_REST until it lands. */
+  | { e: 'COIN_DROP'; id: string; pos: Vec3T; vel: Vec3T }
+  /** The coin I own is here (streamed while it falls). */
+  | { e: 'COIN_MOVE'; id: string; pos: Vec3T }
+  /** The coin I own has come to rest here — anyone may pick it up. */
+  | { e: 'COIN_REST'; id: string; pos: Vec3T }
+  /** I picked coin `id` up off the floor — everyone else drop it from view. */
+  | { e: 'COIN_TAKE'; id: string };
 
 export type PubClientMsg =
   | { t: 'hello'; name: string; av?: string; pf?: string; avc?: number; cid?: string }

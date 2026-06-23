@@ -30,6 +30,7 @@ import { installAdminPanel } from './admin.js';
 import { Panel } from './panel.js';
 import { bus, pub } from './state.js';
 import { buildProps, PropSystem } from './systems/PropSystem.js';
+import { CoinSystem } from './systems/CoinSystem.js';
 import { BartenderSystem } from './systems/BartenderSystem.js';
 import { DartsSystem } from './systems/DartsSystem.js';
 import { FightSystem } from './systems/FightSystem.js';
@@ -115,6 +116,7 @@ World.create(container, {
   world.registerSystem(ClimbSystem);
   world.registerSystem(PubPlayerSystem);
   world.registerSystem(PropSystem);
+  world.registerSystem(CoinSystem);
   world.registerSystem(DartsSystem);
   world.registerSystem(SnakeSystem);
   world.registerSystem(MusicSystem);
