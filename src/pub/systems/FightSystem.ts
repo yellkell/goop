@@ -48,6 +48,8 @@ import {
 import { spawnDamagePopup, spawnFireImpact, spawnGestureCue, spawnPopup } from '../../fx/effects.js';
 import * as sfx from '../../audio/sfx.js';
 import { announce, preloadAnnouncer } from '../../audio/announcer.js';
+import { playCash, preloadCash } from '../../audio/cash.js';
+import { addCoins } from '../../menu/wallet.js';
 import { pulseHand } from '../../input/haptics.js';
 import { FIGHT } from '../config.js';
 import { pubSendEvent, pubSendRaw } from '../net.js';
@@ -238,9 +240,17 @@ export class FightSystem extends createSystem({}) {
   private fistPose: [Vector3, Vector3] = [new Vector3(), new Vector3()];
   private prevFistPose: [Vector3, Vector3] = [new Vector3(), new Vector3()];
   private hasPrevFistPose = false;
+  /** My round-one stake on each corner's fighter (local only — bets never cross
+   *  the wire; a winning side pays the holder 2× their stake). */
+  private bets: [number, number] = [0, 0];
+  /** Guard so a match pays my bets out exactly once. */
+  private betSettled = false;
+  /** Per-tablet redraw guard (skip the canvas re-paint when nothing changed). */
+  private consoleKey: [string, string] = ['', ''];
 
   init(): void {
     preloadAnnouncer(); // decode 3/2/1/FIGHT so the countdown speaks like the arena
+    preloadCash(); // the cash chime for a winning bet
     // The local fighter's body: an ember (team 0) torso wearing my avatar
     // skin, exactly like the arena's PlayerBodySystem. Only the torso joins
     // the scene (my gloves are the controllers; my own head stays unseen).
@@ -314,9 +324,52 @@ export class FightSystem extends createSystem({}) {
         }
       }),
       bus.on('left', (id) => this.dropRemote(id)),
+      bus.on('coinInserted', (slot) => this.onBet(slot)),
     );
     this.renderConsoles();
     this.renderDisplay();
+  }
+
+  /** A coin was fed into a betting tablet — stake it on that corner's fighter.
+   *  CoinSystem only offers the slot while bets are open and the corner is
+   *  filled; we re-check here so a stray event can't bank a phantom stake. */
+  private onBet(slot: string): void {
+    const side: 0 | 1 | null = slot === 'bet0' ? 0 : slot === 'bet1' ? 1 : null;
+    if (side === null) return;
+    const f = pub.fight;
+    const open = f.round === 1 && (f.phase === 'starting' || f.phase === 'fighting');
+    if (!open || !f.sides[side] || this.amFighter()) return;
+    this.bets[side] += 1;
+    sfx.uiClick();
+    this.renderConsoles();
+  }
+
+  /** Settle my round-one bets when the match ends: the winning corner pays the
+   *  holder 2× their stake (losing stakes are gone — already debited at the
+   *  tablet). The wrist counter rolls the payout up; the cash chime rings. */
+  private settleBets(f: FightNet): void {
+    if (this.betSettled) return;
+    this.betSettled = true;
+    const total = this.bets[0] + this.bets[1];
+    if (total === 0) return;
+    let payout = 0;
+    if (f.winner) {
+      const winSide: 0 | 1 | null = f.sides[0] === f.winner ? 0 : f.sides[1] === f.winner ? 1 : null;
+      if (winSide !== null) payout = this.bets[winSide] * 2;
+    } else {
+      payout = total; // no winner (shouldn't happen best-of-5) — refund stakes
+    }
+    if (payout > 0) {
+      addCoins(payout);
+      playCash();
+    }
+  }
+
+  /** Clear bets for a fresh match. */
+  private resetBets(): void {
+    this.bets[0] = 0;
+    this.bets[1] = 0;
+    this.betSettled = false;
   }
 
   private rimKey = '';
@@ -368,6 +421,7 @@ export class FightSystem extends createSystem({}) {
 
     this.checkConsoles();
     this.dressRims();
+    this.renderConsoles(); // cheap — the key guard skips the redraw unless it changed
 
     const f = pub.fight;
     const fighting = f.phase === 'fighting';
@@ -515,6 +569,8 @@ export class FightSystem extends createSystem({}) {
           this.roundClock = FIGHT.startCountdown;
           this.lastServerTimer = f.roundTimer;
           this.lastCountdown = -1;
+          // A fresh match's first countdown opens the betting books.
+          if (f.round === 1) this.resetBets();
           break;
         case 'fighting':
           // Every round opens with the bell + full health + balls back at fists.
@@ -539,9 +595,11 @@ export class FightSystem extends createSystem({}) {
           const iWon = f.winner === pub.myId;
           if (this.amFighter()) sfx.matchEnd(iWon);
           else sfx.roundEnd(true);
+          this.settleBets(f); // pay out winning bets (rolls the wrist up + chimes)
           break;
         }
         case 'idle':
+          this.resetBets();
           break;
       }
       this.lastPhase = f.phase;
@@ -1318,23 +1376,61 @@ export class FightSystem extends createSystem({}) {
     const refs = pub.refs;
     if (!refs) return;
     const f = pub.fight;
+    const betsOpen = f.round === 1 && (f.phase === 'starting' || f.phase === 'fighting');
     for (const side of [0, 1] as const) {
       const holder = f.sides[side];
       const corner = side === 0 ? 'EMBER CORNER' : 'BLUE CORNER';
       const colour = side === 0 ? '#ff7a18' : '#4fb7ff';
-      const lines = [{ text: corner, size: 44, colour, bold: true }];
+      const stake = this.bets[side];
+      const lit = pub.coinHover === `bet${side}`;
+      const canBet = betsOpen && !this.amFighter();
+
+      // Redraw guard: only re-paint the canvas when something visible changed.
+      const key = `${pub.online ? 1 : 0}|${holder ?? ''}|${f.phase}|${f.round}|${f.winner ?? ''}|${stake}|${lit ? 1 : 0}|${canBet ? 1 : 0}|${holder === pub.myId ? 1 : 0}`;
+      if (key === this.consoleKey[side]) continue;
+      this.consoleKey[side] = key;
+
+      const lines: import('../panel.js').PanelLine[] = [{ text: corner, size: 40, colour, bold: true }];
       if (!pub.online) {
-        lines.push({ text: 'SERVER OFFLINE', size: 30, colour: '#e8352a', bold: false });
-      } else if (holder) {
-        lines.push({ text: this.nameOf(holder).toUpperCase(), size: 34, colour: '#e8ecf2', bold: true });
-        if (holder === pub.myId && f.phase === 'idle') {
-          lines.push({ text: 'TRIGGER TO STEP DOWN', size: 22, colour: '#9aa3b2', bold: false });
+        lines.push({ text: 'SERVER OFFLINE', size: 28, colour: '#e8352a' });
+      } else if (!holder) {
+        if (f.phase === 'idle') {
+          lines.push({ text: 'PULL TRIGGER', size: 28, colour: '#ffb000', bold: true });
+          lines.push({ text: 'TO TAKE THIS CORNER', size: 20, colour: '#9aa3b2' });
+        } else {
+          lines.push({ text: 'EMPTY CORNER', size: 24, colour: '#9aa3b2' });
         }
-      } else if (f.phase === 'idle') {
-        lines.push({ text: 'PULL TRIGGER', size: 30, colour: '#ffb000', bold: true });
-        lines.push({ text: 'TO TAKE THIS CORNER', size: 22, colour: '#9aa3b2', bold: false });
       } else {
-        lines.push({ text: 'BOUT IN PROGRESS', size: 26, colour: '#9aa3b2', bold: false });
+        lines.push({ text: this.nameOf(holder).toUpperCase(), size: 32, colour: '#e8ecf2', bold: true });
+        if (holder === pub.myId && f.phase === 'idle') {
+          lines.push({ text: 'TRIGGER TO STEP DOWN', size: 20, colour: '#9aa3b2' });
+        } else if (canBet) {
+          // Round-one books are open — feed a coin to back this fighter.
+          lines.push({
+            text: lit ? 'DROP COIN TO BET' : 'INSERT COIN TO BET',
+            size: 22,
+            colour: lit ? '#ffd54a' : '#ffb000',
+            bold: true,
+          });
+          lines.push({
+            text: stake > 0 ? `YOUR BET ${stake} · PAYS 2X` : 'WINNER PAYS 2X',
+            size: 18,
+            colour: '#9aa3b2',
+          });
+        } else if (f.phase === 'over' && stake > 0) {
+          const won = f.winner === holder;
+          lines.push({
+            text: won ? `BET WON +${stake * 2}` : 'BET LOST',
+            size: 24,
+            colour: won ? '#39d98a' : '#e8352a',
+            bold: true,
+          });
+        } else if (stake > 0) {
+          lines.push({ text: `YOUR BET: ${stake}`, size: 20, colour: '#ffd54a' });
+          lines.push({ text: 'BETS CLOSED', size: 18, colour: '#9aa3b2' });
+        } else if (f.phase !== 'idle') {
+          lines.push({ text: 'BOUT IN PROGRESS', size: 22, colour: '#9aa3b2' });
+        }
       }
       refs.consolePanels[side].setLines(lines);
     }

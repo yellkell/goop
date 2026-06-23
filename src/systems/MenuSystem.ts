@@ -53,6 +53,7 @@ import {
   setPlatformSkin,
 } from '../menu/customization.js';
 import { canAfford, spendCoins } from '../menu/wallet.js';
+import { playCash, preloadCash } from '../audio/cash.js';
 import { buildBoxer, setAvatarAccent, solveTorso, type BoxerRig } from '../avatar/boxer.js';
 import {
   AVATAR_SKINS,
@@ -142,6 +143,7 @@ export class MenuSystem extends createSystem({}) {
     this.keyboard = createNameKeyboard(this.scene);
     this.pointers.left = this.makePointer();
     this.pointers.right = this.makePointer();
+    preloadCash(); // the shop money sting, ready before the first buy
 
     this.applyState();
   }
@@ -569,6 +571,7 @@ export class MenuSystem extends createSystem({}) {
     if (!platformOwned(id)) {
       if (!canAfford(price) || !spendCoins(price)) return; // can't afford — no-op
       ownPlatform(id);
+      playCash(); // the money sting on a fresh purchase
     }
     setPlatformSkin(id); // applyOwnSkins repaints the pad next frame
   }

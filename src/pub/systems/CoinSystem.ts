@@ -27,7 +27,7 @@ import { coinImage } from '../../menu/coinIcon.js';
 import { addCoins, coins as wallet, spendCoins } from '../../menu/wallet.js';
 import { pubSendEvent } from '../net.js';
 import { bus, pub } from '../state.js';
-import { PUB, SURFACES, type Surface } from '../config.js';
+import { FIGHT, PUB, SURFACES, type Surface } from '../config.js';
 import type { PubEvent, Vec3T } from '../protocol.js';
 
 const WRIST_TOUCH = 0.13; // how close a hand must come to a wrist to grab/bank
@@ -167,6 +167,8 @@ export class CoinSystem extends createSystem({}) {
   private prevHand: { left: Vector3; right: Vector3 } = { left: new Vector3(), right: new Vector3() };
   private floor = new Map<string, FloorCoin>();
   private localTag: WristTag | null = null;
+  /** Eased wrist count for the roll-up (−1 = not yet initialised). */
+  private tagDisplay = -1;
   private counter = 0;
   private moveTimer = 0;
   private time = 0;
@@ -191,7 +193,7 @@ export class CoinSystem extends createSystem({}) {
     }
 
     this.camera.getWorldPosition(_cam);
-    this.updateLocalTags();
+    this.updateLocalTags(delta);
     this.handleHands(delta);
     this.updateCoinHover();
     this.updateGrabHighlight();
@@ -213,11 +215,13 @@ export class CoinSystem extends createSystem({}) {
     if (target) setCoinGlow(target.mesh, true);
   }
 
-  // --- coin-operated machines (snake cabinet + jukebox) ---------------------
+  // --- coin-operated slots (snake cabinet + jukebox + the fight tablets) -----
 
-  /** Insert-slot anchors, resolved once from the built scene. */
+  /** Every insert-slot anchor, resolved once from the built scene. The two
+   *  fight-hall betting tablets are included but only OFFERED while bets are
+   *  open (see slots()). */
   private slotCache: { id: string; pos: Vector3 }[] | null = null;
-  private slots(): { id: string; pos: Vector3 }[] {
+  private allSlots(): { id: string; pos: Vector3 }[] {
     if (this.slotCache) return this.slotCache;
     const refs = pub.refs;
     if (!refs) return [];
@@ -227,8 +231,28 @@ export class CoinSystem extends createSystem({}) {
     this.slotCache = [
       { id: 'snake', pos: new Vector3(refs.arcadePos[0], 1.0, refs.arcadePos[2]) },
       { id: 'jukebox', pos: juke },
+      { id: 'bet0', pos: new Vector3(FIGHT.consoles[0][0], 1.34, FIGHT.consoles[0][2]) },
+      { id: 'bet1', pos: new Vector3(FIGHT.consoles[1][0], 1.34, FIGHT.consoles[1][2]) },
     ];
     return this.slotCache;
+  }
+
+  /** True while the fight-hall tablets are taking bets (first round only). */
+  private betsOpen(): boolean {
+    const f = pub.fight;
+    return f.round === 1 && (f.phase === 'starting' || f.phase === 'fighting');
+  }
+
+  /** The slots a held coin can currently be fed into — the machines always, the
+   *  two betting tablets only when their corner is filled and bets are open. */
+  private slots(): { id: string; pos: Vector3 }[] {
+    const open = this.betsOpen();
+    const f = pub.fight;
+    return this.allSlots().filter((s) => {
+      if (s.id === 'bet0') return open && !!f.sides[0];
+      if (s.id === 'bet1') return open && !!f.sides[1];
+      return true;
+    });
   }
 
   /** The machine slot within reach of `at`, or null. */
@@ -269,7 +293,7 @@ export class CoinSystem extends createSystem({}) {
 
   // --- wrist readouts -------------------------------------------------------
 
-  private updateLocalTags(): void {
+  private updateLocalTags(delta: number): void {
     const grips = this.player.gripSpaces;
     if (!grips?.left) return;
     if (!this.localTag) {
@@ -281,7 +305,17 @@ export class CoinSystem extends createSystem({}) {
     tag.panel.mesh.position.copy(_a);
     tag.panel.mesh.position.y += 0.05;
     tag.panel.mesh.lookAt(_cam);
-    if (tag.shown !== wallet.balance) drawTag(tag, wallet.balance);
+    // Roll the displayed count toward the real balance so a credit (a banked
+    // coin, a winning bet payout) ticks up satisfyingly instead of snapping.
+    const target = wallet.balance;
+    if (this.tagDisplay < 0) {
+      this.tagDisplay = target; // first paint — no animation from zero
+    } else if (this.tagDisplay !== target) {
+      this.tagDisplay += (target - this.tagDisplay) * (1 - Math.exp(-9 * delta));
+      if (Math.abs(target - this.tagDisplay) < 0.5) this.tagDisplay = target;
+    }
+    const show = Math.round(this.tagDisplay);
+    if (tag.shown !== show) drawTag(tag, show);
   }
 
   // --- the hands: pull, hold, drop, pick up, bank ---------------------------

@@ -919,15 +919,24 @@ function buildFightHall(root: Group): {
     root.add(rim);
     fightRims.push(rim);
 
-    // Claim console: steel pedestal + angled panel, between platform and door.
+    // Claim + betting tablet: a steel kiosk between the platform and the door —
+    // claim your corner here, then it takes the crowd's round-one bets on the
+    // fighter who took it. A tapered pedestal under a slightly reclined plate,
+    // aimed with lookAt so the 90° yaw never rolls the panel (the old build set
+    // rotation.y AND rotation.x raw, which skewed it — the "wonky" tablet).
     const [px, , pz] = FIGHT.consoles[side];
-    const pedestal = new Mesh(new CylinderGeometry(0.07, 0.13, 1.0, 8), gunmetal(0.3));
-    pedestal.position.set(px, 0.5, pz);
+    const pedestal = new Mesh(new CylinderGeometry(0.08, 0.15, 1.16, 8), gunmetal(0.3));
+    pedestal.position.set(px, 0.58, pz);
     root.add(pedestal);
-    const panel = new Panel(0.62, 0.4);
-    panel.mesh.position.set(px, 1.18, pz);
-    panel.mesh.rotation.y = Math.PI / 2; // face the doorway (east)
-    panel.mesh.rotation.x = -0.35;
+    // A short collar where the plate meets the post, so it reads as one unit.
+    const collar = new Mesh(new BoxGeometry(0.34, 0.1, 0.22), darkSteel());
+    collar.position.set(px, 1.12, pz);
+    root.add(collar);
+    const panel = new Panel(0.76, 0.52);
+    panel.mesh.position.set(px, 1.34, pz);
+    // Face the approach from the door (east), reclined gently back toward a
+    // standing reader — lookAt keeps the plate square (no roll).
+    panel.mesh.lookAt(px + 2.4, 1.66, pz);
     root.add(panel.mesh);
     consolePanels.push(panel);
   }
