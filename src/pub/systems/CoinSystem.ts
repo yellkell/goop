@@ -30,9 +30,13 @@ import { bus, pub } from '../state.js';
 import { PUB, SURFACES, type Surface } from '../config.js';
 import type { PubEvent, Vec3T } from '../protocol.js';
 
-const WRIST_TOUCH = 0.13; // how close a hand must come to a wrist to pull/bank
-const COIN_GRAB = 0.2; // reach for picking a coin off the floor (forgiving, prop-like)
+const WRIST_TOUCH = 0.13; // how close a hand must come to a wrist to grab/bank
+const COIN_GRAB = 0.2; // direct touch-grab reach for a coin
 const INSERT_R = 0.7; // hold a coin roughly this close to a machine to feed it
+// Range grab — aim at a settled coin and squeeze to pull it in from afar, the
+// same forgiving cone the pints and darts use (PropSystem).
+const RANGE_GRAB_MAX = 1.0;
+const RANGE_GRAB_CONE_COS = Math.cos((30 * Math.PI) / 180);
 const COIN_R = 0.032;
 const COIN_THICK = 0.01;
 const GRAVITY = 9.8;
@@ -136,11 +140,15 @@ const _a = new Vector3();
 const _b = new Vector3();
 const _cam = new Vector3();
 const _off = new Vector3();
+const _rayO = new Vector3();
+const _rayDir = new Vector3();
+const _toCoin = new Vector3();
 const _qh = new Quaternion();
+const _qr = new Quaternion();
 
 export class CoinSystem extends createSystem({}) {
   private held: { left: HeldCoin | null; right: HeldCoin | null } = { left: null, right: null };
-  private prevTrig: { left: boolean; right: boolean } = { left: false, right: false };
+  private prevSq: { left: boolean; right: boolean } = { left: false, right: false };
   private prevHand: { left: Vector3; right: Vector3 } = { left: new Vector3(), right: new Vector3() };
   private floor = new Map<string, FloorCoin>();
   private localTag: WristTag | null = null;
@@ -262,25 +270,30 @@ export class CoinSystem extends createSystem({}) {
       grip.getWorldPosition(_a); // this hand
       const atWrist = hand === 'right' && _a.distanceTo(_b) <= WRIST_TOUCH;
 
-      const pressed = gp.getButtonPressed(InputComponent.Trigger);
-      const justDown = gp.getButtonDown(InputComponent.Trigger);
-      const justUp = this.prevTrig[hand] && !pressed;
-      this.prevTrig[hand] = pressed;
+      // Coins use the GRAB (squeeze) button, like the pints and darts.
+      const pressed = gp.getButtonPressed(InputComponent.Squeeze);
+      const justDown = gp.getButtonDown(InputComponent.Squeeze);
+      const justUp = this.prevSq[hand] && !pressed;
+      this.prevSq[hand] = pressed;
 
       const held = this.held[hand];
 
       if (justDown && !held) {
-        // Floor coin within reach takes priority over pulling a fresh one.
-        const picked = this.pickFloorCoin(_a);
-        if (picked) {
-          pubSendEvent({ e: 'COIN_TAKE', id: picked.id });
-          this.held[hand] = { mesh: picked.mesh, id: picked.id };
-        } else if (atWrist && wallet.balance > 0) {
+        if (atWrist && wallet.balance > 0) {
+          // Grab a fresh coin off your wrist.
           if (spendCoins(1)) {
             const mesh = buildCoinMesh();
             mesh.position.copy(_a);
             this.scene.add(mesh);
             this.held[hand] = { mesh, id: this.newId() };
+          }
+        } else {
+          // Everywhere else: touch-grab a coin underhand, or RANGE-grab one you
+          // aim at from up to a metre away — pints-and-darts style.
+          const picked = this.pickFloorCoin(_a) ?? this.rangeGrabCoin(hand);
+          if (picked) {
+            pubSendEvent({ e: 'COIN_TAKE', id: picked.id });
+            this.held[hand] = { mesh: picked.mesh, id: picked.id };
           }
         }
       } else if (justUp && held) {
@@ -336,6 +349,34 @@ export class CoinSystem extends createSystem({}) {
       if (d <= bestD) {
         best = coin;
         bestD = d;
+      }
+    }
+    if (best) this.floor.delete(best.id);
+    return best;
+  }
+
+  /** Range grab: the settled coin this hand is aiming at within a forgiving
+   *  cone (≤1 m), picked nearest the aim — mirrors PropSystem's range grab. */
+  private rangeGrabCoin(hand: 'left' | 'right'): FloorCoin | null {
+    const ray = this.player.raySpaces?.[hand];
+    if (!ray) return null;
+    ray.getWorldPosition(_rayO);
+    ray.getWorldQuaternion(_qr);
+    _rayDir.set(0, 0, -1).applyQuaternion(_qr).normalize();
+
+    let best: FloorCoin | null = null;
+    let bestScore = -Infinity;
+    for (const coin of this.floor.values()) {
+      if (!coin.resting) continue; // only settled coins are aim-grabbable
+      _toCoin.copy(coin.mesh.position).sub(_rayO);
+      const dist = _toCoin.length();
+      if (dist < 1e-3 || dist > RANGE_GRAB_MAX) continue;
+      const aim = _toCoin.divideScalar(dist).dot(_rayDir);
+      if (aim < RANGE_GRAB_CONE_COS) continue; // outside the aim cone
+      const score = aim - dist * 0.1; // most on-axis wins, nearer breaks ties
+      if (score > bestScore) {
+        bestScore = score;
+        best = coin;
       }
     }
     if (best) this.floor.delete(best.id);

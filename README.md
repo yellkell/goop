@@ -154,11 +154,12 @@ and three things to actually do:
   (or dart) can be CAUGHT mid-air by anyone, transferring ownership.
 - **Coins** — your bolt-dollar balance (earned in the arena) rides above your
   **left** wrist as the "$" symbol with the count over it — **private**, only
-  you see your total. Bring your right hand to that wrist and pull the trigger
+  you see your total. Bring your right hand to that wrist and **grab** (squeeze)
   to draw a coin out into it (held up at the fingertips); let go and it drops —
-  landing on whatever's beneath it, a table, a bar stool or the bar top as
-  readily as the floor — where anyone can pick it up. Carry a coin back to your
-  left wrist and release to bank it.
+  landing flat on whatever's beneath it, a table, a bar stool or the bar top as
+  readily as the floor. A loose coin is picked up like a pint or dart: touch it
+  and grab, or **range-grab** one you aim at from up to a metre away. Carry a
+  coin back to your left wrist and release to bank it.
   A coin is a bearer token — pulling debits your wallet, banking credits
   whoever's holding it — and only the physical coins are networked (relayed
   events, no server state), so a balance never crosses the wire and the room
