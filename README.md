@@ -204,9 +204,12 @@ and three things to actually do:
   on it facing your opponent), and when both corners fill the server counts
   down and the bout runs on the arena's own fireball mechanics: orbit on
   trigger, punch to throw, trigger to recall, parries, victim-ruled hits,
-  100 hp at 20 a hit. Everyone in the social space can gather round the
-  hazard line and watch (both fighters stream their fireballs live) or
-  wander back to the pub. The invisible cage is pulled in to FIVE yards from
+  100 hp at 20 a hit. It's tuned to play 1:1 with QUICK MATCH — the same
+  physics, your ball loadout (split / grow / shrink) carried in from the
+  arena, and the ring-announcer 3-2-1 countdown, which the WHOLE pub hears
+  when a match kicks off. Everyone in the social space can gather round the
+  hazard line and watch (both fighters stream their fireballs — split fans
+  and all — live) or wander back to the pub. The invisible cage is pulled in to FIVE yards from
   the platform rims (the arena uses ten) so the duel fits indoors. Leaving
   your platform mid-bout forfeits.
 
