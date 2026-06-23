@@ -47,6 +47,7 @@ import {
 } from '../../fx/fire.js';
 import { spawnDamagePopup, spawnFireImpact, spawnGestureCue, spawnPopup } from '../../fx/effects.js';
 import * as sfx from '../../audio/sfx.js';
+import { announce, preloadAnnouncer } from '../../audio/announcer.js';
 import { pulseHand } from '../../input/haptics.js';
 import { FIGHT } from '../config.js';
 import { pubSendEvent, pubSendRaw } from '../net.js';
@@ -168,6 +169,8 @@ export class FightSystem extends createSystem({}) {
    *  down here and snap to the server's value whenever a live one arrives. */
   private roundClock = 0;
   private lastServerTimer = -1;
+  /** Last countdown second spoken, so the announcer fires once per beat. */
+  private lastCountdown = -1;
   /** Throttle glove-touches so one bump pops a single GG. */
   private fistBumpCooldown = 0;
   private fistPose: [Vector3, Vector3] = [new Vector3(), new Vector3()];
@@ -175,6 +178,7 @@ export class FightSystem extends createSystem({}) {
   private hasPrevFistPose = false;
 
   init(): void {
+    preloadAnnouncer(); // decode 3/2/1/FIGHT so the countdown speaks like the arena
     // The local fighter's body: an ember (team 0) torso wearing my avatar
     // skin, exactly like the arena's PlayerBodySystem. Only the torso joins
     // the scene (my gloves are the controllers; my own head stays unseen).
@@ -410,14 +414,17 @@ export class FightSystem extends createSystem({}) {
     if (f.phase !== this.lastPhase) {
       switch (f.phase) {
         case 'starting':
-          // Open the 3-2-1: first tick now, then count down locally to the bell.
-          sfx.uiClick();
+          // Open the 3-2-1: count down locally to the bell. The announcer below
+          // speaks each beat (room-wide), exactly like the arena.
           this.roundClock = FIGHT.startCountdown;
           this.lastServerTimer = f.roundTimer;
+          this.lastCountdown = -1;
           break;
         case 'fighting':
           // Every round opens with the bell + full health + balls back at fists.
           sfx.roundBell();
+          announce('fight'); // the ring announcer, heard across the whole pub
+          this.lastCountdown = -1;
           this.myHp = FIGHT.hpMax;
           // Start the local clock at a full round; the server's live ticks (if
           // it sends them) snap it from here in update().
@@ -442,8 +449,20 @@ export class FightSystem extends createSystem({}) {
           break;
       }
       this.lastPhase = f.phase;
-    } else if (f.phase === 'starting') {
-      sfx.uiClick(); // each second of the countdown ticks over (3 → 2 → 1)
+    }
+
+    // Pre-round 3-2-1: the ring announcer speaks each beat on EVERY client in
+    // the room (the clips play non-spatially, so the whole pub hears a match
+    // kick off), not just the two fighters — driven off the server's whole-
+    // second snaps so everyone counts together.
+    if (f.phase === 'starting') {
+      const n = Math.round(f.roundTimer);
+      if (n >= 1 && n <= 3 && n !== this.lastCountdown) {
+        this.lastCountdown = n;
+        announce(String(n) as '1' | '2' | '3');
+      }
+    } else {
+      this.lastCountdown = -1;
     }
     this.renderConsoles();
     this.renderDisplay();
