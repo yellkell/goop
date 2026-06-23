@@ -36,6 +36,7 @@ import {
   type LeaderboardTab,
 } from '../net/leaderboard.js';
 import { gazette, type GazetteArticle } from '../net/gazette.js';
+import { isMusicMuted } from '../audio/menuMusic.js';
 import { PUB_MAX_PLAYERS } from '../pub/protocol.js';
 import { PUB_REGIONS } from '../pub/config.js';
 import { UI, buttonPlate, hazardStrip, plate, segmentBar, stencilFont } from '../ui/industrial.js';
@@ -54,6 +55,8 @@ export type PanelId =
   | 'coins'
   /** The little circular paper button hanging above the right panel. */
   | 'gazette'
+  /** The music mute disc, left of the paper button. */
+  | 'mute'
   /** The Gasket Gazette front page itself (opens modal over the lobby). */
   | 'news';
 
@@ -110,7 +113,9 @@ export type MenuAction =
   | `shop-pf-${number}`
   /** Open / close the Gasket Gazette. */
   | 'open-gazette'
-  | 'gazette-close';
+  | 'gazette-close'
+  /** Toggle the lobby music mute (the speaker button left of the paper). */
+  | 'toggle-mute';
 
 const PW = 512;
 const PH = 400;
@@ -1120,6 +1125,65 @@ function hitGazetteButton(u: number, v: number): MenuAction | null {
   return dx * dx + dy * dy <= 0.41 * 0.41 ? 'open-gazette' : null;
 }
 
+/** The lobby-music mute button: a steel disc with a speaker glyph, struck
+ *  through in red when muted. Matches the paper button's look (NOT glowing). */
+function drawMuteButton(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
+  ctx.clearRect(0, 0, GZ, GZ);
+  const hot = hoverAction === 'toggle-mute';
+  const muted = isMusicMuted();
+  const cx = GZ / 2;
+  const cy = GZ / 2;
+  const r = 52;
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fillStyle = hot ? 'rgba(16,18,24,0.92)' : 'rgba(9,10,14,0.82)';
+  ctx.fill();
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = hot ? UI.amber : UI.steel;
+  ctx.stroke();
+
+  const ink = muted ? UI.steel : hot ? UI.amber : UI.text;
+  ctx.fillStyle = ink;
+  ctx.strokeStyle = ink;
+  // Speaker body: a little square + a trapezoidal cone.
+  ctx.beginPath();
+  ctx.moveTo(cx - 22, cy - 9);
+  ctx.lineTo(cx - 9, cy - 9);
+  ctx.lineTo(cx + 4, cy - 20);
+  ctx.lineTo(cx + 4, cy + 20);
+  ctx.lineTo(cx - 9, cy + 9);
+  ctx.lineTo(cx - 22, cy + 9);
+  ctx.closePath();
+  ctx.fill();
+  if (!muted) {
+    // Two sound-wave arcs.
+    ctx.lineWidth = 3.5;
+    ctx.lineCap = 'round';
+    for (const rad of [12, 21]) {
+      ctx.beginPath();
+      ctx.arc(cx + 6, cy, rad, -Math.PI / 4, Math.PI / 4);
+      ctx.stroke();
+    }
+  } else {
+    // Red strike-through — sound off.
+    ctx.strokeStyle = UI.danger;
+    ctx.lineWidth = 5;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(cx + 26, cy - 22);
+    ctx.lineTo(cx - 14, cy + 22);
+    ctx.stroke();
+  }
+}
+
+/** Inside the disc → toggle mute. */
+function hitMuteButton(u: number, v: number): MenuAction | null {
+  const dx = u - 0.5;
+  const dy = v - 0.5;
+  return dx * dx + dy * dy <= 0.41 * 0.41 ? 'toggle-mute' : null;
+}
+
 const NEWS_INK = '#241c12'; // sepia newsprint ink
 const NEWS_SERIF = 'Georgia, "Times New Roman", serif';
 /** CLOSE button band on the page (canvas coords). */
@@ -1800,6 +1864,11 @@ export function createMenu(scene: Scene): Menu {
     cw: GZ,
     ch: GZ,
   });
+  // The music mute button, a twin disc just LEFT of the paper button.
+  const muteBtn = makePanel('mute', 0.16, 0.16, drawMuteButton, hitMuteButton, {
+    cw: GZ,
+    ch: GZ,
+  });
   const news = makePanel('news', 0.86, 0.86 * (NH / NW), drawNews, hitNews, { cw: NW, ch: NH });
   // The coin readout beside the paper button, and the platform shop it links to.
   const coinHud = makePanel('coins', 0.24, 0.24 * (COIN_HUD_H / COIN_HUD_W), (ctx) => drawCoinHud(ctx), () => null, {
@@ -1836,6 +1905,10 @@ export function createMenu(scene: Scene): Menu {
   // The paper button sits just above the right (info) panel, sharing its tilt.
   gazetteBtn.mesh.position.set(0.92, 1.86, -1.05);
   gazetteBtn.mesh.rotation.y = -0.48;
+  // The mute button mirrors the coin readout to the LEFT of the paper button,
+  // along the same inward-tilted arc (left → a touch further away).
+  muteBtn.mesh.position.set(0.66, 1.86, -1.16);
+  muteBtn.mesh.rotation.y = -0.48;
   // The coin readout sits just to the RIGHT of the paper button, same height +
   // tilt — symbol and balance together, as asked.
   coinHud.mesh.position.set(1.18, 1.86, -0.94);
@@ -1848,7 +1921,7 @@ export function createMenu(scene: Scene): Menu {
   news.mesh.position.set(0, 1.5, -1.16);
   news.mesh.visible = false;
 
-  const panels = [train, duel, info, board, custom, balls, gazetteBtn, coinHud, shop, news];
+  const panels = [train, duel, info, board, custom, balls, gazetteBtn, muteBtn, coinHud, shop, news];
   for (const p of panels) {
     p.redraw(null);
     group.add(p.mesh);

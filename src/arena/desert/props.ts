@@ -3,19 +3,81 @@
  * signpost, a sun-bleached cattle skull and a broken fence — just enough story.
  */
 
-import { BoxGeometry, ConeGeometry, CylinderGeometry, type Group as GroupT, Group, IcosahedronGeometry, Mesh } from 'three';
+import { BoxGeometry, CanvasTexture, ConeGeometry, CylinderGeometry, type Group as GroupT, Group, IcosahedronGeometry, Mesh, MeshStandardMaterial } from 'three';
 import { CONFIG } from './config.js';
 import { makePaper } from './paper.js';
 import { desertHeight } from './terrain.js';
 
 const P = CONFIG.palette;
 
+/** A painted directional sign face: weathered board with black "GASKET" and a
+ *  big arrow pointing the way — the Gasket Gazette's home town, thataway. */
+function gasketSignTexture(): CanvasTexture {
+  const W = 560;
+  const H = 160;
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d')!;
+  // Weathered plank base + a little grain and a routed dark border.
+  ctx.fillStyle = '#9c6a3e';
+  ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = 0.12;
+  ctx.strokeStyle = '#5a3a20';
+  ctx.lineWidth = 3;
+  for (let i = 0; i < 7; i++) {
+    const y = (i + 0.5) * (H / 7);
+    ctx.beginPath();
+    ctx.moveTo(0, y + Math.sin(i) * 4);
+    ctx.lineTo(W, y - Math.sin(i) * 4);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = '#4a2f1a';
+  ctx.lineWidth = 8;
+  ctx.strokeRect(6, 6, W - 12, H - 12);
+
+  // "GASKET" in black, stencilled bold.
+  ctx.fillStyle = '#141008';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.font = "800 96px 'Arial Narrow', Impact, system-ui, sans-serif";
+  ctx.fillText('GASKET', 34, H / 2 + 4);
+
+  // A fat arrow pointing right (the "-->" the town lies thataway).
+  const sx = 360;
+  const ex = 524;
+  const cy = H / 2 + 2;
+  ctx.strokeStyle = '#141008';
+  ctx.lineWidth = 18;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(sx, cy);
+  ctx.lineTo(ex - 22, cy);
+  ctx.stroke();
+  ctx.fillStyle = '#141008';
+  ctx.beginPath();
+  ctx.moveTo(ex, cy);
+  ctx.lineTo(ex - 46, cy - 34);
+  ctx.lineTo(ex - 46, cy + 34);
+  ctx.closePath();
+  ctx.fill();
+
+  const tex = new CanvasTexture(canvas);
+  tex.anisotropy = 4;
+  return tex;
+}
+
 function signpost(): Group {
   const g = new Group();
   const wood = makePaper(P.wood, 0.98);
   const post = new Mesh(new BoxGeometry(0.14, 2.2, 0.14), wood);
   post.position.y = 1.1;
-  const board = new Mesh(new BoxGeometry(1.4, 0.4, 0.08), makePaper('#9c6a3e', 0.98));
+  // The board now carries a painted "GASKET ->" face pointing off into the dunes.
+  const board = new Mesh(
+    new BoxGeometry(1.4, 0.4, 0.08),
+    new MeshStandardMaterial({ map: gasketSignTexture(), roughness: 0.95, metalness: 0 }),
+  );
   board.position.set(0.25, 1.8, 0);
   board.rotation.z = -0.06;
   g.add(post, board);

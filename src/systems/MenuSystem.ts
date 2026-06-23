@@ -54,6 +54,7 @@ import {
 } from '../menu/customization.js';
 import { canAfford, spendCoins } from '../menu/wallet.js';
 import { playCash, preloadCash } from '../audio/cash.js';
+import { toggleMusicMuted } from '../audio/menuMusic.js';
 import { buildBoxer, setAvatarAccent, solveTorso, type BoxerRig } from '../avatar/boxer.js';
 import {
   AVATAR_SKINS,
@@ -486,6 +487,11 @@ export class MenuSystem extends createSystem({}) {
         break;
       case 'gazette-close':
         app.gazetteOpen = false;
+        break;
+      case 'toggle-mute':
+        // Flip the lobby music (persisted) and repaint the disc's glyph.
+        toggleMusicMuted();
+        this.menu.panels.find((p) => p.id === 'mute')?.redraw(null);
         break;
       case 'open-pub':
         // Don't navigate yet — open the EU/USA region picker first.

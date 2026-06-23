@@ -31,9 +31,21 @@
  */
 
 import { createSystem, InputComponent } from '@iwsdk/core';
-import { MeshStandardMaterial, Quaternion, Vector3 } from 'three';
+import {
+  AdditiveBlending,
+  CanvasTexture,
+  DoubleSide,
+  Group,
+  Mesh,
+  MeshBasicMaterial,
+  MeshStandardMaterial,
+  PlaneGeometry,
+  Quaternion,
+  RepeatWrapping,
+  Vector3,
+} from 'three';
 import type { XROrigin } from '@iwsdk/xr-input';
-import { ATTACH, BODY_IK, FIREBALL, NET, teamColor } from '../../config.js';
+import { ATTACH, BODY_IK, BOUNDARY, FIREBALL, NET, OCTAGON_VERTICES, PALETTE, teamColor } from '../../config.js';
 import { buildBoxer, solveTorso, type BoxerRig } from '../../avatar/boxer.js';
 import { applyAvatarSkin, platformSkin } from '../../avatar/skins.js';
 import { customization, myAvatarSkin } from '../../menu/customization.js';
@@ -200,6 +212,41 @@ const _myFist = new Vector3();
 const _oppFist = new Vector3();
 const _ggMid = new Vector3();
 const _ggLift = new Vector3();
+const _rimLocal = new Vector3();
+
+/** One octagon-edge wall of the rim barrier (local to the platform group). */
+interface RimEdge {
+  ax: number;
+  az: number;
+  nx: number;
+  nz: number;
+  mat: MeshBasicMaterial;
+  glow: number;
+}
+
+/** Soft grid texture for the rim-barrier panels (same as the arena guardian). */
+function rimGridTexture(): CanvasTexture {
+  const S = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = S;
+  const ctx = canvas.getContext('2d')!;
+  ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+  ctx.lineWidth = 2;
+  for (let i = 0; i <= 4; i++) {
+    const p = (i / 4) * S;
+    ctx.beginPath();
+    ctx.moveTo(p, 0);
+    ctx.lineTo(p, S);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0, p);
+    ctx.lineTo(S, p);
+    ctx.stroke();
+  }
+  const tex = new CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = RepeatWrapping;
+  return tex;
+}
 
 export class FightSystem extends createSystem({}) {
   private time = 0;
@@ -247,6 +294,11 @@ export class FightSystem extends createSystem({}) {
   private betSettled = false;
   /** Per-tablet redraw guard (skip the canvas re-paint when nothing changed). */
   private consoleKey: [string, string] = ['', ''];
+  /** The rim barrier (the arena's guardian, ported): grid walls around MY
+   *  platform that glow as my head nears the edge — the forfeit warning. */
+  private rimGroup: Group | null = null;
+  private rimEdges: RimEdge[] = [];
+  private rimSide: -1 | 0 | 1 = -1;
 
   init(): void {
     preloadAnnouncer(); // decode 3/2/1/FIGHT so the countdown speaks like the arena
@@ -413,6 +465,88 @@ export class FightSystem extends createSystem({}) {
     });
   }
 
+  /** Build the eight octagon-edge barrier walls once (local to a platform-sized
+   *  group we then reposition onto whichever corner I'm fighting from). */
+  private buildRimBarrier(): void {
+    const group = new Group();
+    group.name = 'pub-rim-barrier';
+    group.visible = false;
+    const tex = rimGridTexture();
+    const n = OCTAGON_VERTICES.length;
+    for (let i = 0; i < n; i++) {
+      const [ax, az] = OCTAGON_VERTICES[i];
+      const [bx, bz] = OCTAGON_VERTICES[(i + 1) % n];
+      const dx = bx - ax;
+      const dz = bz - az;
+      const len = Math.hypot(dx, dz);
+      let nx = -dz / len;
+      let nz = dx / len;
+      const midx = (ax + bx) / 2;
+      const midz = (az + bz) / 2;
+      if (nx * midx + nz * midz < 0) {
+        nx = -nx;
+        nz = -nz;
+      }
+      const mat = new MeshBasicMaterial({
+        map: tex,
+        color: PALETTE.ember,
+        transparent: true,
+        opacity: 0,
+        side: DoubleSide,
+        blending: AdditiveBlending,
+        depthWrite: false,
+      });
+      mat.map!.repeat.set(Math.max(1, Math.round(len * 3)), Math.round(BOUNDARY.wallHeight * 3));
+      const mesh = new Mesh(new PlaneGeometry(len, BOUNDARY.wallHeight), mat);
+      mesh.position.set(midx, BOUNDARY.wallHeight / 2, midz);
+      mesh.rotation.y = -Math.atan2(dz, dx);
+      group.add(mesh);
+      this.rimEdges.push({ ax, az, nx, nz, mat, glow: 0 });
+    }
+    this.scene.add(group);
+    this.rimGroup = group;
+  }
+
+  /** Glow MY platform's rim walls as my head nears the edge (red once I've
+   *  leant out past it — the last warning before leaving forfeits). Local
+   *  only, exactly like the arena guardian: spectators see no barrier. */
+  private updateRimBarrier(delta: number): void {
+    if (!this.rimGroup) this.buildRimBarrier();
+    const group = this.rimGroup!;
+    const f = pub.fight;
+    const side = this.mySide();
+    const show =
+      side !== -1 && pub.online && (f.phase === 'starting' || f.phase === 'fighting' || f.phase === 'roundOver');
+    group.visible = show;
+    if (!show) {
+      this.rimSide = -1;
+      for (const e of this.rimEdges) {
+        e.glow = 0;
+        e.mat.opacity = 0;
+      }
+      return;
+    }
+    if (this.rimSide !== side) {
+      this.rimSide = side as 0 | 1;
+      const z = side === 0 ? FIGHT.platformZ : -FIGHT.platformZ;
+      group.position.set(FIGHT.centerX, -FIGHT.pitDepth, z);
+      group.rotation.y = side === 0 ? 0 : Math.PI; // match the slab's facing
+      group.updateMatrixWorld();
+    }
+    this.player.head.getWorldPosition(_rimLocal);
+    group.worldToLocal(_rimLocal); // head in platform-local space
+    let outside = false;
+    for (const e of this.rimEdges) {
+      const d = (_rimLocal.x - e.ax) * e.nx + (_rimLocal.z - e.az) * e.nz;
+      const target = d > -BOUNDARY.warnDistance ? Math.min(1, 1 + d / BOUNDARY.warnDistance) * 0.6 + 0.08 : 0;
+      e.glow += (target - e.glow) * Math.min(1, delta * 8);
+      e.mat.opacity = e.glow;
+      if (d > BOUNDARY.graceDepth) outside = true;
+    }
+    const hex = outside ? PALETTE.danger : PALETTE.ember;
+    for (const e of this.rimEdges) e.mat.color.setHex(hex);
+  }
+
   update(delta: number): void {
     this.time += delta;
     this.consoleCooldown = Math.max(0, this.consoleCooldown - delta);
@@ -422,6 +556,7 @@ export class FightSystem extends createSystem({}) {
     this.checkConsoles();
     this.dressRims();
     this.renderConsoles(); // cheap — the key guard skips the redraw unless it changed
+    this.updateRimBarrier(delta); // my platform's guardian walls (forfeit warning)
 
     const f = pub.fight;
     const fighting = f.phase === 'fighting';

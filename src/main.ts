@@ -13,6 +13,7 @@
 import { launchXR, SessionMode, World } from '@iwsdk/core';
 import { initLeaderboard } from './net/leaderboard.js';
 import { initGazette } from './net/gazette.js';
+import { enterMenuMusic } from './audio/menuMusic.js';
 import { buildArena } from './arena/arena.js';
 import { setupEnvironment } from './arena/environment.js';
 import { setupCombatants } from './combat/setup.js';
@@ -113,6 +114,7 @@ World.create(container, {
     enterVrButton.removeAttribute('disabled');
     enterVrButton.addEventListener('click', () => {
       enterVrButton.setAttribute('disabled', '');
+      enterMenuMusic(); // lobby music (unless muted last time) — within the gesture
       launchXR(world, { sessionMode: SessionMode.ImmersiveAR });
 
       const watchForSession = () => {
