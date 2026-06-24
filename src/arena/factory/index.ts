@@ -122,8 +122,7 @@ function corrugatedTexture(): CanvasTexture {
   return tex;
 }
 
-/** Hand-painted "GASKET" stencilled on a crate face — jittered, brush-edged
- *  letters off a fixed seed so it reads daubed-on, not typeset. */
+/** "GASKET" stencilled cleanly on a crate face — readable shipping-stencil type. */
 function gasketCrateTexture(): CanvasTexture {
   const W = 256, H = 256;
   const c = document.createElement('canvas');
@@ -136,29 +135,14 @@ function gasketCrateTexture(): CanvasTexture {
   ctx.lineWidth = 3;
   for (let i = 1; i < 4; i++) { ctx.beginPath(); ctx.moveTo(0, (i / 4) * H); ctx.lineTo(W, (i / 4) * H); ctx.stroke(); }
   ctx.strokeRect(5, 5, W - 10, H - 10);
-  // hand-painted GASKET, two short rows so it fills the crate
-  let s = 7;
-  const r = (): number => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; };
+  // clean black shipping stencil, centred and fitted to the crate
   ctx.fillStyle = '#16100a';
-  ctx.strokeStyle = '#16100a';
-  ctx.lineJoin = 'round';
-  ctx.lineWidth = 2;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const word = 'GASKET';
-  let x = 26;
-  for (const ch of word) {
-    const px = 40 + Math.round((r() - 0.5) * 8);
-    ctx.font = `italic 800 ${px}px 'Arial Narrow', Impact, sans-serif`;
-    const cw = ctx.measureText(ch).width;
-    ctx.save();
-    ctx.translate(x + cw / 2, H / 2 + (r() - 0.5) * 10);
-    ctx.rotate((r() - 0.5) * 0.18);
-    ctx.fillText(ch, 0, 0);
-    ctx.strokeText(ch, 0, 0);
-    ctx.restore();
-    x += cw + 2 + (r() - 0.5) * 4;
-  }
+  let px = 56;
+  ctx.font = `900 ${px}px 'Arial Narrow', Impact, sans-serif`;
+  while (ctx.measureText('GASKET').width > W - 36 && px > 20) { px -= 2; ctx.font = `900 ${px}px 'Arial Narrow', Impact, sans-serif`; }
+  ctx.fillText('GASKET', W / 2, H / 2);
   const tex = new CanvasTexture(c);
   tex.colorSpace = SRGBColorSpace;
   tex.anisotropy = 4;
@@ -169,7 +153,6 @@ function gasketCrateTexture(): CanvasTexture {
 
 const steel = (color: number, rough = 0.6): MeshStandardMaterial =>
   new MeshStandardMaterial({ color, metalness: 0.85, roughness: rough });
-const rusty = (): MeshStandardMaterial => new MeshStandardMaterial({ color: 0x6e5038, metalness: 0.5, roughness: 0.85 });
 
 function skyDome(): Mesh {
   const mat = new ShaderMaterial({
@@ -201,8 +184,8 @@ function wall(root: Group, mat: MeshStandardMaterial, len: number, cx: number, c
     root.add(m);
     return;
   }
-  const sillH = 1.2;
-  const winH = 2.6;
+  const sillH = 2.7; // higher window strip — sits well above eye level
+  const winH = 2.3;
   const topH = h - sillH - winH;
   const band = (bh: number, by: number): void => {
     const m = new Mesh(new PlaneGeometry(len, bh), mat);
@@ -338,35 +321,103 @@ export function buildFactory(): Factory {
     }
   }
 
-  // Deliberate, tidy clutter in the FAR corners only — never strewn about.
-  const tank = (x: number, z: number, r: number, hgt: number): void => {
-    const t = new Mesh(new CylinderGeometry(r, r, hgt, 16), rusty());
-    t.position.set(x, FLOOR_Y + hgt / 2, z);
-    root.add(t);
-    const cap = new Mesh(new SphereGeometry(r, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), rusty());
-    cap.position.set(x, FLOOR_Y + hgt, z);
-    root.add(cap);
-  };
-  tank(HALL.minX + 2.2, HALL.minZ + 2.6, 1.3, 4);
-  tank(HALL.minX + 5.2, HALL.minZ + 2.4, 1.0, 3);
-  // A neat stack of GASKET crates against the closed far wall.
   const crateMat = new MeshStandardMaterial({ map: gasketCrateTexture(), roughness: 0.9 });
+
+  // CONVEYOR BELTS — idle lines threading the hall, one carrying a GASKET crate.
+  const frameMat = steel(0x4a4d53, 0.6);
+  const beltMat = new MeshStandardMaterial({ color: 0x1b1c1f, roughness: 0.85 });
+  const conveyor = (cx: number, cz: number, len: number, ry: number, withBox: boolean): void => {
+    const g = new Group();
+    g.position.set(cx, FLOOR_Y, cz);
+    g.rotation.y = ry;
+    const top = 0.95;
+    for (const s of [-1, 1]) {
+      const fr = new Mesh(new BoxGeometry(len, 0.13, 0.06), frameMat);
+      fr.position.set(0, top, s * 0.33);
+      g.add(fr);
+    }
+    const belt = new Mesh(new BoxGeometry(len - 0.24, 0.05, 0.58), beltMat);
+    belt.position.set(0, top + 0.04, 0);
+    g.add(belt);
+    for (const ex of [-len / 2 + 0.12, len / 2 - 0.12]) {
+      const roll = new Mesh(new CylinderGeometry(0.12, 0.12, 0.72, 12), steel(0x6a6e75, 0.5));
+      roll.rotation.x = Math.PI / 2;
+      roll.position.set(ex, top, 0);
+      g.add(roll);
+    }
+    for (let lx = -len / 2 + 0.5; lx <= len / 2 - 0.4; lx += 1.7) {
+      for (const s of [-1, 1]) {
+        const leg = new Mesh(new BoxGeometry(0.08, top, 0.08), frameMat);
+        leg.position.set(lx, top / 2, s * 0.3);
+        g.add(leg);
+      }
+    }
+    if (withBox) {
+      const b = new Mesh(new BoxGeometry(0.52, 0.52, 0.52), crateMat);
+      b.position.set(len * 0.12, top + 0.04 + 0.28, 0);
+      g.add(b);
+    }
+    root.add(g);
+  };
+  conveyor(-4.5, HALL.minZ + 3.2, 6, 0, true); // across the back, carrying a crate
+  conveyor(HALL.minX + 2.6, CENTRE_Z + 6.5, 6.5, Math.PI / 2, false); // down the west side
+
+  // A neat stack of GASKET crates + a couple of drums in the WEST far corner.
   const crate = (x: number, y: number, z: number, sz: number): void => {
     const box = new Mesh(new BoxGeometry(sz, sz, sz), crateMat);
     box.position.set(x, FLOOR_Y + y + sz / 2, z);
-    box.rotation.y = (rnd() - 0.5) * 0.12;
+    box.rotation.y = (rnd() - 0.5) * 0.1;
     root.add(box);
   };
-  const cbx = HALL.maxX - 2.4;
-  crate(cbx, 0, HALL.minZ + 1.6, 0.8);
+  const cbx = HALL.minX + 2.6;
+  crate(cbx, 0, HALL.minZ + 1.7, 0.8);
   crate(cbx + 0.95, 0, HALL.minZ + 1.7, 0.8);
-  crate(cbx + 0.4, 0.8, HALL.minZ + 1.6, 0.8);
-  crate(cbx - 0.9, 0, HALL.minZ + 1.5, 0.7);
-  // A couple of steel drums beside them (rusty/blue — no lone green tubes).
-  for (const [dx, dz, col] of [[cbx + 1.9, HALL.minZ + 1.4, 0x7a4a2a], [cbx + 2.4, HALL.minZ + 2.1, 0x355a78]] as const) {
+  crate(cbx + 0.45, 0.8, HALL.minZ + 1.7, 0.8);
+  for (const [dx, dz, col] of [[cbx + 1.9, HALL.minZ + 1.5, 0x7a4a2a], [cbx + 2.5, HALL.minZ + 2.2, 0x355a78]] as const) {
     const drum = new Mesh(new CylinderGeometry(0.3, 0.3, 0.9, 14), steel(col, 0.8));
     drum.position.set(dx, FLOOR_Y + 0.45, dz);
     root.add(drum);
+  }
+
+  // RAISED WALKWAY along the FAR (north) wall — NOT the windowed east side — a
+  // catwalk on posts with a handrail and a ladder up, adding height to the hall.
+  const deckY = 3.6;
+  const wlMinX = HALL.minX + 2.5, wlMaxX = HALL.maxX - 2.5;
+  const wlLen = wlMaxX - wlMinX;
+  const wlMidX = (wlMinX + wlMaxX) / 2;
+  const wlZ = HALL.minZ + 1.4;
+  const grating = steel(0x44474d, 0.7);
+  const deck = new Mesh(new BoxGeometry(wlLen, 0.1, 1.3), grating);
+  deck.position.set(wlMidX, FLOOR_Y + deckY, wlZ);
+  root.add(deck);
+  for (let x = wlMinX + 1; x <= wlMaxX - 1; x += 3) {
+    const post = new Mesh(new BoxGeometry(0.13, deckY, 0.13), grating);
+    post.position.set(x, FLOOR_Y + deckY / 2, wlZ + 0.5);
+    root.add(post);
+  }
+  // front handrail: top rail, mid rail, balusters
+  const railZ = wlZ + 0.62;
+  for (const ry of [1.0, 0.5]) {
+    const rail = new Mesh(new BoxGeometry(wlLen, 0.06, 0.06), grating);
+    rail.position.set(wlMidX, FLOOR_Y + deckY + ry, railZ);
+    root.add(rail);
+  }
+  for (let x = wlMinX; x <= wlMaxX; x += 1.3) {
+    const bal = new Mesh(new BoxGeometry(0.04, 1.0, 0.04), grating);
+    bal.position.set(x, FLOOR_Y + deckY + 0.5, railZ);
+    root.add(bal);
+  }
+  // ladder up at the east end of the catwalk (still on the far wall)
+  const ladX = wlMaxX - 0.5;
+  for (const s of [-1, 1]) {
+    const sideRail = new Mesh(new BoxGeometry(0.05, deckY, 0.05), grating);
+    sideRail.position.set(ladX + s * 0.22, FLOOR_Y + deckY / 2, railZ + 0.25);
+    root.add(sideRail);
+  }
+  for (let y = 0.3; y < deckY; y += 0.32) {
+    const rung = new Mesh(new BoxGeometry(0.48, 0.04, 0.04), grating);
+    rung.position.set(ladX, FLOOR_Y + y, railZ + 0.25);
+    root.add(rung);
   }
 
   // Work lamps over the action + a couple deep in the hall.
@@ -381,7 +432,7 @@ export function buildFactory(): Factory {
   const bird = makeVulture(rnd);
   root.add(bird.obj);
   const dihedral = bird.wings[0].rotation.z;
-  const BIRD = { cx: HALL.maxX + 11, cz: CENTRE_Z, r: 7, y: FLOOR_Y + 2.7 };
+  const BIRD = { cx: HALL.maxX + 30, cz: CENTRE_Z, r: 10, y: FLOOR_Y + 8.6 };
 
   return {
     root,
