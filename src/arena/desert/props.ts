@@ -13,8 +13,8 @@ const P = CONFIG.palette;
 /** A painted directional sign face: weathered board with black "GASKET" and a
  *  big arrow pointing the way — the Gasket Gazette's home town, thataway. */
 function gasketSignTexture(): CanvasTexture {
-  const W = 560;
-  const H = 160;
+  const W = 600;
+  const H = 170;
   const canvas = document.createElement('canvas');
   canvas.width = W;
   canvas.height = H;
@@ -37,29 +37,32 @@ function gasketSignTexture(): CanvasTexture {
   ctx.lineWidth = 8;
   ctx.strokeRect(6, 6, W - 12, H - 12);
 
-  // "GASKET" in black, stencilled bold.
+  // "GASKET" in black, stencilled bold, hard against the left so it clears the
+  // arrow. Measure it so the arrow always starts past the last letter.
   ctx.fillStyle = '#141008';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   ctx.font = "800 96px 'Arial Narrow', Impact, system-ui, sans-serif";
-  ctx.fillText('GASKET', 34, H / 2 + 4);
+  const tx = 30;
+  ctx.fillText('GASKET', tx, H / 2 + 2);
+  const textEnd = tx + ctx.measureText('GASKET').width;
 
-  // A fat arrow pointing right (the "-->" the town lies thataway).
-  const sx = 360;
-  const ex = 524;
+  // A fat arrow pointing right, with a clear gap after the word.
+  const sx = Math.min(textEnd + 44, W - 150);
+  const ex = W - 26;
   const cy = H / 2 + 2;
   ctx.strokeStyle = '#141008';
   ctx.lineWidth = 18;
   ctx.lineCap = 'round';
   ctx.beginPath();
   ctx.moveTo(sx, cy);
-  ctx.lineTo(ex - 22, cy);
+  ctx.lineTo(ex - 24, cy);
   ctx.stroke();
   ctx.fillStyle = '#141008';
   ctx.beginPath();
   ctx.moveTo(ex, cy);
-  ctx.lineTo(ex - 46, cy - 34);
-  ctx.lineTo(ex - 46, cy + 34);
+  ctx.lineTo(ex - 48, cy - 36);
+  ctx.lineTo(ex - 48, cy + 36);
   ctx.closePath();
   ctx.fill();
 
@@ -71,14 +74,15 @@ function gasketSignTexture(): CanvasTexture {
 function signpost(): Group {
   const g = new Group();
   const wood = makePaper(P.wood, 0.98);
+  // The post stands BEHIND the board (negative z) so it never crosses the
+  // painted face — it used to sit in front and hide the first letters.
   const post = new Mesh(new BoxGeometry(0.14, 2.2, 0.14), wood);
-  post.position.y = 1.1;
-  // The board now carries a painted "GASKET ->" face pointing off into the dunes.
+  post.position.set(-0.05, 1.1, -0.12);
   const board = new Mesh(
-    new BoxGeometry(1.4, 0.4, 0.08),
+    new BoxGeometry(1.5, 0.42, 0.07),
     new MeshStandardMaterial({ map: gasketSignTexture(), roughness: 0.95, metalness: 0 }),
   );
-  board.position.set(0.25, 1.8, 0);
+  board.position.set(0.32, 1.8, 0);
   board.rotation.z = -0.06;
   g.add(post, board);
   g.rotation.z = 0.05;
