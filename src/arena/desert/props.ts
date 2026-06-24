@@ -37,34 +37,56 @@ function gasketSignTexture(): CanvasTexture {
   ctx.lineWidth = 8;
   ctx.strokeRect(6, 6, W - 12, H - 12);
 
-  // "GASKET" in black, stencilled bold, hard against the left so it clears the
-  // arrow. Measure it so the arrow always starts past the last letter.
+  // "Gasket" hand-PAINTED: a casual script with each letter nudged, tilted and
+  // resized a touch off a fixed seed, brush-edged (fill + soft round stroke), so
+  // it reads as daubed on by hand rather than typeset. Measure as we go so the
+  // arrow always starts clear of the last letter.
+  let seed = 9;
+  const rnd = (): number => {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    return seed / 0x7fffffff;
+  };
+  const word = 'Gasket';
   ctx.fillStyle = '#141008';
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'middle';
-  ctx.font = "800 96px 'Arial Narrow', Impact, system-ui, sans-serif";
-  const tx = 30;
-  ctx.fillText('GASKET', tx, H / 2 + 2);
-  const textEnd = tx + ctx.measureText('GASKET').width;
-
-  // A fat arrow pointing right, with a clear gap after the word.
-  const sx = Math.min(textEnd + 44, W - 150);
-  const ex = W - 26;
-  const cy = H / 2 + 2;
   ctx.strokeStyle = '#141008';
-  ctx.lineWidth = 18;
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 2.5;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const baseY = H / 2 + 4;
+  let x = 40;
+  for (const ch of word) {
+    const px = 86 + Math.round((rnd() - 0.5) * 14); // slightly uneven sizes
+    ctx.font = `italic 700 ${px}px 'Brush Script MT', 'Segoe Script', 'Comic Sans MS', cursive`;
+    const w = ctx.measureText(ch).width;
+    ctx.save();
+    ctx.translate(x + w / 2, baseY + (rnd() - 0.5) * 12);
+    ctx.rotate((rnd() - 0.5) * 0.16); // hand-tilt each glyph
+    ctx.fillText(ch, 0, 0);
+    ctx.strokeText(ch, 0, 0); // brushy edge thickening
+    ctx.restore();
+    x += w + 4 + (rnd() - 0.5) * 6;
+  }
+  const textEnd = x;
+
+  // A hand-drawn arrow pointing right: a slightly bowed shaft + a rough head.
+  const sx = Math.min(textEnd + 30, W - 140);
+  const ex = W - 26;
+  const cy = H / 2 + 6;
   ctx.lineCap = 'round';
+  ctx.lineWidth = 15;
   ctx.beginPath();
-  ctx.moveTo(sx, cy);
-  ctx.lineTo(ex - 24, cy);
+  ctx.moveTo(sx, cy + 4);
+  ctx.quadraticCurveTo((sx + ex) / 2, cy - 8, ex - 20, cy); // gentle bow
   ctx.stroke();
-  ctx.fillStyle = '#141008';
+  // Two strokes for the head, drawn like a quick hand flick (not a filled wedge).
+  ctx.lineWidth = 14;
   ctx.beginPath();
   ctx.moveTo(ex, cy);
-  ctx.lineTo(ex - 48, cy - 36);
-  ctx.lineTo(ex - 48, cy + 36);
-  ctx.closePath();
-  ctx.fill();
+  ctx.lineTo(ex - 44, cy - 30);
+  ctx.moveTo(ex, cy);
+  ctx.lineTo(ex - 40, cy + 34);
+  ctx.stroke();
 
   const tex = new CanvasTexture(canvas);
   tex.anisotropy = 4;
