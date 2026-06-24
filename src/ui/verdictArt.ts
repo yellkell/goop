@@ -1,10 +1,11 @@
 /**
- * Match-verdict art — the hand-made neon-metal KO / KO'D / WIN plates
+ * Match-verdict art — the hand-made neon-metal KNOCKOUT / WIN plates
  * (src/assets/verdict) that replace the stencilled verdict text on the centre
  * scoreboard. Same load-and-decode pattern as the countdown art: Vite bundles
  * each PNG to a hashed URL, the images decode on import, and the scoreboard
  * gets the right plate for a verdict once it's ready (null until then, or for
- * a verdict with no art).
+ * a verdict with no art). Only the *winner* ever sees a plate — there is no
+ * loser-side KO'D plate; a knockout loss shows nothing at all.
  */
 
 const modules = import.meta.glob('../assets/verdict/*.png', {
@@ -22,10 +23,10 @@ for (const [path, url] of Object.entries(modules)) {
 }
 
 /** Map a centre-board verdict to its art key, or null if it has none. WIN art
- *  covers both a round win and the match-clinching YOU WIN. */
+ *  covers both a round win and the match-clinching YOU WIN. There is no KO'D
+ *  art — a knockout loss is suppressed upstream, so it never reaches here. */
 function keyFor(message: string): string | null {
   if (message === 'KO') return 'ko';
-  if (message === "KO'D") return 'kod';
   if (message === 'WIN' || message === 'YOU WIN') return 'win';
   return null;
 }

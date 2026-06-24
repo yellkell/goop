@@ -386,10 +386,12 @@ export function createScoreboard(scene: Scene): Scoreboard {
       setBoard(right, enemies[0]);
       setBoard(extraRightA, enemies[1]);
       setBoard(extraRightB, enemies[2]);
-      // The loser gets no verdict popup — a plain LOSS / YOU LOSE shows nothing
-      // (the winner still sees WIN). A knockout still flashes KO'D, since that's
-      // the dramatic beat and it has its own plate.
-      const verdict = state.message === 'LOSS' || state.message === 'YOU LOSE' ? '' : state.message;
+      // The loser gets no verdict popup — a plain LOSS / YOU LOSE shows nothing,
+      // and a knockout loss (KO'D) is suppressed the same way: only the winner
+      // ever sees a verdict plate (WIN, or the dramatic KNOCKOUT). The KO'D token
+      // still rides the wire so a guest who lands the KO flips it back to KO.
+      const verdict =
+        state.message === 'LOSS' || state.message === 'YOU LOSE' || state.message === "KO'D" ? '' : state.message;
       drawCentre(verdict, '');
       animateVerdict(verdict);
     },
