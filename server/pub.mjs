@@ -291,7 +291,7 @@ function boardRows() {
 
 function playerNet(id) {
   const p = players.get(id);
-  return { id, name: p.name, accent: p.accent, av: p.av, pf: p.pf, avc: p.avc, head: p.head, left: p.left, right: p.right };
+  return { id, name: p.name, accent: p.accent, av: p.av, pf: p.pf, avc: p.avc, avl: p.avl, head: p.head, left: p.left, right: p.right };
 }
 
 function releaseSnake(id) {
@@ -463,6 +463,7 @@ wss.on('connection', (ws, req) => {
         av: String(msg.av || '').slice(0, 16),
         pf: String(msg.pf || '').slice(0, 16),
         avc: Number.isFinite(msg.avc) ? msg.avc : -1, // custom armour hue (0..1) or -1
+        avl: Number.isFinite(msg.avl) ? msg.avl : 0.5, // custom armour lightness (0..1)
         head: ZERO_POSE,
         left: ZERO_POSE,
         right: ZERO_POSE,

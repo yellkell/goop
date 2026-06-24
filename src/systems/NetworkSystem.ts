@@ -88,6 +88,7 @@ export class NetworkSystem extends createSystem({
         av: customization.avatar,
         pf: customization.platform,
         avc: customization.colorHue,
+        avl: customization.colorLight,
       });
     }
 
@@ -146,7 +147,7 @@ export class NetworkSystem extends createSystem({
         (gp?.getButtonPressed(InputComponent.Trigger) ?? false);
     }
 
-    net.send({ k: 'pose', head: headPose, left: hands[0], right: hands[1], orbit, fist, hp: this.myHp, acc: app.accentHue });
+    net.send({ k: 'pose', head: headPose, left: hands[0], right: hands[1], orbit, fist, hp: this.myHp, acc: app.accentHue, acl: app.accentLight });
   }
 
   // --- incoming ------------------------------------------------------------
@@ -168,6 +169,7 @@ export class NetworkSystem extends createSystem({
         opponent.fisting[0] = msg.fist?.[0] ?? false;
         opponent.fisting[1] = msg.fist?.[1] ?? false;
         if (typeof msg.acc === 'number') opponent.accentHue = msg.acc;
+        if (typeof msg.acl === 'number') opponent.accentLight = msg.acl;
         this.setTheirHp(msg.hp);
         target.fresh = true;
         break;
@@ -243,6 +245,7 @@ export class NetworkSystem extends createSystem({
         rival.avatarSkin = msg.av ?? '';
         rival.platformSkin = msg.pf ?? '';
         rival.avColor = typeof msg.avc === 'number' ? msg.avc : -1;
+        rival.avLight = typeof msg.avl === 'number' ? msg.avl : 0.5;
         break;
       case 'state':
         if (app.side === 1) this.applyHostState(msg);

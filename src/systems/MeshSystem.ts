@@ -192,7 +192,7 @@ export class MeshSystem extends createSystem({
         (gp?.getButtonPressed(InputComponent.Trigger) ?? false);
     }
 
-    mesh.send({ k: 'pose', head: headPose, left: hands[0], right: hands[1], orbit, fist, hp: this.myHp(), acc: app.accentHue });
+    mesh.send({ k: 'pose', head: headPose, left: hands[0], right: hands[1], orbit, fist, hp: this.myHp(), acc: app.accentHue, acl: app.accentLight });
   }
 
   /** HOST → guests: the authoritative match state on a cadence + on resets. */
@@ -244,6 +244,7 @@ export class MeshSystem extends createSystem({
         pose.fisting[0] = msg.fist?.[0] ?? false;
         pose.fisting[1] = msg.fist?.[1] ?? false;
         if (typeof msg.acc === 'number') pose.accentHue = msg.acc;
+        if (typeof msg.acl === 'number') pose.accentLight = msg.acl;
         this.setHp(localIdx, msg.hp);
         t.fresh = true;
         break;

@@ -434,10 +434,11 @@ export function modeTeams(mode: ArcadeMode): number[] {
  * accents. Saturation/lightness are fixed to the ember vibe, so the default
  * hue (≈0.07) reproduces the classic orange — see DEFAULT_ACCENT_HUE.
  */
-export function hueToColor(hue: number): number {
+export function hueToColor(hue: number, light = 0.5): number {
   const h = (((hue % 1) + 1) % 1) * 6;
   const s = 1;
-  const l = 0.55;
+  // light 0..1 (0.5 = neutral) walks the neon's lightness from murky to bright.
+  const l = Math.max(0.2, Math.min(0.9, 0.55 + (light - 0.5) * 0.6));
   const c = (1 - Math.abs(2 * l - 1)) * s;
   const x = c * (1 - Math.abs((h % 2) - 1));
   const m = l - c / 2;

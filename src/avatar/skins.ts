@@ -105,26 +105,29 @@ export function platformSkin(id: string): PlatformSkin {
  * body, a darker trim, and a vivid accent — so one colour repaints the WHOLE
  * suit yet still reads as forged metal lit from within, not a flat fill.
  */
-export function colorPalette(hue: number): { chassis: number; trim: number; accent: number } {
+export function colorPalette(hue: number, light = 0.5): { chassis: number; trim: number; accent: number } {
   const h = ((hue % 1) + 1) % 1;
+  // light 0..1 (0.5 = neutral) shifts every tone's HSL lightness up or down.
+  const dl = (light - 0.5) * 0.7;
+  const cl = (l: number): number => Math.max(0.03, Math.min(0.95, l + dl));
   return {
-    chassis: new Color().setHSL(h, 0.5, 0.16).getHex(),
-    trim: new Color().setHSL(h, 0.45, 0.08).getHex(),
-    accent: new Color().setHSL(h, 0.9, 0.56).getHex(),
+    chassis: new Color().setHSL(h, 0.5, cl(0.16)).getHex(),
+    trim: new Color().setHSL(h, 0.45, cl(0.08)).getHex(),
+    accent: new Color().setHSL(h, 0.9, cl(0.56)).getHex(),
   };
 }
 
-/** A skin recoloured to a custom hue — keeps the SHAPE (id/name/slim), repaints
- *  the whole armour. */
-export function tintSkin(base: AvatarSkin, hue: number): AvatarSkin {
-  return { ...base, ...colorPalette(hue) };
+/** A skin recoloured to a custom hue + lightness — keeps the SHAPE
+ *  (id/name/slim), repaints the whole armour. */
+export function tintSkin(base: AvatarSkin, hue: number, light = 0.5): AvatarSkin {
+  return { ...base, ...colorPalette(hue, light) };
 }
 
 /** The skin to actually wear: the chosen shape, recoloured to `hue` when one is
  *  set (hue < 0 keeps the shape's own default palette). */
-export function resolveAvatarSkin(id: string, hue: number): AvatarSkin {
+export function resolveAvatarSkin(id: string, hue: number, light = 0.5): AvatarSkin {
   const base = avatarSkin(id);
-  return hue >= 0 && !base.locked ? tintSkin(base, hue) : base;
+  return hue >= 0 && !base.locked ? tintSkin(base, hue, light) : base;
 }
 
 const _white = new Color(0xffffff);

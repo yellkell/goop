@@ -128,7 +128,7 @@ export class OpponentSystem extends createSystem({
       const want = dead
         ? DEAD_GREY
         : app.mode === 'net' && slot === 1 && pose.accentHue >= 0
-          ? hueToColor(pose.accentHue)
+          ? hueToColor(pose.accentHue, pose.accentLight)
           : teamColor(team);
       if (want !== r.accentColor) {
         r.accentColor = want;
@@ -195,7 +195,7 @@ export class OpponentSystem extends createSystem({
     // applied below, so teams stay readable); the rival wears their own; 1v1
     // and the default keep the house look.
     let av: AvatarSkin;
-    if (net && rival.avatarSkin) av = resolveAvatarSkin(rival.avatarSkin, rival.avColor);
+    if (net && rival.avatarSkin) av = resolveAvatarSkin(rival.avatarSkin, rival.avColor, rival.avLight);
     else if (app.mode !== 'net' && app.arcade !== '1v1') {
       r.botSkin ??= AVATAR_SKINS[Math.floor(Math.random() * AVATAR_SKINS.length)];
       av = r.botSkin;

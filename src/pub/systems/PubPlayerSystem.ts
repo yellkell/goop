@@ -235,7 +235,11 @@ export class PubPlayerSystem extends createSystem({}) {
     // Build ONLY the skin this punter wears (resolves blank/locked → default) —
     // not all three with two hidden. Always apply it so an unskinned punter
     // shows the default body, never an invisible one.
-    const skin = resolveAvatarSkin(p.av ?? '', typeof p.avc === 'number' ? p.avc : -1);
+    const skin = resolveAvatarSkin(
+      p.av ?? '',
+      typeof p.avc === 'number' ? p.avc : -1,
+      typeof p.avl === 'number' ? p.avl : 0.5,
+    );
     const rig = buildBoxer(1, skin.id);
     retintRig(rig.all, p.accent);
     // Their arena skin rides over the accent tint (LEDs keep the accent).

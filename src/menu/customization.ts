@@ -34,6 +34,11 @@ function loadHue(): number {
   return Number.isFinite(n) ? n : -1;
 }
 
+function loadLight(): number {
+  const n = parseFloat(load('ff-skin-light', ''));
+  return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0.5;
+}
+
 /** Platform skins the player has unlocked: the free trio plus anything bought
  *  in the shop ('ff-owned-platforms', a JSON id array). */
 function loadOwnedPlatforms(): Set<string> {
@@ -75,6 +80,9 @@ export const customization = {
   /** Custom armour hue (0..1) from the colour picker, or -1 to keep the
    *  avatar's own default palette. */
   colorHue: loadHue(),
+  /** Custom armour lightness (0..1, 0.5 = neutral) — darkens/brightens the
+   *  recoloured suit. Ignored while colorHue is -1 (default palette). */
+  colorLight: loadLight(),
   /** Bumped on every change — consumers re-apply when they see it move. */
   version: 1,
   /** The customisation panel (and the avatar mirror) is up in the lobby. */
@@ -94,9 +102,18 @@ export function setAvatarColor(hue: number): void {
   customization.version += 1;
 }
 
+/** Set the custom armour lightness (0..1, 0.5 = neutral). */
+export function setAvatarLight(light: number): void {
+  const l = Math.min(1, Math.max(0, light));
+  if (l === customization.colorLight) return;
+  customization.colorLight = l;
+  save('ff-skin-light', String(l));
+  customization.version += 1;
+}
+
 /** The fully-resolved skin the LOCAL player wears: chosen shape + custom colour. */
 export function myAvatarSkin(): AvatarSkin {
-  return resolveAvatarSkin(customization.avatar, customization.colorHue);
+  return resolveAvatarSkin(customization.avatar, customization.colorHue, customization.colorLight);
 }
 
 export function setAvatarSkin(id: string): void {

@@ -31,6 +31,8 @@ export interface OpponentPose {
    * packet arrives (or in bot bouts) → OpponentSystem keeps the team colour.
    */
   accentHue: number;
+  /** Their avatar-accent lightness (0..1, 0.5 = neutral), from their pose packets. */
+  accentLight: number;
 }
 
 /** Most OTHER boxers in any mode: FFA (3 rivals) and 2v2 (1 ally + 2 rivals). */
@@ -46,6 +48,7 @@ function makePose(): OpponentPose {
     orbiting: [false, false],
     fisting: [false, false],
     accentHue: -1,
+    accentLight: 0.5,
   };
 }
 

@@ -36,6 +36,14 @@ function loadAccentHue(): number {
   return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : DEFAULT_ACCENT_HUE;
 }
 
+export const DEFAULT_ACCENT_LIGHT = 0.5;
+
+function loadAccentLight(): number {
+  const raw = localStorage.getItem('ff-accent-light');
+  const n = raw == null ? NaN : parseFloat(raw);
+  return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : DEFAULT_ACCENT_LIGHT;
+}
+
 /** Per-fist ball attachment: [left, right], each 0 none / 1 split / 2 grow / 3 shrink. */
 function loadBallAttach(): [number, number] {
   const raw = localStorage.getItem('ff-ballattach');
@@ -101,6 +109,8 @@ export const app: {
   environment: AppEnvironment;
   /** Player's chosen avatar-accent hue (0..1 around the colour wheel). */
   accentHue: number;
+  /** Player's chosen avatar-accent lightness (0..1, 0.5 = neutral). */
+  accentLight: number;
   /** Ball attachment per fist: [left, right] (0 none/1 split/2 grow/3 shrink). */
   ballAttach: [number, number];
   /** Which face the 1V1 panel shows: the mode list, or the private-match flow. */
@@ -127,6 +137,7 @@ export const app: {
   gazetteOpen: false,
   environment: localStorage.getItem('ff-env') === 'desert' ? 'desert' : 'ar',
   accentHue: loadAccentHue(),
+  accentLight: loadAccentLight(),
   ballAttach: loadBallAttach(),
   duelView: 'root',
   privateCode: '',
@@ -161,6 +172,14 @@ export function saveEnvironment(): void {
 export function saveAccentHue(): void {
   try {
     localStorage.setItem('ff-accent', app.accentHue.toFixed(4));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function saveAccentLight(): void {
+  try {
+    localStorage.setItem('ff-accent-light', app.accentLight.toFixed(4));
   } catch {
     /* ignore */
   }

@@ -95,10 +95,14 @@ export type MenuAction =
   | 'custom-close'
   /** Dragging the armour-colour hue bar (continuous — MenuSystem reads the UV). */
   | 'av-color'
+  /** Dragging the armour lightness/darkness bar. */
+  | 'av-light'
   /** Reset the armour colour to the skin's default palette. */
   | 'av-uncolor'
   /** Dragging the avatar-accent (neon) hue bar in the locker's COLOUR tab. */
   | 'accent-color'
+  /** Dragging the avatar-accent (neon) lightness bar. */
+  | 'accent-light'
   /** Reset the avatar-accent (neon) hue to the house ember default. */
   | 'accent-default'
   /** Swap between SHOP (all items) and LOCKER (your inventory + colours). */
@@ -1526,11 +1530,14 @@ const ITEM_H = 112;
 const ROW_STEP = ITEM_H + 12;
 const FOOT_SWAP = { x: 40, y: PAN_H - 66, w: 210, h: 50 };
 const FOOT_CLOSE = { x: PAN_W - 40 - 160, y: PAN_H - 66, w: 160, h: 50 };
-// COLOUR-tab hue tracks (locker only): armour repaints the suit, accent the neon.
-const ARMOUR_BAR = { x: 40, y: 214, w: PAN_W - 210, h: 42 };
-const ARMOUR_DEF = { x: PAN_W - 156, y: 214, w: 116, h: 42 };
-const ACCENT_BAR = { x: 40, y: 344, w: PAN_W - 210, h: 42 };
-const ACCENT_DEF = { x: PAN_W - 156, y: 344, w: 116, h: 42 };
+// COLOUR-tab tracks (locker only): armour repaints the suit, accent the neon,
+// each with a hue track and a lightness track beneath it.
+const ARMOUR_BAR = { x: 40, y: 168, w: PAN_W - 210, h: 38 };
+const ARMOUR_DEF = { x: PAN_W - 156, y: 168, w: 116, h: 38 };
+const ARMOUR_LIGHT_BAR = { x: 40, y: 250, w: PAN_W - 80, h: 38 };
+const ACCENT_BAR = { x: 40, y: 348, w: PAN_W - 210, h: 38 };
+const ACCENT_DEF = { x: PAN_W - 156, y: 348, w: 116, h: 38 };
+const ACCENT_LIGHT_BAR = { x: 40, y: 430, w: PAN_W - 80, h: 38 };
 
 interface PanRect {
   x: number;
@@ -1554,6 +1561,14 @@ export function colorBarHue(u: number): number {
 /** u → hue for the accent track. */
 export function accentBarHue(u: number): number {
   return Math.max(0, Math.min(1, (u * PAN_W - ACCENT_BAR.x) / ACCENT_BAR.w));
+}
+/** u → lightness (0..1) for the armour lightness track. */
+export function colorBarLight(u: number): number {
+  return Math.max(0, Math.min(1, (u * PAN_W - ARMOUR_LIGHT_BAR.x) / ARMOUR_LIGHT_BAR.w));
+}
+/** u → lightness (0..1) for the accent lightness track. */
+export function accentBarLight(u: number): number {
+  return Math.max(0, Math.min(1, (u * PAN_W - ACCENT_LIGHT_BAR.x) / ACCENT_LIGHT_BAR.w));
 }
 
 /** Which tab is showing. 'colour' is locker-only, so the shop falls back to avatars. */
@@ -1722,6 +1737,36 @@ function drawHueBar(ctx: CanvasRenderingContext2D, bar: PanRect, hue: number, ac
   }
 }
 
+/** A dark→light track for a fixed hue + a knob at the chosen lightness.
+ *  `accent` uses the neon ramp; armour uses a suit-tone ramp (grey if no hue). */
+function drawLightBar(ctx: CanvasRenderingContext2D, bar: PanRect, light: number, hue: number, accent: boolean): void {
+  const grad = ctx.createLinearGradient(bar.x, 0, bar.x + bar.w, 0);
+  const h360 = (((hue % 1) + 1) % 1) * 360;
+  for (let i = 0; i <= 12; i++) {
+    const f = i / 12;
+    let col: string;
+    if (accent) {
+      col = hexCss(hueToColor(hue, f));
+    } else if (hue < 0) {
+      col = `hsl(0, 0%, ${Math.round((0.06 + f * 0.84) * 100)}%)`; // no hue yet → greyscale
+    } else {
+      col = `hsl(${h360}, 55%, ${Math.round(Math.max(5, Math.min(92, (0.18 + f * 0.66) * 100)))}%)`;
+    }
+    grad.addColorStop(f, col);
+  }
+  ctx.fillStyle = grad;
+  ctx.fillRect(bar.x, bar.y, bar.w, bar.h);
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = UI.steel;
+  ctx.strokeRect(bar.x, bar.y, bar.w, bar.h);
+  const kx = bar.x + Math.min(1, Math.max(0, light)) * bar.w;
+  ctx.fillStyle = '#ffffff';
+  ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+  ctx.lineWidth = 1.5;
+  ctx.fillRect(kx - 3, bar.y - 6, 6, bar.h + 12);
+  ctx.strokeRect(kx - 3, bar.y - 6, 6, bar.h + 12);
+}
+
 function drawResetBtn(ctx: CanvasRenderingContext2D, r: PanRect, atDefault: boolean, hot: boolean): void {
   plate(ctx, r.x, r.y, r.w, r.h, {
     cut: 8,
@@ -1736,28 +1781,34 @@ function drawResetBtn(ctx: CanvasRenderingContext2D, r: PanRect, atDefault: bool
   ctx.fillText('DEFAULT', r.x + r.w / 2, r.y + r.h / 2 + 1);
 }
 
-/** The locker's COLOUR tab: armour-suit hue + neon-accent hue sliders. */
+/** The locker's COLOUR tab: armour-suit + neon-accent, each a hue track over a
+ *  lightness/darkness track. */
 function drawColourTab(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
   ctx.textAlign = 'left';
   ctx.textBaseline = 'alphabetic';
-  ctx.font = '700 20px system-ui, sans-serif';
-  ctx.fillStyle = UI.textDim;
-  ctx.fillText('ARMOUR COLOUR', 40, ARMOUR_BAR.y - 14);
+  const label = (text: string, y: number): void => {
+    ctx.font = '700 20px system-ui, sans-serif';
+    ctx.fillStyle = UI.textDim;
+    ctx.fillText(text, 40, y);
+  };
+
+  label('ARMOUR COLOUR', ARMOUR_BAR.y - 14);
   drawHueBar(ctx, ARMOUR_BAR, customization.colorHue, false);
   drawResetBtn(ctx, ARMOUR_DEF, customization.colorHue < 0, hoverAction === 'av-uncolor');
+  label('LIGHTNESS', ARMOUR_LIGHT_BAR.y - 14);
+  drawLightBar(ctx, ARMOUR_LIGHT_BAR, customization.colorLight, customization.colorHue, false);
 
-  ctx.textAlign = 'left';
-  ctx.fillStyle = UI.textDim;
-  ctx.font = '700 20px system-ui, sans-serif';
-  ctx.fillText('NEON ACCENT', 40, ACCENT_BAR.y - 14);
+  label('NEON ACCENT', ACCENT_BAR.y - 14);
   drawHueBar(ctx, ACCENT_BAR, app.accentHue, true);
   drawResetBtn(ctx, ACCENT_DEF, Math.abs(app.accentHue - DEFAULT_ACCENT_HUE) < 0.005, hoverAction === 'accent-default');
+  label('LIGHTNESS', ACCENT_LIGHT_BAR.y - 14);
+  drawLightBar(ctx, ACCENT_LIGHT_BAR, app.accentLight, app.accentHue, true);
 
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = '600 18px system-ui, sans-serif';
+  ctx.font = '600 17px system-ui, sans-serif';
   ctx.fillStyle = 'rgba(232,236,242,0.5)';
-  ctx.fillText('drag to repaint your armour and its neon — looks only', PAN_W / 2, PAN_H - 96);
+  ctx.fillText('drag to repaint your armour and its neon — looks only', PAN_W / 2, PAN_H - 92);
 }
 
 function drawGrid(ctx: CanvasRenderingContext2D, locker: boolean, hoverAction: MenuAction | null): void {
@@ -1835,7 +1886,9 @@ function hitLocker(u: number, v: number): MenuAction | null {
     if (inPanRect(x, y, ARMOUR_DEF)) return 'av-uncolor';
     if (inPanRect(x, y, ACCENT_DEF)) return 'accent-default';
     if (inPanRect(x, y, ARMOUR_BAR)) return 'av-color';
+    if (inPanRect(x, y, ARMOUR_LIGHT_BAR)) return 'av-light';
     if (inPanRect(x, y, ACCENT_BAR)) return 'accent-color';
+    if (inPanRect(x, y, ACCENT_LIGHT_BAR)) return 'accent-light';
     return null;
   }
   return gridHit(x, y, true);

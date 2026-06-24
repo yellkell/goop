@@ -133,7 +133,7 @@ World.create(container, {
   bus.on('full', () => showFullNotice(world));
 
   // Your arena cosmetics walk in with you.
-  pubConnect(pubServerUrl(), pub.myName, customization.avatar, customization.platform, customization.colorHue);
+  pubConnect(pubServerUrl(), pub.myName, customization.avatar, customization.platform, customization.colorHue, customization.colorLight);
 
   // Browser-only moderation: hold Z+A+P to open the admin ban panel.
   installAdminPanel();

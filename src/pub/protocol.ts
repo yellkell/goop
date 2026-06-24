@@ -53,6 +53,8 @@ export interface PubPlayerNet {
   pf?: string;
   /** Custom armour hue (0..1), or -1/absent for the skin's default palette. */
   avc?: number;
+  /** Custom armour lightness (0..1, 0.5 = neutral). */
+  avl?: number;
 }
 
 export interface BoardRow {
@@ -147,7 +149,7 @@ export type PubEvent =
   | { e: 'COIN_TAKE'; id: string };
 
 export type PubClientMsg =
-  | { t: 'hello'; name: string; av?: string; pf?: string; avc?: number; cid?: string }
+  | { t: 'hello'; name: string; av?: string; pf?: string; avc?: number; avl?: number; cid?: string }
   | { t: 'pose'; head: PoseTuple; left: PoseTuple; right: PoseTuple }
   /** I want to hold prop `id` (fresh grab or a mid-air catch). */
   | { t: 'grab'; id: number }

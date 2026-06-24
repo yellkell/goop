@@ -25,11 +25,13 @@ import {
   Vector3,
   type Intersection,
 } from 'three';
-import { app, DEFAULT_ACCENT_HUE, saveAccentHue, saveEnvironment, saveShootBack, type AppState } from '../menu/appState.js';
+import { app, DEFAULT_ACCENT_HUE, DEFAULT_ACCENT_LIGHT, saveAccentHue, saveAccentLight, saveEnvironment, saveShootBack, type AppState } from '../menu/appState.js';
 import {
   accentBarHue,
+  accentBarLight,
   clearProfileKeyboardHint,
   colorBarHue,
+  colorBarLight,
   createActionPanel,
   createMenu,
   flashProfileKeyboardHint,
@@ -49,6 +51,7 @@ import {
   ownPlatform,
   platformOwned,
   setAvatarColor,
+  setAvatarLight,
   setAvatarSkin,
   setPlatformSkin,
 } from '../menu/customization.js';
@@ -133,6 +136,7 @@ export class MenuSystem extends createSystem({}) {
   private newsScrollDir = 0;
   private draggingHue = false;
   private accentHue = Number.NaN;
+  private accentLight = Number.NaN;
   /** Which hand+panel currently owns a slider scrub. A scrub may only START on
    *  a fresh trigger press over the track, so a trigger held from opening the
    *  panel (or clicking elsewhere) can't hijack a slider as the ray crosses it. */
@@ -245,10 +249,17 @@ export class MenuSystem extends createSystem({}) {
         if (down) this.sliderGrab = { hand, panel: panel.id };
         // The hue bar is continuous: scrub the armour colour live while held.
         setAvatarColor(colorBarHue(hit.uv.x));
+      } else if (hit.uv && action === 'av-light' && (down || owns)) {
+        if (down) this.sliderGrab = { hand, panel: panel.id };
+        setAvatarLight(colorBarLight(hit.uv.x)); // scrub the armour lightness live
       } else if (hit.uv && action === 'accent-color' && (down || owns)) {
         if (down) this.sliderGrab = { hand, panel: panel.id };
         app.accentHue = accentBarHue(hit.uv.x); // scrub the neon accent live
         saveAccentHue();
+      } else if (hit.uv && action === 'accent-light' && (down || owns)) {
+        if (down) this.sliderGrab = { hand, panel: panel.id };
+        app.accentLight = accentBarLight(hit.uv.x);
+        saveAccentLight();
       } else if (hit.uv && down) {
         if (panel.click) {
           if (panel.click(hit.uv.x, hit.uv.y)) clicked = true;
@@ -530,7 +541,9 @@ export class MenuSystem extends createSystem({}) {
         break;
       case 'accent-default':
         app.accentHue = DEFAULT_ACCENT_HUE; // neon back to the house ember
+        app.accentLight = DEFAULT_ACCENT_LIGHT;
         saveAccentHue();
+        saveAccentLight();
         break;
       default:
         // shop-av-N: equip an avatar. shop-pf-N: equip a platform if owned,
@@ -622,6 +635,7 @@ export class MenuSystem extends createSystem({}) {
     this.mirror = { group, rig };
     this.skinVersion = -1; // force a re-apply so the mirror dresses correctly
     this.accentHue = Number.NaN;
+    this.accentLight = Number.NaN;
   }
 
   /**
@@ -631,7 +645,7 @@ export class MenuSystem extends createSystem({}) {
    */
   private applyOwnSkins(): void {
     const skinChanged = customization.version !== this.skinVersion;
-    const accentChanged = app.accentHue !== this.accentHue;
+    const accentChanged = app.accentHue !== this.accentHue || app.accentLight !== this.accentLight;
     if (!skinChanged && !accentChanged) return;
 
     const names = ['player-torso', 'player-glove-left', 'player-glove-right', 'mirror-avatar'];
@@ -648,12 +662,13 @@ export class MenuSystem extends createSystem({}) {
       this.accentHue = Number.NaN;
     }
 
-    const accent = hueToColor(app.accentHue);
+    const accent = hueToColor(app.accentHue, app.accentLight);
     for (const name of names) {
       const obj = this.scene.getObjectByName(name);
       if (obj) setAvatarAccent(obj, accent);
     }
     this.accentHue = app.accentHue;
+    this.accentLight = app.accentLight;
   }
 
   /** Point + trigger types on the keyboard; OK saves and resumes the action. */
