@@ -197,22 +197,13 @@ function wall(root: Group, mat: MeshStandardMaterial, len: number, cx: number, c
   band(topH, sillH + winH);
   const panes = Math.max(4, Math.round(len / 2.6));
   const pw = len / panes;
+  // Just the mullions — every pane is smashed clean out (no glass left in).
   for (let i = 0; i <= panes; i++) {
     const mull = new Mesh(new BoxGeometry(0.12, winH, 0.12), steel(0x2c2f34, 0.7));
     const off = -len / 2 + i * pw;
     mull.position.set(cx + Math.cos(ry) * off, FLOOR_Y + sillH + winH / 2, cz - Math.sin(ry) * off);
     mull.rotation.y = ry;
     root.add(mull);
-    if (i < panes && rnd() < 0.25) {
-      const glass = new Mesh(
-        new PlaneGeometry(pw * 0.9, winH * 0.9),
-        new MeshStandardMaterial({ color: 0x8aa0a4, transparent: true, opacity: 0.16, roughness: 0.4, metalness: 0.1, side: DoubleSide }),
-      );
-      const goff = off + pw / 2;
-      glass.position.set(cx + Math.cos(ry) * goff, FLOOR_Y + sillH + winH / 2, cz - Math.sin(ry) * goff);
-      glass.rotation.y = ry;
-      root.add(glass);
-    }
   }
 }
 
@@ -339,7 +330,9 @@ export function buildFactory(): Factory {
     belt.position.set(0, top + 0.04, 0);
     g.add(belt);
     for (const ex of [-len / 2 + 0.12, len / 2 - 0.12]) {
-      const roll = new Mesh(new CylinderGeometry(0.12, 0.12, 0.72, 12), steel(0x6a6e75, 0.5));
+      // Length 0.55 keeps the round end caps INSIDE the side frames (inner face
+      // at z≈0.30) so they don't sit coplanar with them and flicker.
+      const roll = new Mesh(new CylinderGeometry(0.12, 0.12, 0.55, 12), steel(0x6a6e75, 0.5));
       roll.rotation.x = Math.PI / 2;
       roll.position.set(ex, top, 0);
       g.add(roll);

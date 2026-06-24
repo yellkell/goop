@@ -81,13 +81,20 @@ export class MusicSystem extends createSystem({}) {
   }
 
   update(delta: number): void {
-    // Scroll a too-long title across the marquee, jukebox-style.
-    if (this.marqueeScrolls) {
+    if (!this.player || !pub.refs) return;
+    pub.refs.jukebox.getWorldPosition(_box); // floor centre — for distance volume
+    this.camera.getWorldPosition(_cam);
+    const jukeDist = Math.hypot(_cam.x - _box.x, _cam.z - _box.z);
+
+    // Scroll a too-long title across the marquee — but ONLY when close enough to
+    // read it. A long title was re-rendering + re-uploading the screen texture
+    // EVERY frame from anywhere in the pub; gating on distance kills that waste
+    // (you can't read a scrolling marquee from across the room anyway).
+    if (this.marqueeScrolls && jukeDist < JUKEBOX.hearFar) {
       this.marqueeScroll += delta * MARQUEE_SCROLL_SPEED;
       this.renderMarquee();
     }
-    if (!this.player || !pub.refs) return;
-    pub.refs.jukebox.getWorldPosition(_box); // floor centre — for distance volume
+
     _aim.copy(_box);
     _aim.y += JUKE_AIM_Y; // the point on the cabinet a hand aims at
 
@@ -123,9 +130,7 @@ export class MusicSystem extends createSystem({}) {
     // Distance volume + voice duck on the active station.
     const audio = this.station >= 0 ? this.audios[this.station] : null;
     if (audio) {
-      this.camera.getWorldPosition(_cam);
-      const d = Math.hypot(_cam.x - _box.x, _cam.z - _box.z);
-      const fade = (JUKEBOX.hearFar - d) / (JUKEBOX.hearFar - JUKEBOX.hearNear);
+      const fade = (JUKEBOX.hearFar - jukeDist) / (JUKEBOX.hearFar - JUKEBOX.hearNear);
       let vol = JUKEBOX.volume * Math.max(0, Math.min(1, fade));
       if (anyPubVoiceSpeaking()) vol *= JUKEBOX.duck;
       audio.volume = vol;
