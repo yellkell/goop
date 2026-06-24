@@ -93,6 +93,9 @@ export const app: {
   tutorial: boolean;
   /** Aim Training option: targets shoot back so you can train dodging. */
   shootBack: boolean;
+  /** When on: never queue online — RANKED is disabled and QUICK/2V2/FFA drop
+   *  straight onto bots with no matchmaking. */
+  onlyBots: boolean;
   /** How many boxers are in the quick-match queue right now (−1 = unknown,
    *  e.g. before the matchmaker is reachable). Drives the 1V1 panel. */
   searching: number;
@@ -130,6 +133,7 @@ export const app: {
   netStatus: 'not connected',
   // Off unless the player has explicitly switched it on.
   shootBack: localStorage.getItem('ff-shootback') === '1',
+  onlyBots: localStorage.getItem('ff-onlybots') === '1',
   searching: -1,
   pubCount: -1,
   pubRegionCounts: {},
@@ -153,6 +157,14 @@ export function saveStats(): void {
     localStorage.setItem('ff-stats', JSON.stringify(app.stats));
   } catch {
     /* storage unavailable — stats stay in-memory */
+  }
+}
+
+export function saveOnlyBots(): void {
+  try {
+    localStorage.setItem('ff-onlybots', app.onlyBots ? '1' : '0');
+  } catch {
+    /* ignore */
   }
 }
 

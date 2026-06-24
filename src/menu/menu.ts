@@ -66,6 +66,7 @@ export type MenuAction =
   | 'arcade-2v2'
   | 'arcade-ffa'
   | 'toggle-shootback'
+  | 'toggle-onlybots'
   | 'ranked-match'
   | 'quick-match'
   | 'cancel-queue'
@@ -240,38 +241,41 @@ function drawTrain(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null
   panelBg(ctx, false, UI.emberBright, 'ARCADE');
 
   // TUTORIAL sits at the top — the very first thing a new boxer should tap.
-  buttonPlate(ctx, 70, 88, PW - 140, 58, 'TUTORIAL', UI.emberBright, hoverAction === 'start-tutorial');
-  buttonPlate(ctx, 70, 154, PW - 140, 58, '2V2', UI.cool, hoverAction === 'arcade-2v2');
-  buttonPlate(ctx, 70, 220, PW - 140, 58, 'FFA', UI.amber, hoverAction === 'arcade-ffa');
-  buttonPlate(ctx, 70, 286, PW - 140, 58, 'AIM TRAINING', UI.ember, hoverAction === 'start-training');
+  buttonPlate(ctx, 70, 80, PW - 140, 54, 'TUTORIAL', UI.emberBright, hoverAction === 'start-tutorial');
+  buttonPlate(ctx, 70, 140, PW - 140, 54, '2V2', UI.cool, hoverAction === 'arcade-2v2');
+  buttonPlate(ctx, 70, 200, PW - 140, 54, 'FFA', UI.amber, hoverAction === 'arcade-ffa');
+  buttonPlate(ctx, 70, 260, PW - 140, 54, 'AIM TRAINING', UI.ember, hoverAction === 'start-training');
 
-  // Shoot-back toggle row: an industrial breaker switch (aim training only).
-  const on = app.shootBack;
-  const toggleHot = hoverAction === 'toggle-shootback';
-  ctx.font = '700 22px system-ui, sans-serif';
-  ctx.textAlign = 'left';
-  ctx.fillStyle = toggleHot ? UI.emberBright : UI.textDim;
-  ctx.fillText('targets shoot back', 64, 366);
-  const pw = 96, ph = 38, px = PW - 64 - pw, py = 348;
-  plate(ctx, px, py, pw, ph, {
-    cut: 10,
-    fill: on ? 'rgba(79,183,255,0.25)' : toggleHot ? 'rgba(255,176,0,0.16)' : 'rgba(150,150,170,0.12)',
-    stroke: toggleHot ? UI.emberBright : on ? UI.cool : UI.steelDim,
-    rivets: false,
-  });
-  ctx.fillStyle = on ? UI.cool : UI.steelDim;
-  const kw = pw / 2 - 10;
-  ctx.fillRect(on ? px + pw - kw - 6 : px + 6, py + 6, kw, ph - 12);
+  // Two industrial breaker switches: targets-shoot-back, then only-play-bots.
+  const breaker = (text: string, on: boolean, hot: boolean, py: number, onFill: string, onStroke: string): void => {
+    ctx.font = '700 21px system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = hot ? UI.emberBright : UI.textDim;
+    ctx.fillText(text, 64, py + 23);
+    const pw = 96, ph = 34, px = PW - 64 - pw;
+    plate(ctx, px, py, pw, ph, {
+      cut: 10,
+      fill: on ? onFill : hot ? 'rgba(255,176,0,0.16)' : 'rgba(150,150,170,0.12)',
+      stroke: hot ? UI.emberBright : on ? onStroke : UI.steelDim,
+      rivets: false,
+    });
+    ctx.fillStyle = on ? onStroke : UI.steelDim;
+    const kw = pw / 2 - 10;
+    ctx.fillRect(on ? px + pw - kw - 6 : px + 6, py + 6, kw, ph - 12);
+  };
+  breaker('targets shoot back', app.shootBack, hoverAction === 'toggle-shootback', 320, 'rgba(79,183,255,0.25)', UI.cool);
+  breaker('only play bots', app.onlyBots, hoverAction === 'toggle-onlybots', 360, 'rgba(255,176,0,0.25)', UI.amber);
 }
 
 function hitTrain(_u: number, v: number): MenuAction | null {
   // v: 0 bottom → 1 top (canvas y = (1-v)*PH).
   const y = (1 - v) * PH;
-  if (y >= 88 && y <= 146) return 'start-tutorial';
-  if (y >= 154 && y <= 212) return 'arcade-2v2';
-  if (y >= 220 && y <= 278) return 'arcade-ffa';
-  if (y >= 286 && y <= 344) return 'start-training';
-  if (y >= 348 && y <= 388) return 'toggle-shootback';
+  if (y >= 80 && y <= 134) return 'start-tutorial';
+  if (y >= 140 && y <= 194) return 'arcade-2v2';
+  if (y >= 200 && y <= 254) return 'arcade-ffa';
+  if (y >= 260 && y <= 314) return 'start-training';
+  if (y >= 318 && y <= 356) return 'toggle-shootback';
+  if (y >= 358 && y <= 396) return 'toggle-onlybots';
   return null;
 }
 
@@ -306,17 +310,25 @@ function hitDuel(u: number, v: number): MenuAction | null {
 function drawDuelRoot(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
   const queueing = app.state === 'queueing';
   const rankedAction = queueing ? 'cancel-queue' : 'ranked-match';
+  // RANKED is disabled while ONLY PLAY BOTS is on (no online queue allowed).
+  const rankedOff = app.onlyBots && !queueing;
 
   // RANKED — waits in the lobby for a real human (no bot).
   buttonPlate(
     ctx, 70, 84, PW - 140, 66,
     queueing ? 'CANCEL' : 'RANKED',
-    queueing ? UI.amber : UI.cool,
-    hoverAction === rankedAction,
+    rankedOff ? UI.steelDim : queueing ? UI.amber : UI.cool,
+    !rankedOff && hoverAction === rankedAction,
   );
+  if (rankedOff) {
+    ctx.font = '700 14px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = UI.steelDim;
+    ctx.fillText('ONLY PLAY BOTS IS ON', PW / 2, 132);
+  }
 
   // Live "N searching" badge on the RANKED plate — the queue you'd join.
-  if (!queueing && app.searching > 0) {
+  if (!queueing && !rankedOff && app.searching > 0) {
     const label = `${app.searching} SEARCHING`;
     ctx.font = '800 16px system-ui, sans-serif';
     const pillW = ctx.measureText(label).width + 34, pillH = 24;
@@ -371,7 +383,10 @@ function envToggle(ctx: CanvasRenderingContext2D, label: string, on: boolean, ho
 
 function hitDuelRoot(v: number): MenuAction | null {
   const y = (1 - v) * PH;
-  if (y >= 80 && y <= 152) return app.state === 'queueing' ? 'cancel-queue' : 'ranked-match';
+  if (y >= 80 && y <= 152) {
+    if (app.state === 'queueing') return 'cancel-queue';
+    return app.onlyBots ? null : 'ranked-match'; // ranked disabled in only-bots mode
+  }
   if (y >= 154 && y <= 224) return 'quick-match';
   if (y >= 226 && y <= 288) return 'private-open';
   if (y >= 288 && y <= 328) return 'toggle-environment';

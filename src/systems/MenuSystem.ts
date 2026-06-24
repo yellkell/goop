@@ -25,7 +25,7 @@ import {
   Vector3,
   type Intersection,
 } from 'three';
-import { app, DEFAULT_ACCENT_HUE, DEFAULT_ACCENT_LIGHT, saveAccentHue, saveAccentLight, saveEnvironment, saveShootBack, type AppState } from '../menu/appState.js';
+import { app, DEFAULT_ACCENT_HUE, DEFAULT_ACCENT_LIGHT, saveAccentHue, saveAccentLight, saveEnvironment, saveOnlyBots, saveShootBack, type AppState } from '../menu/appState.js';
 import {
   accentBarHue,
   accentBarLight,
@@ -381,35 +381,42 @@ export class MenuSystem extends createSystem({}) {
         break;
       case 'arcade-2v2':
         // Arcade brawl: drop onto bots now, hunt humans on the mesh in the
-        // background, and flip to the live bout once the room fills.
+        // background, and flip to the live bout once the room fills. ONLY PLAY
+        // BOTS skips the matchmaking entirely — bots and bots alone.
         app.arcade = '2v2';
         app.mode = 'bot';
         app.state = 'playing';
-        void mesh.queue('2v2', (s) => (app.netStatus = s));
+        if (!app.onlyBots) void mesh.queue('2v2', (s) => (app.netStatus = s));
         break;
       case 'arcade-ffa':
         app.arcade = 'ffa';
         app.mode = 'bot';
         app.state = 'playing';
-        void mesh.queue('ffa', (s) => (app.netStatus = s));
+        if (!app.onlyBots) void mesh.queue('ffa', (s) => (app.netStatus = s));
         break;
       case 'toggle-shootback':
         app.shootBack = !app.shootBack;
         saveShootBack();
         break;
+      case 'toggle-onlybots':
+        app.onlyBots = !app.onlyBots;
+        saveOnlyBots();
+        break;
       case 'ranked-match':
+        if (app.onlyBots) break; // disabled — no online queue in only-bots mode
         // Wait in the lobby for a real human — no bot fallback.
         app.arcade = '1v1';
         app.state = 'queueing';
         net.queue();
         break;
       case 'quick-match':
-        // Drop straight onto a bot, but keep hunting in the background: if a
-        // human turns up mid-bout the bot is dropped and we swap to the live bout.
+        // Drop straight onto a bot. Normally we keep hunting for a human in the
+        // background (swap to the live bout if one turns up) — but ONLY PLAY BOTS
+        // skips that, so it stays a pure bot bout.
         app.arcade = '1v1';
         app.mode = 'bot';
         app.state = 'playing';
-        net.queue();
+        if (!app.onlyBots) net.queue();
         break;
       case 'cancel-queue':
         net.cancel();
