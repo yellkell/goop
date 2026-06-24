@@ -343,7 +343,7 @@ function drawDuelRoot(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | n
   ctx.font = '700 24px system-ui, sans-serif';
   ctx.textAlign = 'left';
   ctx.fillStyle = environmentHot ? UI.amber : UI.textDim;
-  ctx.fillText('desert', 64, 320);
+  ctx.fillText('desert arena', 64, 320);
   const sw = 110, sh = 44, sx = PW - 64 - sw, sy = 298;
   plate(ctx, sx, sy, sw, sh, {
     cut: 10,
