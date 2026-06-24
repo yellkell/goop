@@ -425,18 +425,38 @@ export function buildFactory(): Factory {
   root.add(bird.obj);
   const dihedral = bird.wings[0].rotation.z;
   const BIRD = { cx: HALL.maxX + 48, cz: CENTRE_Z, r: 12, y: FLOOR_Y + 16.5 };
+  const PERCH_Y = FLOOR_Y + 3; // where it eases down to as it slips out of view
+  // Soar → glide down → rest (hidden) → climb back, like the desert vultures.
+  const SOAR = 24, GLIDE = 4, REST = 9;
+  const CYCLE = SOAR + 2 * GLIDE + REST;
+  const smooth = (t: number): number => t * t * (3 - 2 * t);
 
   return {
     root,
     skyColor,
     update: (_delta, time) => {
       for (const l of lamps) l.pivot.rotation.z = Math.sin(time * 0.6 + l.phase) * 0.04;
+
+      // Where in its soar/rest cycle is the bird? `climb` is 1 aloft, eases to 0
+      // as it glides down and shrinks to a speck, and the bird hides while it rests.
+      const t = ((time % CYCLE) + CYCLE) % CYCLE;
+      let climb: number;
+      if (t < SOAR) climb = 1;
+      else if (t < SOAR + GLIDE) climb = 1 - smooth((t - SOAR) / GLIDE);
+      else if (t < SOAR + GLIDE + REST) {
+        bird.obj.visible = false; // off resting, out of sight
+        return;
+      } else climb = smooth((t - SOAR - GLIDE - REST) / GLIDE);
+      bird.obj.visible = true;
+
       // wheel the bird on a slow lazy loop, banking into the turn + trimming.
       const ang = time * 0.16;
       const bx = BIRD.cx + Math.cos(ang) * BIRD.r;
       const bz = BIRD.cz + Math.sin(ang) * BIRD.r;
-      const by = BIRD.y + Math.sin(time * 0.5) * 1.1;
+      const aloftY = BIRD.y + Math.sin(time * 0.5) * 1.1;
+      const by = PERCH_Y + (aloftY - PERCH_Y) * climb; // dive toward the perch as it leaves
       bird.obj.position.set(bx, by, bz);
+      bird.obj.scale.setScalar(0.05 + 0.95 * climb); // shrink to a speck at the hand-off
       const a2 = ang + 0.06;
       const dx = BIRD.cx + Math.cos(a2) * BIRD.r - bx;
       const dz = BIRD.cz + Math.sin(a2) * BIRD.r - bz;
