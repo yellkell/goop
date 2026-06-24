@@ -29,6 +29,10 @@ export class DesertSystem extends createSystem({}) {
     // Shadows compiled in once up front so flipping a backdrop on later never
     // forces a material recompile mid-session; with no sun in AR they're free.
     this.world.renderer.shadowMap.enabled = true;
+    // Nothing that casts a shadow ever MOVES (only the static desert props do),
+    // so the shadow map is identical every frame — render it once per backdrop
+    // change instead of every frame. A real GPU saving with no visible change.
+    this.world.renderer.shadowMap.autoUpdate = false;
 
     this.desert = buildDesert();
     this.scene.add(this.desert.root);
@@ -49,6 +53,8 @@ export class DesertSystem extends createSystem({}) {
     this.applied = env;
     if (this.desert) this.desert.root.visible = env === 'desert';
     if (this.factory) this.factory.root.visible = env === 'factory';
+    // Re-bake the (otherwise frozen) shadow map once to reflect the new backdrop.
+    this.world.renderer.shadowMap.needsUpdate = true;
 
     const renderer = this.world.renderer;
     if (env === 'ar') {

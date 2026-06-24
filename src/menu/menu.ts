@@ -1995,7 +1995,13 @@ export function createMenu(scene: Scene): Menu {
       group.visible = v;
     },
     redrawAll: (hoverId, hoverAction) => {
-      for (const p of panels) p.redraw(p.id === hoverId ? hoverAction : null);
+      // Skip panels that aren't on screen — re-rendering a hidden canvas and
+      // re-uploading its texture (the news page is 720×900) is pure waste. They
+      // get a redraw the moment they're shown (applyState calls this again).
+      for (const p of panels) {
+        if (!p.mesh.visible) continue;
+        p.redraw(p.id === hoverId ? hoverAction : null);
+      }
     },
   };
 }
