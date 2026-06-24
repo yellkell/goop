@@ -19,20 +19,55 @@ function gasketSignTexture(): CanvasTexture {
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext('2d')!;
-  // Weathered plank base + a little grain and a routed dark border.
-  ctx.fillStyle = '#9c6a3e';
+  let seed = 9;
+  const rnd = (): number => {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    return seed / 0x7fffffff;
+  };
+
+  // A real WOODEN plank: a warm vertical tone gradient, long horizontal grain
+  // streaks running the length of the board (wavy, varied tones), and a couple
+  // of knots — so it reads unmistakably as wood, not a flat tan card.
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, '#aa7642');
+  grad.addColorStop(0.5, '#996737');
+  grad.addColorStop(1, '#85572f');
+  ctx.fillStyle = grad;
   ctx.fillRect(0, 0, W, H);
-  ctx.globalAlpha = 0.12;
-  ctx.strokeStyle = '#5a3a20';
-  ctx.lineWidth = 3;
-  for (let i = 0; i < 7; i++) {
-    const y = (i + 0.5) * (H / 7);
+  for (let i = 0; i < 30; i++) {
+    const y = rnd() * H;
+    ctx.strokeStyle = rnd() < 0.5 ? '#754c2a' : '#b48150';
+    ctx.globalAlpha = 0.08 + rnd() * 0.16;
+    ctx.lineWidth = 1 + rnd() * 2.4;
     ctx.beginPath();
-    ctx.moveTo(0, y + Math.sin(i) * 4);
-    ctx.lineTo(W, y - Math.sin(i) * 4);
+    ctx.moveTo(0, y);
+    const seg = 6;
+    for (let s = 1; s <= seg; s++) {
+      ctx.lineTo((W * s) / seg, y + Math.sin(s * 1.2 + i) * (2.5 + rnd() * 5));
+    }
     ctx.stroke();
   }
+  // Knots, kept to the corners so they never sit under the lettering.
+  for (const [kx, ky] of [
+    [W * 0.1, H * 0.78],
+    [W * 0.9, H * 0.26],
+  ]) {
+    for (let ring = 11; ring > 1; ring -= 3) {
+      ctx.strokeStyle = '#5a3a20';
+      ctx.globalAlpha = 0.45;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(kx, ky, ring, ring * 0.68, 0.3, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#3a2415';
+    ctx.beginPath();
+    ctx.ellipse(kx, ky, 3, 2, 0.3, 0, Math.PI * 2);
+    ctx.fill();
+  }
   ctx.globalAlpha = 1;
+  // Routed dark border frame.
   ctx.strokeStyle = '#4a2f1a';
   ctx.lineWidth = 8;
   ctx.strokeRect(6, 6, W - 12, H - 12);
@@ -41,11 +76,6 @@ function gasketSignTexture(): CanvasTexture {
   // resized a touch off a fixed seed, brush-edged (fill + soft round stroke), so
   // it reads as daubed on by hand rather than typeset. Measure as we go so the
   // arrow always starts clear of the last letter.
-  let seed = 9;
-  const rnd = (): number => {
-    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
-    return seed / 0x7fffffff;
-  };
   const word = 'Gasket';
   ctx.fillStyle = '#141008';
   ctx.strokeStyle = '#141008';
