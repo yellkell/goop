@@ -167,8 +167,8 @@ export const ATTACH = {
    * shot — the ball sailing deep toward the back cage — to approach the max.
    */
   fullRange: 14.0,
-  growSize: 2.0, // up to double size on a long recall
-  shrinkSize: 0.5, // down to half size on a long recall
+  growSize: 3.0, // up to triple size on a long recall
+  shrinkSize: 1 / 3, // down to a third of the size on a long recall
   damageSwing: 10, // ±10 damage at full range
   splitCount: 3, // total balls a split becomes
   splitSize: 0.62, // each shard's size vs a normal ball
