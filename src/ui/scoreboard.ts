@@ -316,12 +316,12 @@ export function createScoreboard(scene: Scene): Scoreboard {
     ctx.clearRect(0, 0, W, H);
     if (cd) {
       // Countdown plate, centred and undistorted. Numbers are sized to a tall
-      // glyph; the wide FIGHT bar is sized to fill the board's WIDTH so it
-      // reads big (its transparent top/bottom padding overruns the canvas
-      // harmlessly). The mesh's slam-in spring still animates the whole board.
+      // glyph; the FIGHT word is sized to the board's WIDTH so it reads big (its
+      // transparent top/bottom padding overruns the canvas harmlessly). The
+      // mesh's slam-in spring still animates the whole board.
       let w: number, h: number;
       if (message === 'FIGHT') {
-        w = W - 90;
+        w = W - 200;
         h = cd.naturalHeight * (w / cd.naturalWidth);
       } else {
         h = 360;
@@ -329,16 +329,12 @@ export function createScoreboard(scene: Scene): Scoreboard {
       }
       ctx.drawImage(cd, (W - w) / 2, (H - h) / 2, w, h);
     } else if (vd) {
-      // Verdict plate (KO/KO'D/WIN): a smaller neon-metal word, centred. Capped
-      // on width too so a wide verdict never overruns the board.
-      const targetH = 150;
-      let h = targetH;
-      let w = vd.naturalWidth * (h / vd.naturalHeight);
-      const maxW = W - 140;
-      if (w > maxW) {
-        h *= maxW / w;
-        w = maxW;
-      }
+      // Verdict plate (KNOCKOUT / WIN): a big neon-metal word, centred and sized
+      // to the board WIDTH just like the FIGHT plate so it reads large. The word
+      // sits inside generous transparent padding, so the frame overruns the
+      // canvas top/bottom harmlessly while the word itself stays in bounds.
+      const w = W - 200;
+      const h = vd.naturalHeight * (w / vd.naturalWidth);
       ctx.drawImage(vd, (W - w) / 2, (H - h) / 2, w, h);
     } else if (message) {
       // No backing plate: just the short chromed verdict floating over the gap.
