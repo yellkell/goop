@@ -17,7 +17,7 @@
  * docs/gasket-gazette.md.
  */
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { initializeApp } from 'firebase/app';
 import { collection, doc, getDoc, getDocs, getFirestore, limit, orderBy, query, serverTimestamp, setDoc } from 'firebase/firestore';
 
@@ -67,6 +67,25 @@ await setDoc(doc(db, 'newspaper', 'latest'), {
   mood: article.mood ?? '',
   publishedAt: serverTimestamp(),
 });
+
+// Archive a copy to the repo (gazette-archive/) — Firestore only keeps `latest`,
+// so this is the permanent record of every edition. Committed by the gazette task.
+{
+  const n = String(edition).padStart(3, '0');
+  mkdirSync('gazette-archive', { recursive: true });
+  const record = {
+    edition,
+    dateline,
+    headline: article.headline,
+    subhead: article.subhead ?? '',
+    body: article.body,
+    byline: article.byline ?? 'Sheriff Cole Ironside',
+    mood: article.mood ?? '',
+  };
+  writeFileSync(`gazette-archive/no-${n}.json`, JSON.stringify(record, null, 2) + '\n');
+  const md = `# The Gasket Gazette — No. ${edition}\n\n**${dateline}** · _${record.mood}_\n\n## ${record.headline}\n\n*${record.subhead}*\n\n${record.body}\n\n— ${record.byline}\n`;
+  writeFileSync(`gazette-archive/no-${n}.md`, md);
+}
 
 // Roll the snapshot forward to today's standings for tomorrow's diff.
 const playersSnap = await getDocs(query(collection(db, 'players'), orderBy('xp', 'desc'), limit(80)));

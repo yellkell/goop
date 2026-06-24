@@ -154,6 +154,20 @@ node scripts/publish-gazette.mjs /tmp/gazette.json
 ```
 
 This bumps the edition number, writes `newspaper/latest` (lighting the red dot
-on every player's lobby paper button) and rolls the ladder snapshot forward for
-tomorrow's diff. Confirm it printed the "Filed edition No. N" line, then report
-the headline and edition number back.
+on every player's lobby paper button), rolls the ladder snapshot forward for
+tomorrow's diff, AND drops a permanent copy of the edition into
+`gazette-archive/no-NNN.json` + `.md` (Firestore only keeps the latest, so the
+repo is the real archive). Confirm it printed the "Filed edition No. N" line.
+
+## Step 5 — Commit the archive
+
+Save the new edition to the repo so every issue is kept forever:
+
+```
+git add gazette-archive/
+git commit -m "Gasket Gazette No. N — <headline>"
+git push
+```
+
+(Only the `gazette-archive/` files — nothing else.) Then report the headline and
+edition number back.
