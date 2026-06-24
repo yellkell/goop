@@ -8,9 +8,10 @@
  * always hears the same thing (and late joiners catch whatever's on).
  *
  * Each track is a plain <audio> element pointed at the bundled file. The
- * selected song LOOPS until you flip. We roll the element's own `volume` with
- * distance to the cabinet and duck it while anyone's talking — the walk-up
- * "louder up close" feel, no Web Audio routing needed for same-origin files.
+ * selected song plays ONCE and then stops — it does NOT loop; feed another coin
+ * to start the NEXT track. We roll the element's own `volume` with distance to
+ * the cabinet and duck it while anyone's talking — the walk-up "louder up
+ * close" feel, no Web Audio routing needed for same-origin files.
  */
 
 import { createSystem, InputComponent } from '@iwsdk/core';
@@ -50,6 +51,9 @@ export class MusicSystem extends createSystem({}) {
   private pendingPlay = false;
   /** Playback state of the active track, for the marquee readout. */
   private signal: 'connecting' | 'live' | 'nosignal' = 'connecting';
+  /** True once the current track has played to its end — stopped, waiting on a
+   *  coin to start the NEXT track (the pointer stays on the finished track). */
+  private ended = false;
   /** True while a hand is close enough to interact — the cabinet flares up. */
   private lit = false;
   // --- marquee (LED screen) state ---
@@ -163,9 +167,15 @@ export class MusicSystem extends createSystem({}) {
     old?.pause();
     this.station = s;
     this.pendingPlay = false;
+    this.ended = false;
     this.signal = 'connecting';
     if (s >= 0 && s < TRACKS.length) {
       const audio = this.ensureAudio(s);
+      try {
+        audio.currentTime = 0; // always start a freshly-picked track from the top
+      } catch {
+        /* not seekable yet — it'll start at 0 anyway */
+      }
       audio.volume = 0; // the update loop sets the real level from distance
       audio.play().catch((e: unknown) => this.onPlayReject(e));
     }
@@ -196,7 +206,7 @@ export class MusicSystem extends createSystem({}) {
     if (!audio) {
       audio = new Audio(TRACKS[s].url);
       audio.preload = 'none';
-      audio.loop = true; // the chosen song plays on a loop until you flip
+      audio.loop = false; // play once, then stop — a coin starts the next track
       audio.crossOrigin = null; // same-origin bundled file — no CORS need
       audio.volume = 0;
       // A file that won't decode shows "no signal" (skippable); a real start
@@ -206,6 +216,14 @@ export class MusicSystem extends createSystem({}) {
       });
       audio.addEventListener('error', () => {
         if (s === this.station) this.setSignal('nosignal');
+      });
+      // Reached the end on its own: stop here (don't replay) and prompt for a
+      // coin — the next one advances to the next track.
+      audio.addEventListener('ended', () => {
+        if (s === this.station) {
+          this.ended = true;
+          this.drawMarquee();
+        }
       });
       this.audios[s] = audio;
     }
@@ -220,6 +238,10 @@ export class MusicSystem extends createSystem({}) {
     } else if (this.station < 0) {
       this.marqueeMain = 'JUKEBOX';
       this.marqueeSub = 'insert coin to play';
+    } else if (this.ended) {
+      // Track finished — stopped, awaiting a coin for the next one.
+      this.marqueeMain = 'JUKEBOX';
+      this.marqueeSub = 'insert coin for next track';
     } else {
       this.marqueeMain = `♪ ${TRACKS[this.station].name}`;
       this.marqueeSub =
