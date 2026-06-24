@@ -135,14 +135,18 @@ function gasketCrateTexture(): CanvasTexture {
   ctx.lineWidth = 3;
   for (let i = 1; i < 4; i++) { ctx.beginPath(); ctx.moveTo(0, (i / 4) * H); ctx.lineTo(W, (i / 4) * H); ctx.stroke(); }
   ctx.strokeRect(5, 5, W - 10, H - 10);
-  // clean black shipping stencil, centred and fitted to the crate
+  // clean black shipping stencil: GASKET big, MACHINERY smaller beneath it
   ctx.fillStyle = '#16100a';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   let px = 56;
   ctx.font = `900 ${px}px 'Arial Narrow', Impact, sans-serif`;
   while (ctx.measureText('GASKET').width > W - 36 && px > 20) { px -= 2; ctx.font = `900 ${px}px 'Arial Narrow', Impact, sans-serif`; }
-  ctx.fillText('GASKET', W / 2, H / 2);
+  ctx.fillText('GASKET', W / 2, H * 0.44);
+  let mpx = Math.round(px * 0.46);
+  ctx.font = `800 ${mpx}px 'Arial Narrow', Impact, sans-serif`;
+  while (ctx.measureText('MACHINERY').width > W - 40 && mpx > 12) { mpx -= 1; ctx.font = `800 ${mpx}px 'Arial Narrow', Impact, sans-serif`; }
+  ctx.fillText('MACHINERY', W / 2, H * 0.62);
   const tex = new CanvasTexture(c);
   tex.colorSpace = SRGBColorSpace;
   tex.anisotropy = 4;
