@@ -125,6 +125,9 @@ export type MenuAction =
 
 const PW = 512;
 const PH = 400;
+// The ARCADE panel is a touch taller than the others so the second toggle
+// ('only play bots') has breathing room at the bottom.
+const TRAIN_H = PH + 44;
 // The leaderboard plate is taller than the lobby panels so the whole top 10
 // fits at once — its own canvas (same width, more height) and a physical size
 // scaled to match, so the text keeps the lobby's pixel density (no stretch).
@@ -238,7 +241,7 @@ function makePanel(
 /** Centre — ARCADE: aim training plus the 2v2 and FFA brawls, and the
  *  shoot-back toggle (which only flavours aim training). */
 function drawTrain(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
-  panelBg(ctx, false, UI.emberBright, 'ARCADE');
+  panelBg(ctx, false, UI.emberBright, 'ARCADE', PW, TRAIN_H);
 
   // TUTORIAL sits at the top — the very first thing a new boxer should tap.
   buttonPlate(ctx, 70, 80, PW - 140, 54, 'TUTORIAL', UI.emberBright, hoverAction === 'start-tutorial');
@@ -268,8 +271,8 @@ function drawTrain(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null
 }
 
 function hitTrain(_u: number, v: number): MenuAction | null {
-  // v: 0 bottom → 1 top (canvas y = (1-v)*PH).
-  const y = (1 - v) * PH;
+  // v: 0 bottom → 1 top (canvas y = (1-v)*TRAIN_H — this panel is taller).
+  const y = (1 - v) * TRAIN_H;
   if (y >= 80 && y <= 134) return 'start-tutorial';
   if (y >= 140 && y <= 194) return 'arcade-2v2';
   if (y >= 200 && y <= 254) return 'arcade-ffa';
@@ -313,19 +316,15 @@ function drawDuelRoot(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | n
   // RANKED is disabled while ONLY PLAY BOTS is on (no online queue allowed).
   const rankedOff = app.onlyBots && !queueing;
 
-  // RANKED — waits in the lobby for a real human (no bot).
+  // RANKED — waits in the lobby for a real human (no bot). Greyed + dead while
+  // ONLY PLAY BOTS is on.
   buttonPlate(
     ctx, 70, 84, PW - 140, 66,
     queueing ? 'CANCEL' : 'RANKED',
-    rankedOff ? UI.steelDim : queueing ? UI.amber : UI.cool,
+    queueing ? UI.amber : UI.cool,
     !rankedOff && hoverAction === rankedAction,
+    rankedOff,
   );
-  if (rankedOff) {
-    ctx.font = '700 14px system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = UI.steelDim;
-    ctx.fillText('ONLY PLAY BOTS IS ON', PW / 2, 132);
-  }
 
   // Live "N searching" badge on the RANKED plate — the queue you'd join.
   if (!queueing && !rankedOff && app.searching > 0) {
@@ -1916,7 +1915,7 @@ export function createMenu(scene: Scene): Menu {
   const group = new Group();
   group.name = 'lobby-menu';
 
-  const train = makePanel('train', 0.86, 0.68, drawTrain, hitTrain);
+  const train = makePanel('train', 0.86, 0.86 * (TRAIN_H / PW), drawTrain, hitTrain, { ch: TRAIN_H });
   const duel = makePanel('duel', 0.78, 0.62, drawDuel, hitDuel);
   const info = makePanel('info', 0.78, 0.62, drawInfo, hitInfo);
   // Taller than the lobby panels (1.36 × 1.456 ≈ BW:BH) so the full top 10
@@ -1950,7 +1949,9 @@ export function createMenu(scene: Scene): Menu {
 
   // Shallow arc in front of the player, tilted inward toward the centre.
   const y = 1.45;
-  train.mesh.position.set(0, y, -1.25);
+  // Grow the taller ARCADE panel DOWNWARD: drop its centre by half the extra
+  // height so its top stays level with the 1V1 panel.
+  train.mesh.position.set(0, y - 0.86 * ((TRAIN_H - PH) / PW) / 2, -1.25);
   duel.mesh.position.set(-0.84, y - 0.02, -1.02);
   duel.mesh.rotation.y = 0.48;
   info.mesh.position.set(0.84, y - 0.02, -1.02);

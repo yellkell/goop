@@ -236,6 +236,7 @@ export function buttonPlate(
   label: string,
   accent: string,
   hot: boolean,
+  disabled = false,
 ): void {
   plate(ctx, x, y, w, h, {
     cut: 14,
@@ -243,16 +244,16 @@ export function buttonPlate(
     stroke: hot ? accent : UI.steel,
     rivets: false,
   });
-  // Accent keying notch on the left edge — always neon.
-  ctx.shadowColor = accent;
-  ctx.shadowBlur = 10;
-  ctx.fillStyle = accent;
+  // Accent keying notch on the left edge — dimmed (no glow) when disabled.
+  ctx.shadowColor = disabled ? 'transparent' : accent;
+  ctx.shadowBlur = disabled ? 0 : 10;
+  ctx.fillStyle = disabled ? UI.steelDim : accent;
   ctx.fillRect(x + 6, y + h * 0.25, 5, h * 0.5);
   ctx.shadowBlur = 0;
   ctx.font = stencilFont(Math.round(h * 0.4));
   ctx.textAlign = 'center';
-  ctx.fillStyle = hot ? accent : UI.text;
-  if (hot) {
+  ctx.fillStyle = disabled ? 'rgba(180,186,196,0.38)' : hot ? accent : UI.text;
+  if (hot && !disabled) {
     ctx.shadowColor = accent;
     ctx.shadowBlur = 12;
   }
