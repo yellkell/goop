@@ -231,6 +231,82 @@ function workLamp(root: Group, x: number, z: number): { pivot: Object3D; phase: 
   return { pivot, phase: rnd() * Math.PI * 2 };
 }
 
+/** A rectangular hole in the floor with a flight of steps descending into a lit
+ *  pit below — sells the idea the hall is an upper floor. */
+function buildStairwell(root: Group, hx0: number, hx1: number, hz0: number, hz1: number): void {
+  const PIT = 3.0;
+  const pitY = FLOOR_Y - PIT;
+  const cx = (hx0 + hx1) / 2;
+  const cz = (hz0 + hz1) / 2;
+  const wX = hx1 - hx0, wZ = hz1 - hz0;
+  const wallMat = new MeshStandardMaterial({ color: 0x44464b, roughness: 0.95, metalness: 0.05, side: DoubleSide });
+
+  // Shaft walls lining the pit (floor level down to the landing).
+  const shaftWall = (px: number, pz: number, len: number, ry: number): void => {
+    const m = new Mesh(new PlaneGeometry(len, PIT), wallMat);
+    m.position.set(px, FLOOR_Y - PIT / 2, pz);
+    m.rotation.y = ry;
+    root.add(m);
+  };
+  shaftWall(cx, hz0, wX, 0);
+  shaftWall(cx, hz1, wX, Math.PI);
+  shaftWall(hx0, cz, wZ, Math.PI / 2);
+  shaftWall(hx1, cz, wZ, -Math.PI / 2);
+
+  // Pit floor / landing at the bottom.
+  const land = new Mesh(new PlaneGeometry(wX, wZ), wallMat);
+  land.rotation.x = -Math.PI / 2;
+  land.position.set(cx, pitY, cz);
+  root.add(land);
+
+  // Staircase descending southward (+z): each tread sits one step lower.
+  const N = 9;
+  const stepH = PIT / N;
+  const stepD = wZ / N;
+  const stepMat = steel(0x52555b, 0.7);
+  for (let i = 1; i <= N; i++) {
+    const topY = FLOOR_Y - i * stepH;
+    const zBack = hz0 + i * stepD;
+    const h = topY - pitY;
+    if (h < 0.05) continue;
+    const block = new Mesh(new BoxGeometry(wX - 0.1, h, zBack - hz0), stepMat);
+    block.position.set(cx, (topY + pitY) / 2, (hz0 + zBack) / 2);
+    root.add(block);
+  }
+
+  // A warm bulb + light down in the pit so it reads as a lived-in floor, not a void.
+  const bulb = new Mesh(
+    new SphereGeometry(0.09, 8, 8),
+    new MeshStandardMaterial({ color: 0xffd2a0, emissive: 0xffb878, emissiveIntensity: 1.5 }),
+  );
+  bulb.position.set(cx, pitY + 1.6, hz1 - 0.3);
+  root.add(bulb);
+  const light = new PointLight(0xffb878, 6, 7, 2);
+  light.position.set(cx, pitY + 1.2, cz);
+  root.add(light);
+
+  // Safety railing on the two room-facing edges (north + west); the east/south
+  // edges hug the building walls.
+  const railMat = steel(0x3c3f45, 0.6);
+  const railing = (px: number, pz: number, len: number, ry: number): void => {
+    for (const ry2 of [1.02, 0.55]) {
+      const bar = new Mesh(new BoxGeometry(len, 0.05, 0.05), railMat);
+      bar.position.set(px, FLOOR_Y + ry2, pz);
+      bar.rotation.y = ry;
+      root.add(bar);
+    }
+    const n = Math.max(2, Math.round(len / 0.9));
+    for (let i = 0; i <= n; i++) {
+      const t = -len / 2 + (i / n) * len;
+      const post = new Mesh(new BoxGeometry(0.05, 1.05, 0.05), railMat);
+      post.position.set(px + Math.cos(ry) * t, FLOOR_Y + 0.52, pz - Math.sin(ry) * t);
+      root.add(post);
+    }
+  };
+  railing(cx, hz0, wX, 0); // north edge
+  railing(hx0, cz, wZ, Math.PI / 2); // west edge
+}
+
 export function buildFactory(): Factory {
   seed = 1337;
   const root = new Group();
@@ -248,20 +324,50 @@ export function buildFactory(): Factory {
   root.add(new AmbientLight(new Color('#6b6470'), 0.62));
   root.add(new HemisphereLight(new Color(CONFIG.ibl.sky), new Color('#3a2f28'), 0.6));
 
-  // The desert outside: a vast sand floor + the desert's own horizon mesas.
-  const sand = new Mesh(new PlaneGeometry(700, 700), new MeshStandardMaterial({ color: new Color(CONFIG.palette.sandLight), roughness: 1 }));
-  sand.rotation.x = -Math.PI / 2;
-  sand.position.y = FLOOR_Y - 0.02;
-  root.add(sand);
-  buildMesas(root);
+  buildMesas(root); // the desert's own horizon mesas, seen through the window
 
-  // Cracked concrete floor over the interior footprint.
-  const concrete = new MeshStandardMaterial({ map: concreteTexture(), roughness: 0.95, metalness: 0.05 });
-  (concrete.map as CanvasTexture).repeat.set(10, 11);
-  const floor = new Mesh(new PlaneGeometry(HALL.maxX - HALL.minX, HALL.maxZ - HALL.minZ), concrete);
-  floor.rotation.x = -Math.PI / 2;
-  floor.position.set((HALL.minX + HALL.maxX) / 2, FLOOR_Y, (HALL.minZ + HALL.maxZ) / 2);
-  root.add(floor);
+  // A STAIRWELL hole in the SE corner — the empty corner behind the player's
+  // right shoulder (player faces −z, so +x/+z is back-right). Both the desert
+  // sand AND the concrete floor are laid as a frame AROUND the hole so the pit
+  // below shows through it.
+  const HW = 2.7, HD = 2.7, HMARGIN = 0.9;
+  const hx1 = HALL.maxX - HMARGIN, hx0 = hx1 - HW;
+  const hz1 = HALL.maxZ - HMARGIN, hz0 = hz1 - HD;
+
+  const flatRect = (mat: MeshStandardMaterial, x0: number, x1: number, z0: number, z1: number, y: number): void => {
+    if (x1 - x0 < 1e-3 || z1 - z0 < 1e-3) return;
+    const m = new Mesh(new PlaneGeometry(x1 - x0, z1 - z0), mat);
+    m.rotation.x = -Math.PI / 2;
+    m.position.set((x0 + x1) / 2, y, (z0 + z1) / 2);
+    root.add(m);
+  };
+
+  // Desert sand, framed around the hole (so it never covers the pit).
+  const sandMat = new MeshStandardMaterial({ color: new Color(CONFIG.palette.sandLight), roughness: 1 });
+  const sandY = FLOOR_Y - 0.02;
+  flatRect(sandMat, -350, 350, -350, hz0, sandY);
+  flatRect(sandMat, -350, 350, hz1, 350, sandY);
+  flatRect(sandMat, -350, hx0, hz0, hz1, sandY);
+  flatRect(sandMat, hx1, 350, hz0, hz1, sandY);
+
+  // Cracked concrete floor, framed around the hole. Each piece clones the
+  // concrete texture with a size-proportional repeat so the texel size stays even.
+  const floorTex = concreteTexture();
+  const DENSITY = 0.46;
+  const floorPiece = (x0: number, x1: number, z0: number, z1: number): void => {
+    if (x1 - x0 < 1e-3 || z1 - z0 < 1e-3) return;
+    const tex = floorTex.clone();
+    tex.needsUpdate = true;
+    tex.wrapS = tex.wrapT = RepeatWrapping;
+    tex.repeat.set((x1 - x0) * DENSITY, (z1 - z0) * DENSITY);
+    flatRect(new MeshStandardMaterial({ map: tex, roughness: 0.95, metalness: 0.05 }), x0, x1, z0, z1, FLOOR_Y);
+  };
+  floorPiece(HALL.minX, HALL.maxX, HALL.minZ, hz0); // north band (full width)
+  floorPiece(HALL.minX, HALL.maxX, hz1, HALL.maxZ); // south band
+  floorPiece(HALL.minX, hx0, hz0, hz1); // west band beside the hole
+  floorPiece(hx1, HALL.maxX, hz0, hz1); // east band beside the hole
+
+  buildStairwell(root, hx0, hx1, hz0, hz1);
 
   // The shell: EAST wall windowed (desert beyond), the other three closed.
   const clad = new MeshStandardMaterial({ map: corrugatedTexture(), metalness: 0.7, roughness: 0.72, side: DoubleSide });
