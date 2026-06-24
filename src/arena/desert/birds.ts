@@ -82,7 +82,7 @@ function makeWingGeometry(span: number, chord: number): BufferGeometry {
   return geo;
 }
 
-function makeVulture(rng: () => number): { obj: Group; wings: Group[] } {
+export function makeVulture(rng: () => number): { obj: Group; wings: Group[] } {
   const bird = new Group();
   const span = V.wingspan * (0.85 + rng() * 0.3);
   const chord = span * 0.18;
