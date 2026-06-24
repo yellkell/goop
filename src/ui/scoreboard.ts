@@ -32,6 +32,12 @@ import { verdictArt } from './verdictArt.js';
 const W = 880;
 const H = 420;
 
+// Visible cap height (canvas px) shared by every word plate — FIGHT, KNOCKOUT
+// and WIN — so they read at a consistent size. Clamped by WORD_PLATE_MARGIN so
+// the whole word always stays inside the board (never chopped at the edges).
+const WORD_PLATE_H = 357;
+const WORD_PLATE_MARGIN = 26;
+
 interface Board {
   mesh: Mesh;
   ctx: CanvasRenderingContext2D;
@@ -83,6 +89,49 @@ function makeBoard(wMeters: number, hMeters: number, cw = W, ch = H): Board {
     new MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }),
   );
   return { mesh, ctx, tex };
+}
+
+/** Opaque-content bounding box of a decoded plate, in image pixels — measured
+ *  once per image (the neon-metal art sits inside a lot of transparent
+ *  padding, so we size by the WORD, not the frame). Cached on the element. */
+interface ContentBox {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+const contentBoxCache = new WeakMap<HTMLImageElement, ContentBox>();
+function contentBox(img: HTMLImageElement): ContentBox {
+  const cached = contentBoxCache.get(img);
+  if (cached) return cached;
+  const iw = img.naturalWidth;
+  const ih = img.naturalHeight;
+  let box: ContentBox = { x: 0, y: 0, w: iw, h: ih };
+  const c = document.createElement('canvas');
+  c.width = iw;
+  c.height = ih;
+  const cx = c.getContext('2d');
+  if (cx) {
+    cx.drawImage(img, 0, 0);
+    const data = cx.getImageData(0, 0, iw, ih).data;
+    let minX = iw,
+      minY = ih,
+      maxX = -1,
+      maxY = -1;
+    for (let y = 0; y < ih; y++) {
+      for (let x = 0; x < iw; x++) {
+        if (data[(y * iw + x) * 4 + 3] > 16) {
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+    if (maxX >= minX && maxY >= minY) box = { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+  }
+  contentBoxCache.set(img, box);
+  return box;
 }
 
 /**
@@ -314,28 +363,31 @@ export function createScoreboard(scene: Scene): Scoreboard {
     centre.key = key;
     const { ctx, tex } = centre;
     ctx.clearRect(0, 0, W, H);
-    if (cd) {
-      // Countdown plate, centred and undistorted. Numbers are sized to a tall
-      // glyph; the FIGHT word is sized to the board's WIDTH so it reads big (its
-      // transparent top/bottom padding overruns the canvas harmlessly). The
-      // mesh's slam-in spring still animates the whole board.
-      let w: number, h: number;
-      if (message === 'FIGHT') {
-        w = W - 200;
-        h = cd.naturalHeight * (w / cd.naturalWidth);
-      } else {
-        h = 360;
-        w = cd.naturalWidth * (h / cd.naturalHeight);
-      }
+    if (cd && message !== 'FIGHT') {
+      // Countdown number (3/2/1): sized to a tall glyph by FRAME height, the
+      // content is dead-centred in its frame so this reads centred too.
+      const h = 360;
+      const w = cd.naturalWidth * (h / cd.naturalHeight);
       ctx.drawImage(cd, (W - w) / 2, (H - h) / 2, w, h);
-    } else if (vd) {
-      // Verdict plate (KNOCKOUT / WIN): a big neon-metal word, centred and sized
-      // to the board WIDTH just like the FIGHT plate so it reads large. The word
-      // sits inside generous transparent padding, so the frame overruns the
-      // canvas top/bottom harmlessly while the word itself stays in bounds.
-      const w = W - 200;
-      const h = vd.naturalHeight * (w / vd.naturalWidth);
-      ctx.drawImage(vd, (W - w) / 2, (H - h) / 2, w, h);
+    } else if (cd || vd) {
+      // Word plates — FIGHT (countdown) and KNOCKOUT / WIN (verdict) — all share
+      // one frame full of transparent padding, so we size by the VISIBLE WORD,
+      // not the frame: every word gets the same cap height (WORD_PLATE_H) so the
+      // three read consistently, and the box is clamped to keep the whole word
+      // inside the board with margin to spare — nothing is ever chopped off.
+      const img = (cd ?? vd) as HTMLImageElement;
+      const box = contentBox(img);
+      let scale = WORD_PLATE_H / box.h;
+      const maxW = W - 2 * WORD_PLATE_MARGIN;
+      const maxH = H - 2 * WORD_PLATE_MARGIN;
+      if (box.w * scale > maxW) scale = maxW / box.w;
+      if (box.h * scale > maxH) scale = maxH / box.h;
+      const dw = img.naturalWidth * scale;
+      const dh = img.naturalHeight * scale;
+      // Centre the WORD (its content box) on the board, not the padded frame.
+      const cx = (box.x + box.w / 2) * scale;
+      const cy = (box.y + box.h / 2) * scale;
+      ctx.drawImage(img, W / 2 - cx, H / 2 - cy, dw, dh);
     } else if (message) {
       // No backing plate: just the short chromed verdict floating over the gap.
       ctx.textAlign = 'center';
