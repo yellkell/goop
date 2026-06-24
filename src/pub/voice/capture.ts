@@ -18,6 +18,7 @@
  */
 
 import { audioContext } from '../../audio/sfx.js';
+import { voiceEnabled } from '../../audio/voicePref.js';
 
 /** Receives one PCM voice frame ready for the wire. */
 export type VoiceSender = (frame: ArrayBuffer) => void;
@@ -59,6 +60,8 @@ export function toggleVoiceMuted(): boolean {
  */
 export async function startVoiceCapture(send: VoiceSender): Promise<boolean> {
   if (running) return true;
+  // Voice chat turned off in the main menu: don't even ask for the mic.
+  if (!voiceEnabled()) return false;
   const ctx = audioContext();
   if (!ctx) {
     console.warn('[pub voice] no audio context — mic disabled');

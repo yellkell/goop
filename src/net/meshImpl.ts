@@ -29,6 +29,7 @@ import {
   type Unsubscribe,
 } from 'firebase/firestore';
 import { firebaseConfig } from './firebaseConfig.js';
+import { voiceEnabled } from '../audio/voicePref.js';
 import type { ArcadeMode } from '../config.js';
 import type { PeerMessage } from './protocol.js';
 import type { MeshState } from './mesh.js';
@@ -218,7 +219,12 @@ export class MeshImpl {
   private ensureMic(): Promise<MediaStream | null> {
     this.micPromise ??= navigator.mediaDevices
       .getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
-      .then((s) => (this.micStream = s))
+      .then((s) => {
+        this.micStream = s;
+        // Honour the voice-chat preference: a disabled mic transmits nothing.
+        for (const t of s.getAudioTracks()) t.enabled = voiceEnabled();
+        return s;
+      })
       .catch(() => null);
     return this.micPromise;
   }

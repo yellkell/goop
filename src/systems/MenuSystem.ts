@@ -58,6 +58,7 @@ import {
 import { canAfford, spendCoins } from '../menu/wallet.js';
 import { playCash, preloadCash } from '../audio/cash.js';
 import { setMenuMusicActive, toggleMusicMuted } from '../audio/menuMusic.js';
+import { setVoiceEnabled, voiceEnabled } from '../audio/voicePref.js';
 import { buildBoxer, setAvatarAccent, solveTorso, type BoxerRig } from '../avatar/boxer.js';
 import {
   AVATAR_SKINS,
@@ -401,6 +402,9 @@ export class MenuSystem extends createSystem({}) {
       case 'toggle-onlybots':
         app.onlyBots = !app.onlyBots;
         saveOnlyBots();
+        break;
+      case 'toggle-voice':
+        setVoiceEnabled(!voiceEnabled());
         break;
       case 'ranked-match':
         if (app.onlyBots) break; // disabled — no online queue in only-bots mode

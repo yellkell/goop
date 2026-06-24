@@ -15,6 +15,10 @@
 
 import type { Quaternion, Vector3 } from 'three';
 import { audioContext } from '../../audio/sfx.js';
+import { voiceEnabled } from '../../audio/voicePref.js';
+
+/** Read once at load — the toggle lives in the main menu, set before the pub. */
+const VOICE_ON = voiceEnabled();
 
 const JITTER = 0.12; // s of lead before a speaker starts — absorbs network jitter
 const SPEAKING_MS = 350; // recent-frame window for the "is talking" indicator
@@ -52,6 +56,7 @@ function ensureSpeaker(id: string): Speaker | null {
 /** Decode (just int16→float) and queue one PCM frame from punter `id`. */
 export function pushVoiceFrame(id: string, frame: ArrayBuffer): void {
   if (frame.byteLength <= 8) return;
+  if (!VOICE_ON) return; // voice chat turned off in the main menu — hear no one
   const ctx = audioContext();
   if (!ctx) return;
   // Voice may be the first thing to wake the graph in a quiet pub.

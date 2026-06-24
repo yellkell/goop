@@ -11,6 +11,10 @@
 
 import type { Quaternion, Vector3 } from 'three';
 import { audioContext } from '../audio/sfx.js';
+import { voiceEnabled } from '../audio/voicePref.js';
+
+/** Playback gain — 0 (deaf) when the player turned voice chat off. */
+const hearGain = (): number => (voiceEnabled() ? 1.5 : 0);
 
 let el: HTMLAudioElement | null = null;
 let source: MediaStreamAudioSourceNode | null = null;
@@ -38,7 +42,7 @@ export function attachRemoteVoice(stream: MediaStream): void {
   panner.maxDistance = 30;
   panner.rolloffFactor = 1;
   gain = ctx.createGain();
-  gain.gain.value = 1.5; // voice sits above the sfx bed
+  gain.gain.value = hearGain(); // voice sits above the sfx bed (0 when voice chat off)
   source.connect(panner).connect(gain).connect(ctx.destination);
 }
 
@@ -102,7 +106,7 @@ export function attachMeshVoice(key: number, stream: MediaStream): void {
   panner.maxDistance = 30;
   panner.rolloffFactor = 1;
   const gain = ctx.createGain();
-  gain.gain.value = 1.5;
+  gain.gain.value = hearGain();
   source.connect(panner).connect(gain).connect(ctx.destination);
   speakers.set(key, { el, source, panner, gain });
 }

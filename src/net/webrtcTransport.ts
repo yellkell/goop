@@ -40,6 +40,7 @@ import {
   type Unsubscribe,
 } from 'firebase/firestore';
 import { firebaseConfig } from './firebaseConfig.js';
+import { voiceEnabled } from '../audio/voicePref.js';
 import type { PeerMessage } from './protocol.js';
 import type { Transport, TransportEvents } from './transport.js';
 
@@ -226,6 +227,8 @@ export class WebRtcTransport implements Transport {
         this.micStream = null;
         return;
       }
+      // Honour the voice-chat preference: a disabled mic transmits nothing.
+      for (const track of this.micStream.getAudioTracks()) track.enabled = voiceEnabled();
       for (const track of this.micStream.getTracks()) pc.addTrack(track, this.micStream);
     } catch {
       // Mic denied/unavailable — still set up to RECEIVE their voice.

@@ -37,6 +37,7 @@ import {
 } from '../net/leaderboard.js';
 import { gazette, type GazetteArticle } from '../net/gazette.js';
 import { isMusicMuted } from '../audio/menuMusic.js';
+import { voiceEnabled } from '../audio/voicePref.js';
 import { PUB_MAX_PLAYERS } from '../pub/protocol.js';
 import { PUB_REGIONS } from '../pub/config.js';
 import { UI, buttonPlate, hazardStrip, plate, segmentBar, stencilFont } from '../ui/industrial.js';
@@ -67,6 +68,7 @@ export type MenuAction =
   | 'arcade-ffa'
   | 'toggle-shootback'
   | 'toggle-onlybots'
+  | 'toggle-voice'
   | 'ranked-match'
   | 'quick-match'
   | 'cancel-queue'
@@ -125,9 +127,9 @@ export type MenuAction =
 
 const PW = 512;
 const PH = 400;
-// The ARCADE panel is a touch taller than the others so the second toggle
-// ('only play bots') has breathing room at the bottom.
-const TRAIN_H = PH + 44;
+// The ARCADE panel is taller than the others to fit its three breaker toggles
+// (shoot-back, only-play-bots, voice-chat) with breathing room at the bottom.
+const TRAIN_H = PH + 92;
 // The leaderboard plate is taller than the lobby panels so the whole top 10
 // fits at once — its own canvas (same width, more height) and a physical size
 // scaled to match, so the text keeps the lobby's pixel density (no stretch).
@@ -267,7 +269,8 @@ function drawTrain(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null
     ctx.fillRect(on ? px + pw - kw - 6 : px + 6, py + 6, kw, ph - 12);
   };
   breaker('targets shoot back', app.shootBack, hoverAction === 'toggle-shootback', 320, 'rgba(79,183,255,0.25)', UI.cool);
-  breaker('only play bots', app.onlyBots, hoverAction === 'toggle-onlybots', 360, 'rgba(255,176,0,0.25)', UI.amber);
+  breaker('only play bots', app.onlyBots, hoverAction === 'toggle-onlybots', 362, 'rgba(255,176,0,0.25)', UI.amber);
+  breaker('voice chat', voiceEnabled(), hoverAction === 'toggle-voice', 404, 'rgba(57,217,138,0.28)', '#39d98a');
 }
 
 function hitTrain(_u: number, v: number): MenuAction | null {
@@ -277,8 +280,9 @@ function hitTrain(_u: number, v: number): MenuAction | null {
   if (y >= 140 && y <= 194) return 'arcade-2v2';
   if (y >= 200 && y <= 254) return 'arcade-ffa';
   if (y >= 260 && y <= 314) return 'start-training';
-  if (y >= 318 && y <= 356) return 'toggle-shootback';
-  if (y >= 358 && y <= 396) return 'toggle-onlybots';
+  if (y >= 318 && y <= 358) return 'toggle-shootback';
+  if (y >= 360 && y <= 400) return 'toggle-onlybots';
+  if (y >= 402 && y <= 442) return 'toggle-voice';
   return null;
 }
 
