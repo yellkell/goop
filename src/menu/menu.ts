@@ -77,6 +77,7 @@ export type MenuAction =
   | 'kp-join'
   | `kp-${number}`
   | 'toggle-environment'
+  | 'toggle-factory'
   | 'lb-ranked'
   | 'lb-xp'
   | 'lb-arcade'
@@ -337,30 +338,35 @@ function drawDuelRoot(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | n
   // PRIVATE — share a 5-digit code with a friend.
   buttonPlate(ctx, 70, 228, PW - 140, 58, 'PRIVATE', UI.coolBright, hoverAction === 'private-open');
 
-  // Desert-arena breaker switch.
-  const on = app.environment === 'desert';
-  const environmentHot = hoverAction === 'toggle-environment';
-  ctx.font = '700 24px system-ui, sans-serif';
+  // Arena-backdrop breaker switches: desert, then factory beneath it (each a
+  // toggle; turning one on turns the other off — the third state is bare AR).
+  envToggle(ctx, 'desert arena', app.environment === 'desert', hoverAction === 'toggle-environment', 290);
+  envToggle(ctx, 'factory arena', app.environment === 'factory', hoverAction === 'toggle-factory', 334);
+
+  if (queueing) {
+    ctx.textAlign = 'center';
+    ctx.font = '600 19px system-ui, sans-serif';
+    ctx.fillStyle = 'rgba(159,226,255,0.85)';
+    ctx.fillText('searching for an opponent…', PW / 2, 392);
+  }
+}
+
+/** One labelled breaker switch row at canvas y `sy`. */
+function envToggle(ctx: CanvasRenderingContext2D, label: string, on: boolean, hot: boolean, sy: number): void {
+  ctx.font = '700 23px system-ui, sans-serif';
   ctx.textAlign = 'left';
-  ctx.fillStyle = environmentHot ? UI.amber : UI.textDim;
-  ctx.fillText('desert arena', 64, 320);
-  const sw = 110, sh = 44, sx = PW - 64 - sw, sy = 298;
+  ctx.fillStyle = hot ? UI.amber : UI.textDim;
+  ctx.fillText(label, 64, sy + 24);
+  const sw = 110, sh = 36, sx = PW - 64 - sw;
   plate(ctx, sx, sy, sw, sh, {
     cut: 10,
-    fill: on ? 'rgba(255,176,0,0.22)' : environmentHot ? 'rgba(255,176,0,0.16)' : 'rgba(150,150,170,0.12)',
-    stroke: environmentHot || on ? UI.amber : UI.steelDim,
+    fill: on ? 'rgba(255,176,0,0.22)' : hot ? 'rgba(255,176,0,0.16)' : 'rgba(150,150,170,0.12)',
+    stroke: hot || on ? UI.amber : UI.steelDim,
     rivets: false,
   });
   ctx.fillStyle = on ? UI.amber : UI.steelDim;
   const kw = sw / 2 - 12;
-  ctx.fillRect(on ? sx + sw - kw - 8 : sx + 8, sy + 8, kw, sh - 16);
-
-  if (queueing) {
-    ctx.textAlign = 'center';
-    ctx.font = '600 20px system-ui, sans-serif';
-    ctx.fillStyle = 'rgba(159,226,255,0.85)';
-    ctx.fillText('searching for an opponent…', PW / 2, 372);
-  }
+  ctx.fillRect(on ? sx + sw - kw - 8 : sx + 8, sy + 7, kw, sh - 14);
 }
 
 function hitDuelRoot(v: number): MenuAction | null {
@@ -368,7 +374,8 @@ function hitDuelRoot(v: number): MenuAction | null {
   if (y >= 80 && y <= 152) return app.state === 'queueing' ? 'cancel-queue' : 'ranked-match';
   if (y >= 154 && y <= 224) return 'quick-match';
   if (y >= 226 && y <= 288) return 'private-open';
-  if (y >= 292 && y <= 344) return 'toggle-environment';
+  if (y >= 288 && y <= 328) return 'toggle-environment';
+  if (y >= 332 && y <= 372) return 'toggle-factory';
   return null;
 }
 

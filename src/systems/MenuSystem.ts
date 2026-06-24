@@ -448,6 +448,10 @@ export class MenuSystem extends createSystem({}) {
         app.environment = app.environment === 'desert' ? 'ar' : 'desert';
         saveEnvironment();
         break;
+      case 'toggle-factory':
+        app.environment = app.environment === 'factory' ? 'ar' : 'factory';
+        saveEnvironment();
+        break;
       case 'lb-ranked':
         setLeaderboardTab('ranked');
         break;

@@ -17,7 +17,7 @@ export type AppMode = 'bot' | 'net';
 export type { ArcadeMode } from '../config.js';
 import type { ArcadeMode } from '../config.js';
 /** The arena backdrop: bare AR passthrough, or the papercraft desert. */
-export type AppEnvironment = 'ar' | 'desert';
+export type AppEnvironment = 'ar' | 'desert' | 'factory';
 
 export interface LifetimeStats {
   wins: number;
@@ -135,7 +135,10 @@ export const app: {
   pubRegionCounts: {},
   infoView: 'root',
   gazetteOpen: false,
-  environment: localStorage.getItem('ff-env') === 'desert' ? 'desert' : 'ar',
+  environment: ((): AppEnvironment => {
+    const e = localStorage.getItem('ff-env');
+    return e === 'desert' || e === 'factory' ? e : 'ar';
+  })(),
   accentHue: loadAccentHue(),
   accentLight: loadAccentLight(),
   ballAttach: loadBallAttach(),
