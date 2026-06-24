@@ -184,8 +184,8 @@ function wall(root: Group, mat: MeshStandardMaterial, len: number, cx: number, c
     root.add(m);
     return;
   }
-  const sillH = 2.7; // higher window strip — sits well above eye level
-  const winH = 2.3;
+  const sillH = 3.7; // window strip set high up the wall
+  const winH = 2.1;
   const topH = h - sillH - winH;
   const band = (bh: number, by: number): void => {
     const m = new Mesh(new PlaneGeometry(len, bh), mat);
@@ -250,7 +250,7 @@ export function buildFactory(): Factory {
   sun.position.set(26, 16, 6);
   sun.target.position.set(0, 0, CENTRE_Z);
   root.add(sun, sun.target);
-  root.add(new AmbientLight(new Color('#6b6470'), 0.5));
+  root.add(new AmbientLight(new Color('#6b6470'), 0.62));
   root.add(new HemisphereLight(new Color(CONFIG.ibl.sky), new Color('#3a2f28'), 0.6));
 
   // The desert outside: a vast sand floor + the desert's own horizon mesas.
@@ -300,7 +300,6 @@ export function buildFactory(): Factory {
   const panelsX = 7, panelsZ = 8;
   for (let i = 0; i < panelsX; i++) {
     for (let j = 0; j < panelsZ; j++) {
-      if (rnd() < 0.13) continue; // a missing panel — daylight pours in
       const px = HALL.minX + (i + 0.5) * (w / panelsX);
       const pz = HALL.minZ + (j + 0.5) * (d / panelsZ);
       const panel = new Mesh(new PlaneGeometry(w / panelsX + 0.05, d / panelsZ + 0.05), roofMat);
@@ -432,7 +431,7 @@ export function buildFactory(): Factory {
   const bird = makeVulture(rnd);
   root.add(bird.obj);
   const dihedral = bird.wings[0].rotation.z;
-  const BIRD = { cx: HALL.maxX + 30, cz: CENTRE_Z, r: 10, y: FLOOR_Y + 8.6 };
+  const BIRD = { cx: HALL.maxX + 48, cz: CENTRE_Z, r: 12, y: FLOOR_Y + 16.5 };
 
   return {
     root,

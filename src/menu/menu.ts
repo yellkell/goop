@@ -341,7 +341,7 @@ function drawDuelRoot(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | n
   // Arena-backdrop breaker switches: desert, then factory beneath it (each a
   // toggle; turning one on turns the other off — the third state is bare AR).
   envToggle(ctx, 'desert arena', app.environment === 'desert', hoverAction === 'toggle-environment', 290);
-  envToggle(ctx, 'factory arena', app.environment === 'factory', hoverAction === 'toggle-factory', 334);
+  envToggle(ctx, 'old factory arena', app.environment === 'factory', hoverAction === 'toggle-factory', 334);
 
   if (queueing) {
     ctx.textAlign = 'center';
