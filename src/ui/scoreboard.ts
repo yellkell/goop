@@ -32,11 +32,14 @@ import { verdictArt } from './verdictArt.js';
 const W = 880;
 const H = 420;
 
-// Visible cap height (canvas px) shared by every word plate — FIGHT, KNOCKOUT
-// and WIN — so they read at a consistent size. Clamped by WORD_PLATE_MARGIN so
-// the whole word always stays inside the board (never chopped at the edges).
+// Visible cap height (canvas px) for the art plates, measured from the opaque
+// WORD/digit so they read at a consistent size regardless of each PNG's
+// transparent padding. Words (FIGHT / KNOCKOUT / WIN) share one height; the
+// countdown digits share a slightly smaller one so FIGHT still lands biggest.
+// Clamped by PLATE_MARGIN so the whole glyph always stays on the board.
 const WORD_PLATE_H = 357;
-const WORD_PLATE_MARGIN = 26;
+const NUMBER_PLATE_H = 300;
+const PLATE_MARGIN = 26;
 
 interface Board {
   mesh: Mesh;
@@ -132,6 +135,22 @@ function contentBox(img: HTMLImageElement): ContentBox {
   }
   contentBoxCache.set(img, box);
   return box;
+}
+
+/** Draw an art plate centred on the centre board, sized so its VISIBLE glyph
+ *  (not the padded frame) is `targetH` tall — but never larger than the board's
+ *  safe area, so the whole glyph always stays on screen (nothing chopped). */
+function drawContentPlate(ctx: CanvasRenderingContext2D, img: HTMLImageElement, targetH: number): void {
+  const box = contentBox(img);
+  let scale = targetH / box.h;
+  const maxW = W - 2 * PLATE_MARGIN;
+  const maxH = H - 2 * PLATE_MARGIN;
+  if (box.w * scale > maxW) scale = maxW / box.w;
+  if (box.h * scale > maxH) scale = maxH / box.h;
+  // Centre the glyph's content box on the board, not the padded frame.
+  const cx = (box.x + box.w / 2) * scale;
+  const cy = (box.y + box.h / 2) * scale;
+  ctx.drawImage(img, W / 2 - cx, H / 2 - cy, img.naturalWidth * scale, img.naturalHeight * scale);
 }
 
 /**
@@ -364,30 +383,13 @@ export function createScoreboard(scene: Scene): Scoreboard {
     const { ctx, tex } = centre;
     ctx.clearRect(0, 0, W, H);
     if (cd && message !== 'FIGHT') {
-      // Countdown number (3/2/1): sized to a tall glyph by FRAME height, the
-      // content is dead-centred in its frame so this reads centred too.
-      const h = 360;
-      const w = cd.naturalWidth * (h / cd.naturalHeight);
-      ctx.drawImage(cd, (W - w) / 2, (H - h) / 2, w, h);
+      // Countdown digit (3/2/1): sized by its VISIBLE glyph to a consistent
+      // height so the count reads evenly, whatever padding each PNG carries.
+      drawContentPlate(ctx, cd, NUMBER_PLATE_H);
     } else if (cd || vd) {
-      // Word plates — FIGHT (countdown) and KNOCKOUT / WIN (verdict) — all share
-      // one frame full of transparent padding, so we size by the VISIBLE WORD,
-      // not the frame: every word gets the same cap height (WORD_PLATE_H) so the
-      // three read consistently, and the box is clamped to keep the whole word
-      // inside the board with margin to spare — nothing is ever chopped off.
-      const img = (cd ?? vd) as HTMLImageElement;
-      const box = contentBox(img);
-      let scale = WORD_PLATE_H / box.h;
-      const maxW = W - 2 * WORD_PLATE_MARGIN;
-      const maxH = H - 2 * WORD_PLATE_MARGIN;
-      if (box.w * scale > maxW) scale = maxW / box.w;
-      if (box.h * scale > maxH) scale = maxH / box.h;
-      const dw = img.naturalWidth * scale;
-      const dh = img.naturalHeight * scale;
-      // Centre the WORD (its content box) on the board, not the padded frame.
-      const cx = (box.x + box.w / 2) * scale;
-      const cy = (box.y + box.h / 2) * scale;
-      ctx.drawImage(img, W / 2 - cx, H / 2 - cy, dw, dh);
+      // Word plates — FIGHT (countdown) and KNOCKOUT / WIN (verdict) — sized by
+      // the VISIBLE word to a shared cap height so all three read consistently.
+      drawContentPlate(ctx, (cd ?? vd) as HTMLImageElement, WORD_PLATE_H);
     } else if (message) {
       // No backing plate: just the short chromed verdict floating over the gap.
       ctx.textAlign = 'center';
