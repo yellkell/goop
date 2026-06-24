@@ -1796,6 +1796,8 @@ function drawColourTab(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | 
   const label = (text: string, y: number): void => {
     ctx.font = '700 20px system-ui, sans-serif';
     ctx.fillStyle = UI.textDim;
+    ctx.textAlign = 'left'; // reset — drawResetBtn leaves textAlign 'center'
+    ctx.textBaseline = 'alphabetic';
     ctx.fillText(text, 40, y);
   };
 
@@ -1810,12 +1812,6 @@ function drawColourTab(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | 
   drawResetBtn(ctx, ACCENT_DEF, Math.abs(app.accentHue - DEFAULT_ACCENT_HUE) < 0.005, hoverAction === 'accent-default');
   label('LIGHTNESS', ACCENT_LIGHT_BAR.y - 14);
   drawLightBar(ctx, ACCENT_LIGHT_BAR, app.accentLight, app.accentHue, true);
-
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.font = '600 17px system-ui, sans-serif';
-  ctx.fillStyle = 'rgba(232,236,242,0.5)';
-  ctx.fillText('drag to repaint your armour and its neon — looks only', PAN_W / 2, PAN_H - 92);
 }
 
 function drawGrid(ctx: CanvasRenderingContext2D, locker: boolean, hoverAction: MenuAction | null): void {
