@@ -54,7 +54,7 @@ import {
 } from '../menu/customization.js';
 import { canAfford, spendCoins } from '../menu/wallet.js';
 import { playCash, preloadCash } from '../audio/cash.js';
-import { toggleMusicMuted } from '../audio/menuMusic.js';
+import { setMenuMusicActive, toggleMusicMuted } from '../audio/menuMusic.js';
 import { buildBoxer, setAvatarAccent, solveTorso, type BoxerRig } from '../avatar/boxer.js';
 import {
   AVATAR_SKINS,
@@ -860,6 +860,7 @@ export class MenuSystem extends createSystem({}) {
   private applyState(): void {
     const inLobby = app.state === 'menu' || app.state === 'queueing';
     this.menu.setVisible(inLobby);
+    setMenuMusicActive(inLobby); // pause the lobby music during a bout / training
     // Fresh board standings + the day's Gasket Gazette whenever you land back
     // in the lobby (both throttled).
     if (inLobby) {
