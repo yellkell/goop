@@ -130,6 +130,9 @@ const PH = 400;
 // The ARCADE panel is taller than the others to fit its three breaker toggles
 // (shoot-back, only-play-bots, voice-chat) with breathing room at the bottom.
 const TRAIN_H = PH + 92;
+// The 1V1 panel grows a little downward so the "searching for an opponent…"
+// line sits inside the frame instead of hanging off the bottom edge.
+const DUEL_H = PH + 48;
 // The leaderboard plate is taller than the lobby panels so the whole top 10
 // fits at once — its own canvas (same width, more height) and a physical size
 // scaled to match, so the text keeps the lobby's pixel density (no stretch).
@@ -288,7 +291,7 @@ function hitTrain(_u: number, v: number): MenuAction | null {
 
 /** Left — 1V1. Mode list (Ranked / Quick / Private) or the private-match flow. */
 function drawDuel(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
-  panelBg(ctx, false, UI.cool, '1 V 1');
+  panelBg(ctx, false, UI.cool, '1 V 1', PW, DUEL_H);
   switch (app.duelView) {
     case 'private':
       return drawPrivateMenu(ctx, hoverAction);
@@ -385,7 +388,7 @@ function envToggle(ctx: CanvasRenderingContext2D, label: string, on: boolean, ho
 }
 
 function hitDuelRoot(v: number): MenuAction | null {
-  const y = (1 - v) * PH;
+  const y = (1 - v) * DUEL_H;
   if (y >= 80 && y <= 152) {
     if (app.state === 'queueing') return 'cancel-queue';
     return app.onlyBots ? null : 'ranked-match'; // ranked disabled in only-bots mode
@@ -407,7 +410,7 @@ function drawPrivateMenu(ctx: CanvasRenderingContext2D, hoverAction: MenuAction 
 }
 
 function hitPrivateMenu(v: number): MenuAction | null {
-  const y = (1 - v) * PH;
+  const y = (1 - v) * DUEL_H;
   if (y >= 104 && y <= 202) return 'private-create';
   if (y >= 206 && y <= 304) return 'private-enter';
   if (y >= 312 && y <= 378) return 'private-back';
@@ -429,7 +432,7 @@ function drawHosting(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | nu
 }
 
 function hitHosting(v: number): MenuAction | null {
-  const y = (1 - v) * PH;
+  const y = (1 - v) * DUEL_H;
   return y >= 290 && y <= 372 ? 'cancel-queue' : null;
 }
 
@@ -478,7 +481,7 @@ function drawKeypad(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | nul
 
 function hitKeypad(u: number, v: number): MenuAction | null {
   const x = u * PW;
-  const y = (1 - v) * PH;
+  const y = (1 - v) * DUEL_H;
   if (app.state === 'queueing') return y >= 140 && y <= 250 ? 'cancel-queue' : null;
   if (y >= 80 && y <= 122 && x <= 140) return 'private-back';
   for (let r = 0; r < KP.rows; r++) {
@@ -1920,7 +1923,7 @@ export function createMenu(scene: Scene): Menu {
   group.name = 'lobby-menu';
 
   const train = makePanel('train', 0.86, 0.86 * (TRAIN_H / PW), drawTrain, hitTrain, { ch: TRAIN_H });
-  const duel = makePanel('duel', 0.78, 0.62, drawDuel, hitDuel);
+  const duel = makePanel('duel', 0.78, 0.62 * (DUEL_H / PH), drawDuel, hitDuel, { ch: DUEL_H });
   const info = makePanel('info', 0.78, 0.62, drawInfo, hitInfo);
   // Taller than the lobby panels (1.36 × 1.456 ≈ BW:BH) so the full top 10
   // reads at a glance; its own BW×BH canvas keeps the text at lobby density.
@@ -1956,7 +1959,9 @@ export function createMenu(scene: Scene): Menu {
   // Grow the taller ARCADE panel DOWNWARD: drop its centre by half the extra
   // height so its top stays level with the 1V1 panel.
   train.mesh.position.set(0, y - 0.86 * ((TRAIN_H - PH) / PW) / 2, -1.25);
-  duel.mesh.position.set(-0.84, y - 0.02, -1.02);
+  // Shift the centre down by half the extra height so the panel grows DOWNWARD
+  // (its top edge stays put) — the new room lands under the searching line.
+  duel.mesh.position.set(-0.84, y - 0.02 - 0.62 * ((DUEL_H - PH) / PH) / 2, -1.02);
   duel.mesh.rotation.y = 0.48;
   info.mesh.position.set(0.84, y - 0.02, -1.02);
   info.mesh.rotation.y = -0.48;
