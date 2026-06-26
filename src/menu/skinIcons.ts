@@ -58,51 +58,26 @@ function drawBear(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: numb
   ctx.fill();
 }
 
-/** Panther head: a broad-cheeked cat skull with short upright ears, full jowls
- *  and a blunt muzzle — unmistakably feline, not a narrow-snouted fox. */
+/** Panther head: a single clean cat-head SILHOUETTE — two big triangular ears
+ *  on a broad, round-cheeked face that tapers to a soft round chin, matching
+ *  the classic cat-face emblem. One filled shape, no inner features. */
 function drawPanther(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number): void {
-  // Ears — short, broad-based and upright, sitting on top of the skull.
-  for (const s of [-1, 1]) {
-    ctx.beginPath();
-    ctx.moveTo(cx + s * r * 0.24, cy - r * 0.5);
-    ctx.lineTo(cx + s * r * 0.5, cy - r * 0.96);
-    ctx.lineTo(cx + s * r * 0.74, cy - r * 0.44);
-    ctx.closePath();
-    ctx.fill();
-  }
-  // Skull — rounded forehead, cheeks flaring WIDE, full jowls drawn in to a
-  // soft round chin (a cat's broad face, no long taper).
+  const x = (u: number): number => cx + u * r;
+  const y = (v: number): number => cy + v * r;
   ctx.beginPath();
-  ctx.moveTo(cx - r * 0.76, cy - r * 0.5);
-  ctx.quadraticCurveTo(cx - r * 1.02, cy + r * 0.06, cx - r * 0.74, cy + r * 0.44);
-  ctx.quadraticCurveTo(cx - r * 0.5, cy + r * 0.74, cx, cy + r * 0.82);
-  ctx.quadraticCurveTo(cx + r * 0.5, cy + r * 0.74, cx + r * 0.74, cy + r * 0.44);
-  ctx.quadraticCurveTo(cx + r * 1.02, cy + r * 0.06, cx + r * 0.76, cy - r * 0.5);
-  ctx.quadraticCurveTo(cx, cy - r * 0.68, cx - r * 0.76, cy - r * 0.5);
-  ctx.closePath();
-  ctx.fill();
-  // Almond cat-eyes, angled up at the outer corner, carved darker.
-  ctx.save();
-  ctx.globalAlpha = 0.5;
-  ctx.fillStyle = '#06070b';
-  for (const s of [-1, 1]) {
-    ctx.beginPath();
-    ctx.moveTo(cx + s * r * 0.16, cy - r * 0.02);
-    ctx.quadraticCurveTo(cx + s * r * 0.36, cy - r * 0.26, cx + s * r * 0.56, cy - r * 0.08);
-    ctx.quadraticCurveTo(cx + s * r * 0.36, cy + r * 0.08, cx + s * r * 0.16, cy - r * 0.02);
-    ctx.closePath();
-    ctx.fill();
-  }
-  // Blunt muzzle pad: a soft wide shadow under the eyes.
-  ctx.beginPath();
-  ctx.ellipse(cx, cy + r * 0.42, r * 0.28, r * 0.18, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-  // A small inverted-triangle nose sitting on the muzzle.
-  ctx.beginPath();
-  ctx.moveTo(cx, cy + r * 0.4);
-  ctx.lineTo(cx - r * 0.1, cy + r * 0.28);
-  ctx.lineTo(cx + r * 0.1, cy + r * 0.28);
+  // Left ear tip, down its inner edge into the valley between the ears…
+  ctx.moveTo(x(-0.58), y(-0.98));
+  ctx.lineTo(x(0), y(-0.4));
+  // …up the right ear's inner edge to its tip, then down its outer edge.
+  ctx.lineTo(x(0.58), y(-0.98));
+  ctx.lineTo(x(0.8), y(-0.34));
+  // Right cheek bulging wide, then the jaw sweeping down to a round chin.
+  ctx.quadraticCurveTo(x(0.98), y(0.06), x(0.84), y(0.4));
+  ctx.quadraticCurveTo(x(0.6), y(0.82), x(0), y(0.95));
+  // Left jaw back up, left cheek, to the left ear's outer base…
+  ctx.quadraticCurveTo(x(-0.6), y(0.82), x(-0.84), y(0.4));
+  ctx.quadraticCurveTo(x(-0.98), y(0.06), x(-0.8), y(-0.34));
+  // …and closePath runs the outer edge of the left ear back up to its tip.
   ctx.closePath();
   ctx.fill();
 }

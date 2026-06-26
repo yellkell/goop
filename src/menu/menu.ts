@@ -19,7 +19,7 @@ import {
   type Scene,
 } from 'three';
 import { app, DEFAULT_ACCENT_HUE, saveBallAttach } from './appState.js';
-import { customization, platformOwned } from './customization.js';
+import { avatarOwned, customization, platformOwned } from './customization.js';
 import { rankBadge } from './rankBadges.js';
 import { coinImage } from './coinIcon.js';
 import { canAfford, coins } from './wallet.js';
@@ -1536,15 +1536,15 @@ function drawCoinHud(ctx: CanvasRenderingContext2D): void {
   ctx.textBaseline = 'middle';
 }
 
-// The shop sells both cosmetics: AVATARS (everything we've got, plus a COMING
-// SOON tile) on top, PLATFORMS (free recolours + paid ones) below. Two tidy
-// grids of chips with the CLOSE button clear beneath them.
+// The shop sells both cosmetics: AVATARS (the paid unlocks, plus a COMING SOON
+// tile) on top, PLATFORMS (the paid pads) below. Two tidy grids of chips with
+// the CLOSE button clear beneath them.
 // ─────────────────────────── SHOP & LOCKER ──────────────────────────────────
-// Two faces of one tabbed cosmetics plate. SHOP lists every item with prices
-// (buying auto-equips AND stocks your locker); LOCKER lists only what you own,
-// to equip — plus a COLOUR tab carrying the armour + accent hue sliders. Each
-// tile shows a PICTURE of the skin: an animal silhouette (a shield for the
-// knight) for avatars, a little coloured pad for platforms.
+// Two faces of one tabbed cosmetics plate. SHOP lists only the items you DON'T
+// own yet, with prices (buying auto-equips AND stocks your locker); LOCKER lists
+// only what you own, to equip — plus a COLOUR tab carrying the armour + accent
+// hue sliders. Each tile shows a PICTURE of the skin: an animal silhouette (a
+// shield for the knight) for avatars, a little coloured pad for platforms.
 
 const PAN_W = 560;
 const PAN_H = 600;
@@ -1625,15 +1625,18 @@ function panelItems(locker: boolean): { items: DisplayItem[]; soon: PanRect | nu
     idx++;
     return { x: 40 + col * (ITEM_W + GRID_GAP), y: GRID_TOP + row * ROW_STEP, w: ITEM_W, h: ITEM_H };
   };
+  // LOCKER shows what you OWN (to equip); SHOP shows what you DON'T (to buy) —
+  // owned items drop out of the shop so it only ever lists fresh unlocks.
   if (tab === 'avatars') {
     AVATAR_SKINS.forEach((s, i) => {
       if (s.locked) return;
+      if (avatarOwned(s.id) !== locker) return;
       items.push({ rect: next(), action: `shop-av-${i}` as MenuAction, kind: 'avatar', skin: s, index: i });
     });
     return { items, soon: locker ? null : next() };
   }
   PLATFORM_SKINS.forEach((s, j) => {
-    if (locker && !platformOwned(s.id)) return;
+    if (platformOwned(s.id) !== locker) return;
     items.push({ rect: next(), action: `shop-pf-${j}` as MenuAction, kind: 'platform', skin: s, index: j });
   });
   return { items, soon: null };
@@ -1646,7 +1649,7 @@ function drawTile(ctx: CanvasRenderingContext2D, it: DisplayItem, hoverAction: M
   const accent = avatar ? (it.skin as AvatarSkin).accent : (it.skin as PlatformSkin).neon;
   const css = hexCss(accent);
   const equipped = avatar ? customization.avatar === it.skin.id : customization.platform === it.skin.id;
-  const owned = avatar ? true : platformOwned(it.skin.id);
+  const owned = avatar ? avatarOwned(it.skin.id) : platformOwned(it.skin.id);
   const hot = hoverAction === it.action;
   plate(ctx, r.x, r.y, r.w, r.h, {
     cut: 10,
@@ -1679,7 +1682,7 @@ function drawTile(ctx: CanvasRenderingContext2D, it: DisplayItem, hoverAction: M
     ctx.fillStyle = 'rgba(232,236,242,0.5)';
     ctx.fillText('EQUIP', icx, fy);
   } else {
-    const price = (it.skin as PlatformSkin).price ?? 0;
+    const price = (it.skin as { price?: number }).price ?? 0;
     const str = String(price);
     ctx.font = '800 15px system-ui, sans-serif';
     const tw = ctx.measureText(str).width;
