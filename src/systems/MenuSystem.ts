@@ -699,10 +699,12 @@ export class MenuSystem extends createSystem({}) {
         const done = this.keyboard.press(id);
         if (done !== null) {
           if (this.kbMode === 'note') {
-            setPlayerNote(done);
+            setPlayerNote(done); // empty clears the note
             clearProfileKeyboardHint();
-          } else {
+          } else if (done.length > 0) {
             setPlayerName(done);
+          } else {
+            return; // a name is required — ignore empty OK, leave the keyboard up
           }
           this.kbMode = 'name';
           this.keyboard.close();

@@ -45,7 +45,8 @@ export interface NameKeyboard {
   isOpen(): boolean;
   /** Map a hit UV to the key under it, or null. */
   hitTest(u: number, v: number): string | null;
-  /** Apply a key press; returns the finished name when OK lands, else null. */
+  /** Apply a key press; when OK lands, returns the finished text (possibly an
+   *  empty string — the caller may clear a note); otherwise null. */
   press(key: string): string | null;
   /** Update hover highlight (redraws only on change). */
   setHover(key: string | null): void;
@@ -162,10 +163,9 @@ export function createNameKeyboard(scene: Scene): NameKeyboard {
       return null;
     },
     press(k) {
-      if (k === 'ok') {
-        const name = text.trim();
-        return name.length > 0 ? name : null;
-      }
+      // OK always reports a value — even an empty one, so the caller can clear a
+      // note. A non-OK key returns null (nothing finished yet).
+      if (k === 'ok') return text.trim();
       if (k === 'back') {
         text = text.slice(0, -1);
       } else if (k === 'space') {
