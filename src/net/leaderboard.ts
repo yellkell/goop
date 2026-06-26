@@ -225,6 +225,17 @@ function firestore(): Promise<Handle | null> {
   return handlePromise;
 }
 
+// Becomes true once the boot load has settled (doc fetched, created, or the
+// attempt failed) — so `profile.xp` is real, not the pre-load 0. The promotion
+// celebration waits for this before baselining, or a cloud load looks like an
+// instant promotion on every login.
+let loaded = false;
+
+/** Has the boot profile load settled? (XP is real, not the pre-load 0.) */
+export function profileReady(): boolean {
+  return loaded;
+}
+
 /** Load (or create) my player doc, then pull both boards. Call once at boot. */
 export function initLeaderboard(): void {
   profile.id = localId();
@@ -237,7 +248,10 @@ export function initLeaderboard(): void {
   profile.name = stored ?? `IRON-${profile.id.replace(/-/g, '').slice(0, 4).toUpperCase()}`;
   void (async () => {
     const h = await firestore();
-    if (!h) return;
+    if (!h) {
+      loaded = true; // no cloud — local-only play, baseline off the current XP
+      return;
+    }
     try {
       const ref = h.fs.doc(h.db, 'players', profile.id);
       const snap = await h.fs.getDoc(ref);
@@ -268,6 +282,7 @@ export function initLeaderboard(): void {
     } catch {
       leaderboard.status = 'leaderboard unreachable';
     }
+    loaded = true; // XP is now real (or the load failed) — safe to baseline
     void refreshLeaderboard(true);
   })();
 }
