@@ -37,8 +37,9 @@ interface KeyZone {
 
 export interface NameKeyboard {
   mesh: Mesh;
-  /** Show the keyboard, prefilled (usually with the auto callsign). */
-  open(initial: string): void;
+  /** Show the keyboard, prefilled (usually with the auto callsign). `prompt` is
+   *  the heading line — defaults to the battle-name prompt. */
+  open(initial: string, prompt?: string): void;
   close(): void;
   isOpen(): boolean;
   /** Map a hit UV to the key under it, or null. */
@@ -67,6 +68,7 @@ export function createNameKeyboard(scene: Scene): NameKeyboard {
   scene.add(mesh);
 
   let text = '';
+  let prompt = 'ENTER YOUR BATTLE NAME';
   let hover: string | null = null;
   let zones: KeyZone[] = [];
 
@@ -93,7 +95,7 @@ export function createNameKeyboard(scene: Scene): NameKeyboard {
     ctx.textAlign = 'left';
     ctx.font = stencilFont(24);
     ctx.fillStyle = UI.amberSoft;
-    ctx.fillText('ENTER YOUR BATTLE NAME', 112, 36);
+    ctx.fillText(prompt, 112, 36);
 
     // The name field, with a cursor while there's room to type.
     plate(ctx, 60, 62, KW - 120, 62, { cut: 12, fill: 'rgba(20,22,28,0.9)', stroke: UI.steel, rivets: false });
@@ -124,8 +126,9 @@ export function createNameKeyboard(scene: Scene): NameKeyboard {
 
   return {
     mesh,
-    open(initial) {
+    open(initial, p) {
       text = initial.slice(0, MAX_LEN);
+      prompt = p ?? 'ENTER YOUR BATTLE NAME';
       hover = null;
       mesh.visible = true;
       draw();

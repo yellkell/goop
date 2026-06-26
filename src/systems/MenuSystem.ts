@@ -496,7 +496,7 @@ export class MenuSystem extends createSystem({}) {
         this.kbMode = 'note';
         flashProfileKeyboardHint();
         this.menu.redrawAll(this.hovered, this.hoveredAction);
-        this.keyboard.open(myNote());
+        this.keyboard.open(myNote(), 'ENTER NOTE');
         return;
       case 'rename':
         this.kbPending = null;
