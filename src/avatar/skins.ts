@@ -1,7 +1,7 @@
 /**
  * Pickable skins for the avatar and the platform — pure visuals, applied by
  * recolouring role-tagged materials (boxer.ts / arena.ts tag every material
- * with `userData.role`). Hitboxes are never touched: the VALKYRIE silhouette
+ * with `userData.role`). Hitboxes are never touched: the PANTHER silhouette
  * slims the chest/pelvis GROUP scales only, the BODY_IK spheres stay as-is.
  *
  * Three launch skins per slot (blue / red / one more) plus a locked
@@ -60,9 +60,11 @@ export const AVATAR_SKINS: AvatarSkin[] = [
   // ids are stable (saved prefs + per-skin geometry tags key off them); the
   // display names follow the metallic-animal heads buildBoxer gives each one.
   { id: 'cobalt', name: 'BEAR', chassis: 0x122039, trim: 0x0a111e, accent: 0x4fb7ff },
-  { id: 'crimson', name: 'PANTHER', chassis: 0x2e1013, trim: 0x170809, accent: 0xff3b4e },
-  // No slimmer silhouette: the visual body must match the shared hitbox so no
-  // skin is harder to hit than another.
+  // The PANTHER wears a slightly slimmer, more feminine silhouette. This is the
+  // ONE deliberate exception to "visual matches hitbox": the armour groups scale
+  // in, but the BODY_IK hitbox spheres are unchanged, so it's no harder to hit.
+  { id: 'crimson', name: 'PANTHER', chassis: 0x2e1013, trim: 0x170809, accent: 0xff3b4e, slim: true },
+  // Full silhouette — its visual body matches the shared hitbox.
   { id: 'valkyrie', name: 'EAGLE', chassis: 0x261b33, trim: 0x120d1a, accent: 0xff9ad5 },
   // Polished steel knight in heraldic gold — a shop unlock.
   { id: 'knight', name: 'KNIGHT', chassis: 0x2d333d, trim: 0x14181f, accent: 0xffcf6e, price: 100 },
@@ -171,7 +173,7 @@ export function applyAvatarSkin(root: Object3D, skin: AvatarSkin): void {
         break;
     }
   });
-  // Silhouette: VALKYRIE runs a slimmer chest/pelvis. Group scale only.
+  // Silhouette: PANTHER runs a slimmer chest/pelvis. Group scale only.
   const chest = root.getObjectByName('opponent-chest');
   const pelvis = root.getObjectByName('opponent-pelvis');
   if (chest) chest.scale.set(skin.slim ? 0.82 : 1, 1, skin.slim ? 0.88 : 1);
