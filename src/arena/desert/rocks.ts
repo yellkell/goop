@@ -18,6 +18,7 @@ import {
 import { CONFIG } from './config.js';
 import { makePaper, makeRng } from './paper.js';
 import { desertHeight } from './terrain.js';
+import { collapseStatic } from '../merge.js';
 
 const P = CONFIG.palette;
 const dummy = new Object3D();
@@ -78,6 +79,9 @@ function makeMesa(rng: () => number, height: number): Group {
 export function buildMesas(parent: GroupT): void {
   const rng = makeRng(CONFIG.terrain.seed * 13 + 3);
   const { mesas, mesaRingMin, mesaRingMax } = CONFIG.rocks;
+  // Mesas never move and their strata colours repeat, so the whole ring merges
+  // down to one mesh per strata colour instead of ~5 slabs each.
+  const ring = new Group();
   for (let i = 0; i < mesas; i++) {
     const a = (i / mesas) * Math.PI * 2 + (rng() - 0.5) * 0.5;
     const r = mesaRingMin + rng() * (mesaRingMax - mesaRingMin);
@@ -86,6 +90,8 @@ export function buildMesas(parent: GroupT): void {
     const height = 16 + rng() * 26;
     const mesa = makeMesa(rng, height);
     mesa.position.set(x, desertHeight(x, z) - 1, z);
-    parent.add(mesa);
+    ring.add(mesa);
   }
+  collapseStatic(ring);
+  parent.add(ring);
 }

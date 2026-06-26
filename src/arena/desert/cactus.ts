@@ -8,6 +8,7 @@ import { CapsuleGeometry, type Group as GroupT, Group, IcosahedronGeometry, type
 import { CONFIG } from './config.js';
 import { makePaper, makeRng } from './paper.js';
 import { desertHeight } from './terrain.js';
+import { collapseStatic } from '../merge.js';
 import type { Swayer } from './index.js';
 
 const P = CONFIG.palette;
@@ -134,8 +135,11 @@ export function buildCacti(parent: GroupT): Swayer[] {
   const half = CONFIG.terrain.size / 2 - 8;
   const clear = CONFIG.cacti.clearRadius;
   const swayers: Swayer[] = [];
+  // Barrels and prickly-pears never move, so they all merge together into a few
+  // meshes for the whole field; saguaros sway, so each collapses on its own.
+  const statics = new Group();
 
-  const place = (g: Group): void => {
+  const place = (g: Group, into: GroupT): void => {
     let x = 0;
     let z = 0;
     do {
@@ -144,15 +148,18 @@ export function buildCacti(parent: GroupT): Swayer[] {
     } while (Math.hypot(x, z) < clear);
     g.position.set(x, desertHeight(x, z), z);
     g.rotateY(rng() * Math.PI * 2);
-    parent.add(g);
+    into.add(g);
   };
 
   for (let i = 0; i < CONFIG.cacti.saguaro; i++) {
     const s = makeSaguaro(rng);
-    place(s);
+    collapseStatic(s); // trunk + arms + crown → one mesh (+bloom); still sways as a unit
+    place(s, parent);
     swayers.push({ obj: s, phase: rng() * Math.PI * 2, amp: 0.012 + rng() * 0.012, speed: 0.4 + rng() * 0.3 });
   }
-  for (let i = 0; i < CONFIG.cacti.barrel; i++) place(makeBarrel(rng));
-  for (let i = 0; i < CONFIG.cacti.pricklyPear; i++) place(makePricklyPear(rng));
+  for (let i = 0; i < CONFIG.cacti.barrel; i++) place(makeBarrel(rng), statics);
+  for (let i = 0; i < CONFIG.cacti.pricklyPear; i++) place(makePricklyPear(rng), statics);
+  collapseStatic(statics);
+  parent.add(statics);
   return swayers;
 }

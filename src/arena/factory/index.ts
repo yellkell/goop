@@ -38,6 +38,7 @@ import { ARENA_BOUNDS, ARENA_GAP } from '../../config.js';
 import { CONFIG } from '../desert/config.js';
 import { buildMesas } from '../desert/rocks.js';
 import { makeVulture } from '../desert/birds.js';
+import { collapseStatic } from '../merge.js';
 
 export interface Factory {
   root: Group;
@@ -313,6 +314,13 @@ export function buildFactory(): Factory {
   root.name = 'factory-environment';
   root.visible = false;
 
+  // Everything that never moves goes here and is merged at the end into a few
+  // big batches (one per material) — same look, far fewer draw calls. Lights,
+  // the swinging work lamps, the wheeling vulture and the (already-merged)
+  // mesas stay on `root` directly.
+  const statics = new Group();
+  statics.name = 'factory-static';
+
   const skyColor = new Color(CONFIG.sky.horizon);
   root.add(skyDome());
 
@@ -334,21 +342,29 @@ export function buildFactory(): Factory {
   const hx1 = HALL.maxX - HMARGIN, hx0 = hx1 - HW;
   const hz1 = HALL.maxZ - HMARGIN, hz0 = hz1 - HD;
 
-  const flatRect = (mat: MeshStandardMaterial, x0: number, x1: number, z0: number, z1: number, y: number): void => {
+  const flatRect = (
+    mat: MeshStandardMaterial,
+    x0: number,
+    x1: number,
+    z0: number,
+    z1: number,
+    y: number,
+    into: Group = root,
+  ): void => {
     if (x1 - x0 < 1e-3 || z1 - z0 < 1e-3) return;
     const m = new Mesh(new PlaneGeometry(x1 - x0, z1 - z0), mat);
     m.rotation.x = -Math.PI / 2;
     m.position.set((x0 + x1) / 2, y, (z0 + z1) / 2);
-    root.add(m);
+    into.add(m);
   };
 
   // Desert sand, framed around the hole (so it never covers the pit).
   const sandMat = new MeshStandardMaterial({ color: new Color(CONFIG.palette.sandLight), roughness: 1 });
   const sandY = FLOOR_Y - 0.02;
-  flatRect(sandMat, -350, 350, -350, hz0, sandY);
-  flatRect(sandMat, -350, 350, hz1, 350, sandY);
-  flatRect(sandMat, -350, hx0, hz0, hz1, sandY);
-  flatRect(sandMat, hx1, 350, hz0, hz1, sandY);
+  flatRect(sandMat, -350, 350, -350, hz0, sandY, statics);
+  flatRect(sandMat, -350, 350, hz1, 350, sandY, statics);
+  flatRect(sandMat, -350, hx0, hz0, hz1, sandY, statics);
+  flatRect(sandMat, hx1, 350, hz0, hz1, sandY, statics);
 
   // Cracked concrete floor, framed around the hole. Each piece clones the
   // concrete texture with a size-proportional repeat so the texel size stays even.
@@ -367,17 +383,17 @@ export function buildFactory(): Factory {
   floorPiece(HALL.minX, hx0, hz0, hz1); // west band beside the hole
   floorPiece(hx1, HALL.maxX, hz0, hz1); // east band beside the hole
 
-  buildStairwell(root, hx0, hx1, hz0, hz1);
+  buildStairwell(root, hx0, hx1, hz0, hz1); // has its own pit light — leave unmerged
 
   // The shell: EAST wall windowed (desert beyond), the other three closed.
   const clad = new MeshStandardMaterial({ map: corrugatedTexture(), metalness: 0.7, roughness: 0.72, side: DoubleSide });
   (clad.map as CanvasTexture).repeat.set(10, 4);
   const w = HALL.maxX - HALL.minX;
   const d = HALL.maxZ - HALL.minZ;
-  wall(root, clad, w, (HALL.minX + HALL.maxX) / 2, HALL.minZ, 0, false); // far (north) — closed
-  wall(root, clad, w, (HALL.minX + HALL.maxX) / 2, HALL.maxZ, Math.PI, false); // near — closed
-  wall(root, clad, d, HALL.minX, (HALL.minZ + HALL.maxZ) / 2, Math.PI / 2, false); // west — closed
-  wall(root, clad, d, HALL.maxX, (HALL.minZ + HALL.maxZ) / 2, -Math.PI / 2, true); // EAST — windowed
+  wall(statics, clad, w, (HALL.minX + HALL.maxX) / 2, HALL.minZ, 0, false); // far (north) — closed
+  wall(statics, clad, w, (HALL.minX + HALL.maxX) / 2, HALL.maxZ, Math.PI, false); // near — closed
+  wall(statics, clad, d, HALL.minX, (HALL.minZ + HALL.maxZ) / 2, Math.PI / 2, false); // west — closed
+  wall(statics, clad, d, HALL.maxX, (HALL.minZ + HALL.maxZ) / 2, -Math.PI / 2, true); // EAST — windowed
 
   // Roof: trusses + corrugated panels with a few smashed-out skylights.
   const beamMat = steel(0x33363c, 0.6);
@@ -385,15 +401,15 @@ export function buildFactory(): Factory {
   for (let z = HALL.minZ + 2; z <= HALL.maxZ - 2; z += 3.2) {
     const chordTop = new Mesh(new BoxGeometry(w, 0.18, 0.18), beamMat);
     chordTop.position.set(0, roofY - 0.12, z);
-    root.add(chordTop);
+    statics.add(chordTop);
     const chordBot = new Mesh(new BoxGeometry(w, 0.12, 0.12), beamMat);
     chordBot.position.set(0, roofY - 0.7, z);
-    root.add(chordBot);
+    statics.add(chordBot);
     for (let x = -w / 2 + 1; x < w / 2; x += 2) {
       const dia = new Mesh(new BoxGeometry(0.08, 0.72, 0.08), beamMat);
       dia.position.set(x, roofY - 0.4, z);
       dia.rotation.z = (x % 4 < 2 ? 1 : -1) * 0.6;
-      root.add(dia);
+      statics.add(dia);
     }
   }
   const roofMat = new MeshStandardMaterial({ map: corrugatedTexture(), metalness: 0.6, roughness: 0.75, side: DoubleSide });
@@ -406,7 +422,7 @@ export function buildFactory(): Factory {
       const panel = new Mesh(new PlaneGeometry(w / panelsX + 0.05, d / panelsZ + 0.05), roofMat);
       panel.rotation.x = Math.PI / 2;
       panel.position.set(px, roofY, pz);
-      root.add(panel);
+      statics.add(panel);
     }
   }
 
@@ -417,7 +433,7 @@ export function buildFactory(): Factory {
     for (let z = HALL.minZ + 2.5; z <= HALL.maxZ - 2.5; z += 5) {
       const col = new Mesh(new BoxGeometry(0.4, HALL.height, 0.4), colMat);
       col.position.set(cx, FLOOR_Y + HALL.height / 2, z);
-      root.add(col);
+      statics.add(col);
     }
   }
 
@@ -459,7 +475,7 @@ export function buildFactory(): Factory {
       b.position.set(len * 0.12, top + 0.04 + 0.28, 0);
       g.add(b);
     }
-    root.add(g);
+    statics.add(g);
   };
   conveyor(-4.5, HALL.minZ + 3.2, 6, 0, true); // across the back, carrying a crate
   conveyor(HALL.minX + 2.6, CENTRE_Z + 6.5, 6.5, Math.PI / 2, false); // down the west side
@@ -469,7 +485,7 @@ export function buildFactory(): Factory {
     const box = new Mesh(new BoxGeometry(sz, sz, sz), crateMat);
     box.position.set(x, FLOOR_Y + y + sz / 2, z);
     box.rotation.y = (rnd() - 0.5) * 0.1;
-    root.add(box);
+    statics.add(box);
   };
   const cbx = HALL.minX + 2.6;
   crate(cbx, 0, HALL.minZ + 1.7, 0.8);
@@ -478,7 +494,7 @@ export function buildFactory(): Factory {
   for (const [dx, dz, col] of [[cbx + 1.9, HALL.minZ + 1.5, 0x7a4a2a], [cbx + 2.5, HALL.minZ + 2.2, 0x355a78]] as const) {
     const drum = new Mesh(new CylinderGeometry(0.3, 0.3, 0.9, 14), steel(col, 0.8));
     drum.position.set(dx, FLOOR_Y + 0.45, dz);
-    root.add(drum);
+    statics.add(drum);
   }
 
   // RAISED WALKWAY along the FAR (north) wall — NOT the windowed east side — a
@@ -491,35 +507,35 @@ export function buildFactory(): Factory {
   const grating = steel(0x44474d, 0.7);
   const deck = new Mesh(new BoxGeometry(wlLen, 0.1, 1.3), grating);
   deck.position.set(wlMidX, FLOOR_Y + deckY, wlZ);
-  root.add(deck);
+  statics.add(deck);
   for (let x = wlMinX + 1; x <= wlMaxX - 1; x += 3) {
     const post = new Mesh(new BoxGeometry(0.13, deckY, 0.13), grating);
     post.position.set(x, FLOOR_Y + deckY / 2, wlZ + 0.5);
-    root.add(post);
+    statics.add(post);
   }
   // front handrail: top rail, mid rail, balusters
   const railZ = wlZ + 0.62;
   for (const ry of [1.0, 0.5]) {
     const rail = new Mesh(new BoxGeometry(wlLen, 0.06, 0.06), grating);
     rail.position.set(wlMidX, FLOOR_Y + deckY + ry, railZ);
-    root.add(rail);
+    statics.add(rail);
   }
   for (let x = wlMinX; x <= wlMaxX; x += 1.3) {
     const bal = new Mesh(new BoxGeometry(0.04, 1.0, 0.04), grating);
     bal.position.set(x, FLOOR_Y + deckY + 0.5, railZ);
-    root.add(bal);
+    statics.add(bal);
   }
   // ladder up at the east end of the catwalk (still on the far wall)
   const ladX = wlMaxX - 0.5;
   for (const s of [-1, 1]) {
     const sideRail = new Mesh(new BoxGeometry(0.05, deckY, 0.05), grating);
     sideRail.position.set(ladX + s * 0.22, FLOOR_Y + deckY / 2, railZ + 0.25);
-    root.add(sideRail);
+    statics.add(sideRail);
   }
   for (let y = 0.3; y < deckY; y += 0.32) {
     const rung = new Mesh(new BoxGeometry(0.48, 0.04, 0.04), grating);
     rung.position.set(ladX, FLOOR_Y + y, railZ + 0.25);
-    root.add(rung);
+    statics.add(rung);
   }
 
   // Work lamps over the action + a couple deep in the hall.
@@ -529,6 +545,10 @@ export function buildFactory(): Factory {
     workLamp(root, 3.4, CENTRE_Z - 1.6),
     workLamp(root, 0, HALL.minZ + 4),
   ];
+
+  // Bake all that static structure down to a few draw calls (one per material).
+  collapseStatic(statics);
+  root.add(statics);
 
   // A lone vulture wheeling OUTSIDE the east window — caught now and then.
   const bird = makeVulture(rnd);

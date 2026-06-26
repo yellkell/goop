@@ -9,6 +9,7 @@ import { ConeGeometry, type Group as GroupT, Group, Mesh } from 'three';
 import { CONFIG } from './config.js';
 import { makePaperDouble, makeRng } from './paper.js';
 import { desertHeight } from './terrain.js';
+import { collapseStatic } from '../merge.js';
 import type { Swayer } from './index.js';
 
 const P = CONFIG.palette;
@@ -50,6 +51,7 @@ export function buildAgave(parent: GroupT): Swayer[] {
     } while (Math.hypot(x, z) < clearRadius);
 
     const agave = makeAgave(rng);
+    collapseStatic(agave); // many blades → one mesh; the group still sways as a unit
     agave.position.set(x, desertHeight(x, z), z);
     agave.rotateY(rng() * Math.PI * 2);
     parent.add(agave);
