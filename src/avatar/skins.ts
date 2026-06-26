@@ -59,13 +59,14 @@ export const FREE_AVATARS = ['cobalt', 'crimson', 'valkyrie'];
 export const AVATAR_SKINS: AvatarSkin[] = [
   // ids are stable (saved prefs + per-skin geometry tags key off them); the
   // display names follow the metallic-animal heads buildBoxer gives each one.
-  { id: 'cobalt', name: 'BEAR', chassis: 0x122039, trim: 0x0a111e, accent: 0x4fb7ff },
-  // The PANTHER wears a slightly slimmer, more feminine silhouette. This is the
-  // ONE deliberate exception to "visual matches hitbox": the armour groups scale
-  // in, but the BODY_IK hitbox spheres are unchanged, so it's no harder to hit.
-  { id: 'crimson', name: 'PANTHER', chassis: 0x2e1013, trim: 0x170809, accent: 0xff3b4e, slim: true },
+  { id: 'cobalt', name: 'BIGGY', chassis: 0x122039, trim: 0x0a111e, accent: 0x4fb7ff },
+  // SHADOW (the panther) wears a slightly slimmer, more feminine silhouette.
+  // This is the ONE deliberate exception to "visual matches hitbox": the armour
+  // groups scale in, but the BODY_IK hitbox spheres are unchanged, so it's no
+  // harder to hit.
+  { id: 'crimson', name: 'SHADOW', chassis: 0x2e1013, trim: 0x170809, accent: 0xff3b4e, slim: true },
   // Full silhouette — its visual body matches the shared hitbox.
-  { id: 'valkyrie', name: 'EAGLE', chassis: 0x261b33, trim: 0x120d1a, accent: 0xff9ad5 },
+  { id: 'valkyrie', name: 'FLY GUY', chassis: 0x261b33, trim: 0x120d1a, accent: 0xff9ad5 },
   // Polished steel knight in heraldic gold — a shop unlock.
   { id: 'knight', name: 'KNIGHT', chassis: 0x2d333d, trim: 0x14181f, accent: 0xffcf6e, price: 100 },
 ];
