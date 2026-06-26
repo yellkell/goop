@@ -38,8 +38,9 @@ interface KeyZone {
 export interface NameKeyboard {
   mesh: Mesh;
   /** Show the keyboard, prefilled (usually with the auto callsign). `prompt` is
-   *  the heading line — defaults to the battle-name prompt. */
-  open(initial: string, prompt?: string): void;
+   *  the heading line (defaults to the battle-name prompt); `maxLen` caps the
+   *  entry length (defaults to the 12-char name limit). */
+  open(initial: string, prompt?: string, maxLen?: number): void;
   close(): void;
   isOpen(): boolean;
   /** Map a hit UV to the key under it, or null. */
@@ -69,6 +70,7 @@ export function createNameKeyboard(scene: Scene): NameKeyboard {
 
   let text = '';
   let prompt = 'ENTER YOUR BATTLE NAME';
+  let maxLen = MAX_LEN;
   let hover: string | null = null;
   let zones: KeyZone[] = [];
 
@@ -97,12 +99,21 @@ export function createNameKeyboard(scene: Scene): NameKeyboard {
     ctx.fillStyle = UI.amberSoft;
     ctx.fillText(prompt, 112, 36);
 
-    // The name field, with a cursor while there's room to type.
+    // The entry field, with a cursor while there's room to type. The font
+    // shrinks to keep a long note on one line (a name never gets close).
     plate(ctx, 60, 62, KW - 120, 62, { cut: 12, fill: 'rgba(20,22,28,0.9)', stroke: UI.steel, rivets: false });
     ctx.textAlign = 'center';
-    ctx.font = stencilFont(40);
     ctx.fillStyle = UI.text;
-    ctx.fillText(text + (text.length < MAX_LEN ? '_' : ''), KW / 2, 94);
+    const shown = text + (text.length < maxLen ? '_' : '');
+    const fieldW = KW - 120 - 40;
+    let fs = 40;
+    ctx.font = stencilFont(fs);
+    const w = ctx.measureText(shown).width;
+    if (w > fieldW) {
+      fs = Math.max(18, Math.floor((fs * fieldW) / w));
+      ctx.font = stencilFont(fs);
+    }
+    ctx.fillText(shown, KW / 2, 94);
 
     // The key grid.
     const keyH = 56;
@@ -118,16 +129,19 @@ export function createNameKeyboard(scene: Scene): NameKeyboard {
       }
       y += keyH + gap;
     }
-    key('back', KW / 2 - 172, y, 164, keyH, 'DEL');
-    key('ok', KW / 2 + 8, y, 164, keyH, 'OK');
+    // Bottom row: DEL | SPACE | OK. Spaces are valid in both a name and a note.
+    key('back', 72, y, 120, keyH, 'DEL');
+    key('space', 200, y, 240, keyH, 'SPACE');
+    key('ok', 448, y, 120, keyH, 'OK');
 
     texture.needsUpdate = true;
   };
 
   return {
     mesh,
-    open(initial, p) {
-      text = initial.slice(0, MAX_LEN);
+    open(initial, p, max) {
+      maxLen = max ?? MAX_LEN;
+      text = initial.slice(0, maxLen);
       prompt = p ?? 'ENTER YOUR BATTLE NAME';
       hover = null;
       mesh.visible = true;
@@ -152,8 +166,14 @@ export function createNameKeyboard(scene: Scene): NameKeyboard {
         const name = text.trim();
         return name.length > 0 ? name : null;
       }
-      if (k === 'back') text = text.slice(0, -1);
-      else if (text.length < MAX_LEN) text += k;
+      if (k === 'back') {
+        text = text.slice(0, -1);
+      } else if (k === 'space') {
+        // No leading or double spaces — they'd only get stripped on save.
+        if (text.length > 0 && !text.endsWith(' ') && text.length < maxLen) text += ' ';
+      } else if (text.length < maxLen) {
+        text += k;
+      }
       draw();
       return null;
     },
