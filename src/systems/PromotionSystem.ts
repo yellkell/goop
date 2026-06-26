@@ -6,10 +6,12 @@
  * sunburst of light wheeling behind — and swaps to the new emblem, which
  * slams in with an overshoot and holds under a pulsing glow before fading.
  *
- * XP only changes during play/training (away from the menu), so on the first
- * lobby frame we just record the current tier — no animation, which also stops
- * a cloud-sync XP load from faking a promotion. After that, any time the live
- * tier climbs above what we last showed, we play.
+ * XP only changes during play/training (away from the menu). We wait for the
+ * cloud profile to finish loading (profileReady) before reading any tier — the
+ * pre-load XP is 0 (Bronze), so baselining too early makes the real XP arriving
+ * a moment later look like a promotion on every login. Once it's loaded we
+ * record the current tier silently, then play any time the live tier climbs
+ * above what we last showed.
  */
 
 import { createSystem } from '@iwsdk/core';
@@ -30,7 +32,7 @@ import {
 import { app } from '../menu/appState.js';
 import { tierForXp } from '../menu/progression.js';
 import { rankBadgeTexture } from '../menu/rankBadges.js';
-import { myStats } from '../net/leaderboard.js';
+import { myStats, profileReady } from '../net/leaderboard.js';
 import { glowSprite } from '../materials/glow.js';
 import { emberBurst, spawnEmber } from '../fx/fire.js';
 import { UI, fitStencilText, stencilFont } from '../ui/industrial.js';
@@ -68,6 +70,10 @@ export class PromotionSystem extends createSystem({}) {
       return;
     }
     if (app.state !== 'menu') return;
+    // Wait for the cloud profile to finish loading before we read a tier —
+    // otherwise the baseline is the pre-load XP (0 = Bronze) and the real XP
+    // arriving a moment later reads as a promotion on every single login.
+    if (!profileReady()) return;
 
     const cur = tierForXp(myStats().xp).index;
     if (this.shownTier < 0) {
