@@ -7,6 +7,7 @@ import { BoxGeometry, CanvasTexture, ConeGeometry, CylinderGeometry, type Group 
 import { CONFIG } from './config.js';
 import { makePaper } from './paper.js';
 import { desertHeight } from './terrain.js';
+import { collapseStatic } from '../merge.js';
 
 const P = CONFIG.palette;
 
@@ -188,12 +189,17 @@ function fence(): Group {
 }
 
 export function buildProps(parent: GroupT): void {
+  // Set-dressing is static; collapse it (the wood across the signpost and fence
+  // shares one material, so it merges) — the painted sign keeps its own texture.
+  const group = new Group();
   const place = (g: Group, x: number, z: number, ry: number): void => {
     g.position.set(x, desertHeight(x, z), z);
     g.rotateY(ry);
-    parent.add(g);
+    group.add(g);
   };
   place(signpost(), 4.5, -5, -0.5);
   place(skull(), -3.2, -3.5, 0.8);
   place(fence(), -7, 6, 0.3);
+  collapseStatic(group);
+  parent.add(group);
 }
