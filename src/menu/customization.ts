@@ -8,6 +8,7 @@
 import {
   type AvatarSkin,
   avatarSkin,
+  FREE_AVATARS,
   FREE_PLATFORMS,
   platformSkin,
   resolveAvatarSkin,
@@ -74,8 +75,49 @@ export function ownPlatform(id: string): void {
   }
 }
 
+/** Avatar skins the player has unlocked: the free set plus shop buys
+ *  ('ff-owned-avatars', a JSON id array). */
+function loadOwnedAvatars(): Set<string> {
+  const owned = new Set(FREE_AVATARS);
+  try {
+    const raw = localStorage.getItem('ff-owned-avatars');
+    if (raw) for (const id of JSON.parse(raw) as string[]) owned.add(id);
+  } catch {
+    /* fresh wallet — just the free set */
+  }
+  return owned;
+}
+
+const ownedAvatars = loadOwnedAvatars();
+
+/** Has the player unlocked this avatar skin (free or purchased)? */
+export function avatarOwned(id: string): boolean {
+  return ownedAvatars.has(id);
+}
+
+/** Record an avatar purchase: mark it owned and persist it. The coin debit is
+ *  the caller's job (see wallet.spendCoins). */
+export function ownAvatar(id: string): void {
+  if (ownedAvatars.has(id)) return;
+  ownedAvatars.add(id);
+  try {
+    localStorage.setItem(
+      'ff-owned-avatars',
+      JSON.stringify([...ownedAvatars].filter((a) => !FREE_AVATARS.includes(a))),
+    );
+  } catch {
+    /* session-only ownership */
+  }
+}
+
+/** The saved equipped avatar, or the panther if the saved one isn't owned. */
+function loadEquippedAvatar(): string {
+  const id = avatarSkin(load('ff-skin-avatar', 'crimson')).id;
+  return ownedAvatars.has(id) ? id : 'crimson';
+}
+
 export const customization = {
-  avatar: avatarSkin(load('ff-skin-avatar', 'crimson')).id,
+  avatar: loadEquippedAvatar(),
   platform: platformSkin(load('ff-skin-platform', 'ember')).id,
   /** Custom armour hue (0..1) from the colour picker, or -1 to keep the
    *  avatar's own default palette. */
@@ -117,6 +159,7 @@ export function myAvatarSkin(): AvatarSkin {
 }
 
 export function setAvatarSkin(id: string): void {
+  if (!avatarOwned(id)) return; // only equip skins you actually own
   const skin = avatarSkin(id);
   if (skin.id === customization.avatar) return;
   customization.avatar = skin.id;

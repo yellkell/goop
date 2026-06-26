@@ -24,6 +24,8 @@ export interface AvatarSkin {
   accent: number;
   /** Sleeker silhouette (visual group scale only — hitboxes untouched). */
   slim?: boolean;
+  /** Shop price in coins. Omitted = free / owned from the start. */
+  price?: number;
 }
 
 export interface PlatformSkin {
@@ -51,6 +53,8 @@ export const DEFAULT_SLAB_TINT = 0x9aa0ab;
 
 /** Platform skins owned from the start (no purchase needed). */
 export const FREE_PLATFORMS = ['azure', 'inferno', 'ember'];
+/** Avatar skins owned from the start — the rest are shop unlocks. */
+export const FREE_AVATARS = ['cobalt', 'crimson', 'valkyrie'];
 
 export const AVATAR_SKINS: AvatarSkin[] = [
   // ids are stable (saved prefs + per-skin geometry tags key off them); the
@@ -60,8 +64,8 @@ export const AVATAR_SKINS: AvatarSkin[] = [
   // No slimmer silhouette: the visual body must match the shared hitbox so no
   // skin is harder to hit than another.
   { id: 'valkyrie', name: 'EAGLE', chassis: 0x261b33, trim: 0x120d1a, accent: 0xff9ad5 },
-  // Polished steel knight in heraldic gold.
-  { id: 'knight', name: 'KNIGHT', chassis: 0x2d333d, trim: 0x14181f, accent: 0xffcf6e },
+  // Polished steel knight in heraldic gold — a shop unlock.
+  { id: 'knight', name: 'KNIGHT', chassis: 0x2d333d, trim: 0x14181f, accent: 0xffcf6e, price: 100 },
 ];
 
 export const PLATFORM_SKINS: PlatformSkin[] = [

@@ -46,8 +46,10 @@ import {
 } from '../menu/menu.js';
 import { createNameKeyboard, type NameKeyboard } from '../menu/keyboard.js';
 import {
+  avatarOwned,
   customization,
   myAvatarSkin,
+  ownAvatar,
   ownPlatform,
   platformOwned,
   setAvatarColor,
@@ -565,7 +567,7 @@ export class MenuSystem extends createSystem({}) {
         // else try to buy it.
         if (action.startsWith('shop-av-')) {
           const skin = AVATAR_SKINS[Number(action.slice(8))];
-          if (skin && !skin.locked) setAvatarSkin(skin.id);
+          if (skin && !skin.locked) this.buyOrEquipAvatar(skin.id, skin.price ?? 0);
           break;
         }
         if (action.startsWith('shop-pf-')) {
@@ -608,6 +610,19 @@ export class MenuSystem extends createSystem({}) {
       playCash(); // the money sting on a fresh purchase
     }
     setPlatformSkin(id); // applyOwnSkins repaints the pad next frame
+  }
+
+  /**
+   * Shop tap on an avatar tile: own it → equip; else buy it (debit, mark owned,
+   * cash sting) and equip. Can't afford → nothing changes.
+   */
+  private buyOrEquipAvatar(id: string, price: number): void {
+    if (!avatarOwned(id)) {
+      if (!canAfford(price) || !spendCoins(price)) return; // can't afford — no-op
+      ownAvatar(id);
+      playCash();
+    }
+    setAvatarSkin(id); // applyOwnSkins repaints the rig + mirror next frame
   }
 
   /** Leave for the pub page. Navigating WHILE an immersive session is live
