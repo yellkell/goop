@@ -68,7 +68,7 @@ import { pubSendEvent, pubSendRaw } from '../net.js';
 import type { FightNet, FireballNet } from '../protocol.js';
 import { bus, pub } from '../state.js';
 import { Panel } from '../panel.js';
-import { UI, fitStencilText, metalText, plate, segmentBar, stencilFont } from '../../ui/industrial.js';
+import { UI, fitStencilText, metalText, plate, solidBar, stencilFont } from '../../ui/industrial.js';
 import { teleportPlayer } from './TeleportSystem.js';
 
 const HANDS = ['left', 'right'] as const;
@@ -1702,7 +1702,7 @@ export class FightSystem extends createSystem({}) {
         ctx.fillStyle = colour;
         ctx.fillText(name.toUpperCase().slice(0, 12), x + 28, boardY + 56);
         this.drawPips(ctx, x + boardW - 26, boardY + 52, pips, colour);
-        segmentBar(ctx, x + 28, boardY + 92, boardW - 56, 58, hp, colour);
+        solidBar(ctx, x + 28, boardY + 92, boardW - 56, 58, hp, colour);
       }
 
       // Centre column: the verdict headline above a big round clock on its own

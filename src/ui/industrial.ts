@@ -229,6 +229,57 @@ export function segmentBar(
   }
 }
 
+/**
+ * One CONTINUOUS readout bar (a single skewed block) filled to an exact
+ * fraction — so it slides smoothly with every point instead of snapping between
+ * chunky segments. A bright leading edge keeps the current level crisp. Used for
+ * health, where 1-point changes need to read clearly in the heat of a fight.
+ */
+export function solidBar(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, w: number, h: number,
+  frac: number,
+  color: string,
+): void {
+  const f = Math.max(0, Math.min(1, frac));
+  const skew = h * 0.35;
+  const inner = w - skew; // horizontal run of the bar (top and bottom edges)
+  // Empty track.
+  ctx.beginPath();
+  ctx.moveTo(x + skew, y);
+  ctx.lineTo(x + w, y);
+  ctx.lineTo(x + w - skew, y + h);
+  ctx.lineTo(x, y + h);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(255,255,255,0.07)';
+  ctx.fill();
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = UI.steelDim;
+  ctx.stroke();
+  // Filled portion — one unbroken block to the exact fraction.
+  if (f > 0) {
+    const fw = f * inner;
+    ctx.beginPath();
+    ctx.moveTo(x + skew, y);
+    ctx.lineTo(x + skew + fw, y);
+    ctx.lineTo(x + fw, y + h);
+    ctx.lineTo(x, y + h);
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 13;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    // Bright leading edge so the exact level reads at a glance.
+    ctx.beginPath();
+    ctx.moveTo(x + skew + fw, y);
+    ctx.lineTo(x + fw, y + h);
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+    ctx.stroke();
+  }
+}
+
 /** A small chamfered industrial button plate with a stencilled label. */
 export function buttonPlate(
   ctx: CanvasRenderingContext2D,
