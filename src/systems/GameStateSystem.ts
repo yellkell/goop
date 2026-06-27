@@ -275,7 +275,9 @@ export class GameStateSystem extends createSystem({
     const them = actives.find((e) => (e.getValue(Combatant, 'slot') ?? -1) === 1)!;
     const c = { me, them };
     if (app.mode === 'bot') {
-      this.beginCountdown(c); // bots get the 3-2-1 too, not a jump straight to FIGHT
+      // Bots have no peer to sync, so skip the long pre-roll and open straight
+      // on a snappy 3-2-1 (no dead air, no jump to FIGHT).
+      this.beginCountdown(c, MATCH.roundCountdown);
     } else if (app.side === 0) {
       this.beginCountdown(c);
     } else {
