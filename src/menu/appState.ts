@@ -91,6 +91,9 @@ export const app: {
    * untouched — set true only by the lobby's TUTORIAL button.
    */
   tutorial: boolean;
+  /** While the tutorial's intro card is up, the trigger drives the pointer
+   *  (clicking READY), so the fireballs hold off until it's dismissed. */
+  tutorialHoldFire: boolean;
   /** Aim Training option: targets shoot back so you can train dodging. */
   shootBack: boolean;
   /** When on: never queue online — RANKED is disabled and QUICK/2V2/FFA drop
@@ -127,6 +130,7 @@ export const app: {
   state: 'menu',
   mode: 'bot',
   tutorial: false,
+  tutorialHoldFire: false,
   side: 0,
   arcade: '1v1',
   mySlot: 0,
@@ -141,7 +145,10 @@ export const app: {
   gazetteOpen: false,
   environment: ((): AppEnvironment => {
     const e = localStorage.getItem('ff-env');
-    return e === 'desert' || e === 'factory' ? e : 'ar';
+    // First-ever launch (nothing stored) opens in the desert arena; after that
+    // we honour whatever the player last chose — including bare AR.
+    if (e === 'desert' || e === 'factory' || e === 'ar') return e;
+    return 'desert';
   })(),
   accentHue: loadAccentHue(),
   accentLight: loadAccentLight(),

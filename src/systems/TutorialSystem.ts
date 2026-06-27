@@ -19,8 +19,20 @@
  * edits land before the balls are simulated.
  */
 
-import { createSystem, type Entity } from '@iwsdk/core';
-import { CanvasTexture, LinearFilter, Mesh, MeshBasicMaterial, PlaneGeometry, Vector3 } from 'three';
+import { createSystem, type Entity, InputComponent } from '@iwsdk/core';
+import {
+  BufferGeometry,
+  CanvasTexture,
+  Line,
+  LineBasicMaterial,
+  LinearFilter,
+  Mesh,
+  MeshBasicMaterial,
+  PlaneGeometry,
+  Raycaster,
+  SphereGeometry,
+  Vector3,
+} from 'three';
 import { Fireball, BallState } from '../components/Fireball.js';
 import { Combatant } from '../components/Combatant.js';
 import { Health } from '../components/Health.js';
@@ -35,8 +47,10 @@ const TUT_BOT_HP = 55;
 const POP_W = 512;
 const POP_H = 280;
 const GREEN = '#57e389';
+// The "LET'S GO" button drawn on the intro card (canvas px), pointed at + clicked.
+const READY_BTN = { x: 146, y: 200, w: 220, h: 50 };
 
-type StepKind = 'orbit' | 'flying' | 'returning' | 'block' | 'move';
+type StepKind = 'intro' | 'orbit' | 'flying' | 'returning' | 'block' | 'move';
 interface Step {
   title: string;
   body: string[];
@@ -45,6 +59,18 @@ interface Step {
 }
 
 const STEPS: Step[] = [
+  {
+    title: 'SET UP',
+    kind: 'intro',
+    hint: '',
+    body: [
+      'Clear a 1.8m x 1.8m area IRL',
+      'and centre yourself within it.',
+      'Re-centre your area using your',
+      "controller. When you're ready,",
+      'click here:',
+    ],
+  },
   { title: 'ACTIVATE', kind: 'orbit', hint: 'hold the trigger', body: ['Hold the trigger to', 'spin up a ball that', 'orbits your fist.'] },
   { title: 'THROW', kind: 'flying', hint: 'punch and release', body: ['Punch and release the', 'trigger to throw the ball', 'at your opponent.'] },
   { title: 'RECALL', kind: 'returning', hint: 'pull the trigger', body: ['Pull the trigger again', 'to call the ball back', 'to your hand.'] },
@@ -54,6 +80,14 @@ const STEPS: Step[] = [
 
 const _head = new Vector3();
 const _v = new Vector3();
+const _origin = new Vector3();
+const _dir = new Vector3();
+const _end = new Vector3();
+
+interface Pointer {
+  line: Line;
+  dot: Mesh;
+}
 
 export class TutorialSystem extends createSystem({
   balls: { required: [Fireball] },
@@ -69,6 +103,10 @@ export class TutorialSystem extends createSystem({
   private blockTimer = 0;
   private moveStart = new Vector3();
   private popup: { mesh: Mesh; ctx: CanvasRenderingContext2D; tex: CanvasTexture } | null = null;
+  // Controller laser pointers for the intro card's READY button.
+  private ray = new Raycaster();
+  private pointers: Partial<Record<'left' | 'right', Pointer>> = {};
+  private readyHover = false;
 
   update(delta: number): void {
     if (!app.tutorial) {
@@ -126,12 +164,113 @@ export class TutorialSystem extends createSystem({
     }
 
     const step = STEPS[this.stepIdx];
+    // The intro card is a click-through: drive a laser pointer at its READY
+    // button and hold the player's fire so the click-trigger doesn't spawn a ball.
+    if (step.kind === 'intro') {
+      app.tutorialHoldFire = true;
+      if (this.updateReadyPointer()) {
+        app.tutorialHoldFire = false;
+        this.hidePointers();
+        this.cleared = true;
+        this.clearTimer = 0.6;
+        this.draw();
+      }
+      return;
+    }
+    app.tutorialHoldFire = false;
     if (step.kind === 'block') this.tickBlock(delta);
     if (this.detect(step.kind)) {
       this.cleared = true;
       this.clearTimer = 1.0;
       this.draw();
     }
+  }
+
+  /** Aim a laser from each hand at the intro card; light the READY button when
+   *  pointed at, and report a click (trigger) on it. */
+  private updateReadyPointer(): boolean {
+    if (!this.popup) return false;
+    if (!this.pointers.left) this.pointers.left = this.makePointer();
+    if (!this.pointers.right) this.pointers.right = this.makePointer();
+    let hover = false;
+    let clicked = false;
+    for (const hand of ['left', 'right'] as const) {
+      const p = this.pointers[hand]!;
+      const rayObj = this.world.playerSpaceEntities.raySpaces[hand]?.object3D;
+      if (!rayObj) {
+        p.line.visible = false;
+        p.dot.visible = false;
+        continue;
+      }
+      rayObj.getWorldPosition(_origin);
+      rayObj.getWorldDirection(_dir).negate(); // ray space points down −Z
+      this.ray.set(_origin, _dir);
+      const hit = this.ray.intersectObject(this.popup.mesh, false)[0];
+      _end.copy(hit ? hit.point : _origin.clone().addScaledVector(_dir, 1.6));
+      const pos = p.line.geometry.getAttribute('position');
+      pos.setXYZ(0, _origin.x, _origin.y, _origin.z);
+      pos.setXYZ(1, _end.x, _end.y, _end.z);
+      pos.needsUpdate = true;
+      p.line.visible = true;
+      let over = false;
+      if (hit?.uv) {
+        const cx = hit.uv.x * POP_W;
+        const cy = (1 - hit.uv.y) * POP_H; // canvas y is top-down
+        over = cx >= READY_BTN.x && cx <= READY_BTN.x + READY_BTN.w && cy >= READY_BTN.y && cy <= READY_BTN.y + READY_BTN.h;
+      }
+      if (hit) {
+        p.dot.position.copy(hit.point);
+        p.dot.visible = true;
+      } else {
+        p.dot.visible = false;
+      }
+      if (over) {
+        hover = true;
+        if (this.input.xr.gamepads[hand]?.getButtonDown(InputComponent.Trigger)) clicked = true;
+      }
+    }
+    if (hover !== this.readyHover) {
+      this.readyHover = hover;
+      this.draw();
+    }
+    return clicked;
+  }
+
+  private makePointer(): Pointer {
+    const geo = new BufferGeometry().setFromPoints([new Vector3(), new Vector3(0, 0, -1)]);
+    const line = new Line(geo, new LineBasicMaterial({ color: 0xffa03c, transparent: true, opacity: 0.85 }));
+    line.name = 'tutorial-pointer';
+    line.frustumCulled = false;
+    line.visible = false;
+    line.renderOrder = 21;
+    const dot = new Mesh(new SphereGeometry(0.012, 12, 10), new MeshBasicMaterial({ color: 0xffc04d }));
+    dot.visible = false;
+    dot.renderOrder = 21;
+    this.scene.add(line, dot);
+    return { line, dot };
+  }
+
+  private hidePointers(): void {
+    for (const hand of ['left', 'right'] as const) {
+      const p = this.pointers[hand];
+      if (p) {
+        p.line.visible = false;
+        p.dot.visible = false;
+      }
+    }
+  }
+
+  private removePointers(): void {
+    for (const hand of ['left', 'right'] as const) {
+      const p = this.pointers[hand];
+      if (!p) continue;
+      this.scene.remove(p.line, p.dot);
+      p.line.geometry.dispose();
+      (p.line.material as LineBasicMaterial).dispose();
+      p.dot.geometry.dispose();
+      (p.dot.material as MeshBasicMaterial).dispose();
+    }
+    this.pointers = {};
   }
 
   private enterStep(): void {
@@ -147,6 +286,8 @@ export class TutorialSystem extends createSystem({
 
   private detect(kind: StepKind): boolean {
     switch (kind) {
+      case 'intro':
+        return false; // handled by the pointer + READY button, not auto-detection
       case 'orbit':
         return this.playerBallIn(BallState.Orbit);
       case 'flying':
@@ -226,6 +367,9 @@ export class TutorialSystem extends createSystem({
 
   private end(): void {
     this.removePopup();
+    this.removePointers();
+    app.tutorialHoldFire = false;
+    this.readyHover = false;
     this.active = false;
     this.phase = 'lessons';
   }
@@ -304,10 +448,17 @@ export class TutorialSystem extends createSystem({
     ctx.fillStyle = accent;
     ctx.fillText(title, 40, 78);
 
+    const intro = !grad && STEPS[this.stepIdx].kind === 'intro';
     const body = grad ? ["That's the basics.", 'Now beat the bot.'] : STEPS[this.stepIdx].body;
-    ctx.font = '600 25px system-ui, sans-serif';
     ctx.fillStyle = UI.text;
-    body.forEach((line, i) => ctx.fillText(line, 40, 124 + i * 36));
+    if (intro) {
+      // The setup card carries more copy, so it runs a touch smaller and tighter.
+      ctx.font = '600 20px system-ui, sans-serif';
+      body.forEach((line, i) => ctx.fillText(line, 40, 96 + i * 24));
+    } else {
+      ctx.font = '600 25px system-ui, sans-serif';
+      body.forEach((line, i) => ctx.fillText(line, 40, 124 + i * 36));
+    }
 
     // Footer: the prompt, or the ✓ beat once a lesson lands.
     ctx.font = '800 22px system-ui, sans-serif';
@@ -317,6 +468,22 @@ export class TutorialSystem extends createSystem({
     } else if (this.cleared) {
       ctx.fillStyle = GREEN;
       ctx.fillText('✓  DONE', 40, POP_H - 38);
+    } else if (STEPS[this.stepIdx].kind === 'intro') {
+      // A pointable READY button instead of a text hint.
+      const hot = this.readyHover;
+      plate(ctx, READY_BTN.x, READY_BTN.y, READY_BTN.w, READY_BTN.h, {
+        cut: 10,
+        fill: hot ? 'rgba(255,176,0,0.22)' : 'rgba(20,22,30,0.92)',
+        stroke: hot ? UI.amber : UI.steel,
+        rivets: false,
+      });
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = stencilFont(28);
+      ctx.fillStyle = hot ? UI.amber : UI.text;
+      ctx.fillText('LET’S GO', READY_BTN.x + READY_BTN.w / 2, READY_BTN.y + READY_BTN.h / 2 + 1);
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
     } else {
       ctx.fillStyle = 'rgba(232,236,242,0.6)';
       ctx.fillText(STEPS[this.stepIdx].hint, 40, POP_H - 38);
