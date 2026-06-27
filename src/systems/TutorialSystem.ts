@@ -47,8 +47,8 @@ const TUT_BOT_HP = 55;
 const POP_W = 512;
 const POP_H = 280;
 const GREEN = '#57e389';
-// The READY button drawn on the intro card (canvas px), pointed at + clicked.
-const READY_BTN = { x: 156, y: 210, w: 200, h: 50 };
+// The "LET'S GO" button drawn on the intro card (canvas px), pointed at + clicked.
+const READY_BTN = { x: 146, y: 200, w: 220, h: 50 };
 
 type StepKind = 'intro' | 'orbit' | 'flying' | 'returning' | 'block' | 'move';
 interface Step {
@@ -59,7 +59,18 @@ interface Step {
 }
 
 const STEPS: Step[] = [
-  { title: 'SET UP', kind: 'intro', hint: '', body: ['Clear a 1.8m x 1.8m area', 'and centre yourself in it.', 'Hold the recenter button.'] },
+  {
+    title: 'SET UP',
+    kind: 'intro',
+    hint: '',
+    body: [
+      'Clear a 1.8m x 1.8m area IRL',
+      'and centre yourself within it.',
+      'Re-centre your area using your',
+      "controller. When you're ready,",
+      'click here:',
+    ],
+  },
   { title: 'ACTIVATE', kind: 'orbit', hint: 'hold the trigger', body: ['Hold the trigger to', 'spin up a ball that', 'orbits your fist.'] },
   { title: 'THROW', kind: 'flying', hint: 'punch and release', body: ['Punch and release the', 'trigger to throw the ball', 'at your opponent.'] },
   { title: 'RECALL', kind: 'returning', hint: 'pull the trigger', body: ['Pull the trigger again', 'to call the ball back', 'to your hand.'] },
@@ -437,10 +448,17 @@ export class TutorialSystem extends createSystem({
     ctx.fillStyle = accent;
     ctx.fillText(title, 40, 78);
 
+    const intro = !grad && STEPS[this.stepIdx].kind === 'intro';
     const body = grad ? ["That's the basics.", 'Now beat the bot.'] : STEPS[this.stepIdx].body;
-    ctx.font = '600 25px system-ui, sans-serif';
     ctx.fillStyle = UI.text;
-    body.forEach((line, i) => ctx.fillText(line, 40, 124 + i * 36));
+    if (intro) {
+      // The setup card carries more copy, so it runs a touch smaller and tighter.
+      ctx.font = '600 20px system-ui, sans-serif';
+      body.forEach((line, i) => ctx.fillText(line, 40, 96 + i * 24));
+    } else {
+      ctx.font = '600 25px system-ui, sans-serif';
+      body.forEach((line, i) => ctx.fillText(line, 40, 124 + i * 36));
+    }
 
     // Footer: the prompt, or the ✓ beat once a lesson lands.
     ctx.font = '800 22px system-ui, sans-serif';
@@ -463,7 +481,7 @@ export class TutorialSystem extends createSystem({
       ctx.textBaseline = 'middle';
       ctx.font = stencilFont(28);
       ctx.fillStyle = hot ? UI.amber : UI.text;
-      ctx.fillText('READY', READY_BTN.x + READY_BTN.w / 2, READY_BTN.y + READY_BTN.h / 2 + 1);
+      ctx.fillText('LET’S GO', READY_BTN.x + READY_BTN.w / 2, READY_BTN.y + READY_BTN.h / 2 + 1);
       ctx.textAlign = 'left';
       ctx.textBaseline = 'alphabetic';
     } else {
