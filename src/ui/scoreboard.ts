@@ -25,7 +25,7 @@ import {
 import { ARENA_GAP, MATCH } from '../config.js';
 import type { MatchState } from '../combat/matchState.js';
 import { app, training } from '../menu/appState.js';
-import { UI, fitStencilText, hazardStrip, metalText, plate, segmentBar, stencilFont } from './industrial.js';
+import { UI, fitStencilText, hazardStrip, metalText, plate, solidBar, stencilFont } from './industrial.js';
 import { countdownArt } from './countdownArt.js';
 import { verdictArt } from './verdictArt.js';
 
@@ -362,10 +362,10 @@ export function createScoreboard(scene: Scene): Scoreboard {
     board.key = key;
     const { ctx, tex } = board;
     header(ctx, name, neon);
-    // The health readout gets the only solid-ish backing on the board —
-    // the segmented bar IS the number, no digits needed.
+    // The health readout gets the only solid-ish backing on the board — one
+    // continuous bar that slides with every point (no chunky 5-point steps).
     plate(ctx, 28, 124, W - 56, 110, { cut: 16, fill: UI.ink, rivets: false });
-    segmentBar(ctx, 52, 148, W - 104, 60, hpFrac, neon);
+    solidBar(ctx, 52, 148, W - 104, 60, hpFrac, neon);
     scorePips(ctx, 70, 308, pips, neon);
     tex.needsUpdate = true;
   };
