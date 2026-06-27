@@ -27,7 +27,7 @@ import { coinImage } from '../../menu/coinIcon.js';
 import { addCoins, coins as wallet, spendCoins } from '../../menu/wallet.js';
 import { pubSendEvent } from '../net.js';
 import { bus, pub } from '../state.js';
-import { FIGHT, PUB, SURFACES, type Surface } from '../config.js';
+import { BOOTH_CENTRES, FIGHT, PUB, SURFACES, type Surface } from '../config.js';
 import type { PubEvent, Vec3T } from '../protocol.js';
 
 const WRIST_TOUCH = 0.13; // how close a hand must come to a wrist to grab/bank
@@ -46,11 +46,16 @@ const TAG_H = 0.13;
 
 /**
  * Where a dropped coin may come to rest: the floor, plus the same bar/booth
- * tops glasses use AND the four bar stools — so you can set a coin down on
- * tables, chairs and the bar instead of only the floor. Read-only reuse of the
- * glass SURFACES (never mutated, so glass behaviour is untouched).
+ * tops glasses use, the four bar stools AND the booth seats — so you can set a
+ * coin down on any table, chair or the bar instead of only the floor. Read-only
+ * reuse of the glass SURFACES (never mutated, so glass behaviour is untouched).
  */
 const STOOL_R = 0.17;
+const PD = PUB.halfDepth;
+// The continuous banquette bench runs the full booth span (environment.ts
+// buildBanquette): x0/x1 = first/last centre ± 1.0.
+const BOOTH_X0 = BOOTH_CENTRES[0] - 1.0;
+const BOOTH_X1 = BOOTH_CENTRES[BOOTH_CENTRES.length - 1] + 1.0;
 const COIN_SURFACES: Surface[] = [
   ...SURFACES,
   ...[-1.6, -0.8, 0.8, 1.6].map((x) => ({
@@ -59,6 +64,16 @@ const COIN_SURFACES: Surface[] = [
     maxX: x + STOOL_R,
     minZ: PUB.bar.z + 0.45 - STOOL_R,
     maxZ: PUB.bar.z + 0.45 + STOOL_R,
+  })),
+  // The continuous banquette bench cushion against the south wall (top ≈ 0.54).
+  { y: 0.54, minX: BOOTH_X0, maxX: BOOTH_X1, minZ: PD - 0.8, maxZ: PD - 0.3 },
+  // The freestanding bench across each booth table (pad top ≈ 0.395).
+  ...BOOTH_CENTRES.map((cx) => ({
+    y: 0.395,
+    minX: cx - 0.43,
+    maxX: cx + 0.43,
+    minZ: PD - 2.13,
+    maxZ: PD - 1.77,
   })),
 ];
 

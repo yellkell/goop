@@ -272,9 +272,11 @@ export const SURFACES: Surface[] = [
   },
   // Banquette booth tables along the south wall (environment.ts buildBanquette,
   // centres = BOOTH_CENTRES; the door-end booth is gone for the jukebox). Each
-  // table is 0.7 m square at z = HALF_D − 1.45.
+  // table is 0.7 m square at z = HALF_D − 1.45. Its real top is the `edge` plate
+  // (0.765 ± 0.01), so the visible surface is y = 0.775 — the old 0.76 left a
+  // thin coin sunk clean through the tabletop.
   ...BOOTH_CENTRES.map((cx) => ({
-    y: 0.76,
+    y: 0.775,
     minX: cx - 0.35,
     maxX: cx + 0.35,
     minZ: HALF_D - 1.8,
