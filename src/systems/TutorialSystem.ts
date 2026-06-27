@@ -45,11 +45,11 @@ interface Step {
 }
 
 const STEPS: Step[] = [
-  { title: 'ACTIVATE', kind: 'orbit', hint: 'hold the trigger', body: ['Hold the trigger.', 'An iron ball roars to life', 'and orbits your fist.'] },
-  { title: 'THROW', kind: 'flying', hint: 'punch and release', body: ['Swing a punch and RELEASE', 'the trigger to hurl the ball', 'at your opponent.'] },
-  { title: 'RECALL', kind: 'returning', hint: 'pull the trigger', body: ['Pull the trigger again', 'to call the ball blazing', 'back to your hand.'] },
-  { title: 'BLOCK', kind: 'block', hint: 'spin a ball to guard', body: ['An orbiting ball is a shield.', 'Spin one up and let it', "swat the bot's shot away."] },
-  { title: 'MOVE', kind: 'move', hint: 'step off the line', body: ['Lean and step to dodge.', 'Move your whole body', 'out of the line of fire.'] },
+  { title: 'ACTIVATE', kind: 'orbit', hint: 'hold the trigger', body: ['Hold the trigger to', 'spin up a ball that', 'orbits your fist.'] },
+  { title: 'THROW', kind: 'flying', hint: 'punch and release', body: ['Punch and release the', 'trigger to throw the ball', 'at your opponent.'] },
+  { title: 'RECALL', kind: 'returning', hint: 'pull the trigger', body: ['Pull the trigger again', 'to call the ball back', 'to your hand.'] },
+  { title: 'BLOCK', kind: 'block', hint: 'spin a ball to guard', body: ['An orbiting ball blocks', 'shots. Spin one up', 'to guard.'] },
+  { title: 'MOVE', kind: 'move', hint: 'step off the line', body: ['Step and lean to dodge.', 'Move your body out', 'of the way.'] },
 ];
 
 const _head = new Vector3();
@@ -304,7 +304,7 @@ export class TutorialSystem extends createSystem({
     ctx.fillStyle = accent;
     ctx.fillText(title, 40, 78);
 
-    const body = grad ? ["That's the basics.", 'Now finish the bot —', "it's on half health!"] : STEPS[this.stepIdx].body;
+    const body = grad ? ["That's the basics.", 'Now beat the bot.'] : STEPS[this.stepIdx].body;
     ctx.font = '600 25px system-ui, sans-serif';
     ctx.fillStyle = UI.text;
     body.forEach((line, i) => ctx.fillText(line, 40, 124 + i * 36));
@@ -316,7 +316,7 @@ export class TutorialSystem extends createSystem({
       ctx.fillText('✓  LET’S GO', 40, POP_H - 38);
     } else if (this.cleared) {
       ctx.fillStyle = GREEN;
-      ctx.fillText('✓  NICE', 40, POP_H - 38);
+      ctx.fillText('✓  DONE', 40, POP_H - 38);
     } else {
       ctx.fillStyle = 'rgba(232,236,242,0.6)';
       ctx.fillText(STEPS[this.stepIdx].hint, 40, POP_H - 38);
