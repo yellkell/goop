@@ -19,7 +19,7 @@
  * edits land before the balls are simulated.
  */
 
-import { createSystem, type Entity } from '@iwsdk/core';
+import { createSystem, type Entity, InputComponent } from '@iwsdk/core';
 import { CanvasTexture, LinearFilter, Mesh, MeshBasicMaterial, PlaneGeometry, Vector3 } from 'three';
 import { Fireball, BallState } from '../components/Fireball.js';
 import { Combatant } from '../components/Combatant.js';
@@ -36,7 +36,7 @@ const POP_W = 512;
 const POP_H = 280;
 const GREEN = '#57e389';
 
-type StepKind = 'orbit' | 'flying' | 'returning' | 'block' | 'move';
+type StepKind = 'intro' | 'orbit' | 'flying' | 'returning' | 'block' | 'move';
 interface Step {
   title: string;
   body: string[];
@@ -45,6 +45,7 @@ interface Step {
 }
 
 const STEPS: Step[] = [
+  { title: 'READY', kind: 'intro', hint: "press A — LET’S GO", body: ['Clear a 1.8m x 1.8m area', 'and centre yourself in it.', 'Hold the recenter button.'] },
   { title: 'ACTIVATE', kind: 'orbit', hint: 'hold the trigger', body: ['Hold the trigger to', 'spin up a ball that', 'orbits your fist.'] },
   { title: 'THROW', kind: 'flying', hint: 'punch and release', body: ['Punch and release the', 'trigger to throw the ball', 'at your opponent.'] },
   { title: 'RECALL', kind: 'returning', hint: 'pull the trigger', body: ['Pull the trigger again', 'to call the ball back', 'to your hand.'] },
@@ -147,6 +148,12 @@ export class TutorialSystem extends createSystem({
 
   private detect(kind: StepKind): boolean {
     switch (kind) {
+      case 'intro':
+        // Pure click-through: an A/X press (either hand) dismisses the setup card.
+        return (
+          (this.input.xr.gamepads.left?.getButtonDown(InputComponent.A_Button) ?? false) ||
+          (this.input.xr.gamepads.right?.getButtonDown(InputComponent.A_Button) ?? false)
+        );
       case 'orbit':
         return this.playerBallIn(BallState.Orbit);
       case 'flying':
