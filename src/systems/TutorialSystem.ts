@@ -304,7 +304,7 @@ export class TutorialSystem extends createSystem({
     ctx.fillStyle = accent;
     ctx.fillText(title, 40, 78);
 
-    const body = grad ? ["That's the basics.", 'Now beat the bot —', "it's on half health."] : STEPS[this.stepIdx].body;
+    const body = grad ? ["That's the basics.", 'Now beat the bot.'] : STEPS[this.stepIdx].body;
     ctx.font = '600 25px system-ui, sans-serif';
     ctx.fillStyle = UI.text;
     body.forEach((line, i) => ctx.fillText(line, 40, 124 + i * 36));
