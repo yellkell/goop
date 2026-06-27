@@ -267,7 +267,7 @@ export class GameStateSystem extends createSystem({
     this.refill(actives);
 
     if (app.arcade !== '1v1') {
-      this.beginRoundArcade(actives);
+      this.beginCountdownArcade(actives, MATCH.startDelay); // 2v2 / FFA open on the 3-2-1 too
       return;
     }
     // Classic duel: drive the original 1v1 flow.
@@ -275,7 +275,7 @@ export class GameStateSystem extends createSystem({
     const them = actives.find((e) => (e.getValue(Combatant, 'slot') ?? -1) === 1)!;
     const c = { me, them };
     if (app.mode === 'bot') {
-      this.beginRound(c);
+      this.beginCountdown(c); // bots get the 3-2-1 too, not a jump straight to FIGHT
     } else if (app.side === 0) {
       this.beginCountdown(c);
     } else {
