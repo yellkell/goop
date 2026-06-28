@@ -1037,7 +1037,7 @@ function drawBallRow(ctx: CanvasRenderingContext2D, side: 0 | 1, label: string, 
   ctx.textAlign = 'right';
   ctx.font = '700 20px system-ui, sans-serif';
   ctx.fillStyle = on ? UI.emberBright : UI.textDim;
-  ctx.fillText('ARC', b.x - 12, rowY - 18);
+  ctx.fillText('CURVE', b.x - 12, rowY - 18);
   plate(ctx, b.x, b.y, b.s, b.s, {
     cut: 6,
     fill: on ? 'rgba(255,176,0,0.22)' : 'rgba(18,19,24,0.7)',
@@ -1093,10 +1093,10 @@ function drawBalls(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null
   if (ballDescArc) {
     ctx.font = '800 24px system-ui, sans-serif';
     ctx.fillStyle = UI.amber;
-    ctx.fillText('ARC', BMX + 20, DESC_Y + 28);
+    ctx.fillText('CURVE', BMX + 20, DESC_Y + 28);
     ctx.font = '500 20px system-ui, sans-serif';
     ctx.fillStyle = UI.text;
-    wrapText(ctx, 'The ball curves to follow the arc of your punch — hook it past a guard. Aim assist is off for this fist.', BMX + 20, DESC_Y + 58, BALL_W - 2 * BMX - 40, 26);
+    wrapText(ctx, 'The ball curves to follow the arc of your punch — hook it past their guard.', BMX + 20, DESC_Y + 58, BALL_W - 2 * BMX - 40, 26);
   } else if (ballDescIdx < 0) {
     ctx.font = '600 22px system-ui, sans-serif';
     ctx.fillStyle = UI.textDim;
