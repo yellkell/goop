@@ -177,7 +177,13 @@ export class NetworkSystem extends createSystem({
       case 'throw': {
         mirrorPos(_p, msg.pos[0], msg.pos[1], msg.pos[2]);
         mirrorVel(_v, msg.vel[0], msg.vel[1], msg.vel[2]);
-        ballCommands.push({ type: 'throw', hand: msg.hand, pos: _p.clone(), vel: _v.clone() });
+        // The curl axis is an angular velocity — under the 180° mirror it flips
+        // the same way as a linear velocity (−x, y, −z).
+        const curl =
+          msg.curl && (msg.curl[0] || msg.curl[1] || msg.curl[2])
+            ? mirrorVel(new Vector3(), msg.curl[0], msg.curl[1], msg.curl[2])
+            : undefined;
+        ballCommands.push({ type: 'throw', hand: msg.hand, pos: _p.clone(), vel: _v.clone(), curl });
         break;
       }
       case 'recall':

@@ -61,10 +61,57 @@ class VelocityTracker {
     return out.copy(newest.pos).sub(oldest.pos).multiplyScalar(1 / dt);
   }
 
+  /**
+   * The swing's CURVATURE at release: how fast its direction is turning, as an
+   * axis (filled into `outAxis`) whose returned magnitude is rad/s. Compares the
+   * earlier half of the recent window to the later half — a hook turns the
+   * direction, a straight jab doesn't. Returns 0 if the swing is too slow or
+   * straight to read a curve.
+   */
+  curl(outAxis: Vector3, now: number): number {
+    outAxis.set(0, 0, 0);
+    const s = this.samples;
+    if (s.length < 4) return 0;
+    const win = [];
+    for (let i = s.length - 1; i >= 0; i--) {
+      if (now - s[i].t <= 0.14) win.unshift(s[i]);
+      else break;
+    }
+    if (win.length < 4) return 0;
+    const mid = win.length >> 1;
+    const a0 = win[0];
+    const a1 = win[mid];
+    const a2 = win[win.length - 1];
+    const dt1 = a1.t - a0.t;
+    const dt2 = a2.t - a1.t;
+    if (dt1 < 1e-3 || dt2 < 1e-3) return 0;
+    _cA.copy(a1.pos).sub(a0.pos).divideScalar(dt1);
+    _cB.copy(a2.pos).sub(a1.pos).divideScalar(dt2);
+    const lenA = _cA.length();
+    const lenB = _cB.length();
+    if (lenA < 0.4 || lenB < 0.4) return 0; // too slow to read a reliable curve
+    outAxis.copy(_cA).cross(_cB);
+    const sinMag = outAxis.length() / (lenA * lenB);
+    if (sinMag < 1e-3) {
+      outAxis.set(0, 0, 0);
+      return 0;
+    }
+    outAxis.divideScalar(outAxis.length()); // normalize
+    const angle = Math.atan2(sinMag, _cA.dot(_cB) / (lenA * lenB));
+    return angle / ((dt1 + dt2) / 2);
+  }
+
   reset(): void {
     this.samples.length = 0;
   }
 }
+
+// Curveball tuning. The raw swing turn-rate (rad/s) is scaled by GAIN and capped,
+// then in flight the velocity rotates about the curl axis while the rate decays —
+// so the ball banks hard early (just off the fist) and straightens out.
+const CURL_GAIN = 0.35;
+const CURL_MAX = 2.0; // rad/s after gain (≈ caps total bend near 45°)
+const CURL_DECAY = 2.5; // per second
 
 const _grip = new Vector3();
 const _gripQ = new Quaternion();
@@ -77,6 +124,9 @@ const _camQ = new Quaternion();
 const _target = new Vector3();
 const _perp1 = new Vector3();
 const _perp2 = new Vector3();
+const _cA = new Vector3();
+const _cB = new Vector3();
+const _curl = new Vector3();
 
 interface AttachEffect {
   att: number;
@@ -389,6 +439,22 @@ export class FireballSystem extends createSystem({
     v[0] = _dir.x * speed;
     v[1] = _dir.y * speed;
     v[2] = _dir.z * speed;
+
+    // Curveball: when this fist's ARC toggle is on, read the punch's curvature
+    // and store it as the curl axis*rate; the flight integrator banks the ball
+    // along that arc. Off → a dead-straight throw (zero curl).
+    const c = ball.getVectorView(Fireball, 'curl');
+    if (app.ballArc[hand]) {
+      const rate = Math.min(CURL_MAX, this.trackers[hand].curl(_curl, this.time) * CURL_GAIN);
+      c[0] = _curl.x * rate;
+      c[1] = _curl.y * rate;
+      c[2] = _curl.z * rate;
+    } else {
+      c[0] = 0;
+      c[1] = 0;
+      c[2] = 0;
+    }
+
     ball.setValue(Fireball, 'state', BallState.Flying);
     ball.setValue(Fireball, 'elapsed', 0);
     ball.setValue(Fireball, 'recallLock', 0);
@@ -403,6 +469,7 @@ export class FireballSystem extends createSystem({
       hand,
       pos: [obj.position.x, obj.position.y, obj.position.z],
       vel: [v[0], v[1], v[2]],
+      curl: [c[0], c[1], c[2]],
     });
   }
 
@@ -462,6 +529,21 @@ export class FireballSystem extends createSystem({
       }
       case BallState.Flying: {
         const v = ball.getVectorView(Fireball, 'velocity');
+        // Curveball: bank the velocity about the curl axis (its length is the
+        // turn rate), then bleed the rate so the arc eases out down-range.
+        const c = ball.getVectorView(Fireball, 'curl');
+        const cm = Math.hypot(c[0], c[1], c[2]);
+        if (cm > 1e-4) {
+          _curl.set(c[0] / cm, c[1] / cm, c[2] / cm);
+          _vel.set(v[0], v[1], v[2]).applyAxisAngle(_curl, cm * delta);
+          v[0] = _vel.x;
+          v[1] = _vel.y;
+          v[2] = _vel.z;
+          const k = Math.exp(-CURL_DECAY * delta);
+          c[0] *= k;
+          c[1] *= k;
+          c[2] *= k;
+        }
         v[1] -= FIREBALL.gravity * delta;
         obj.position.x += v[0] * delta;
         obj.position.y += v[1] * delta;
@@ -624,6 +706,11 @@ export class FireballSystem extends createSystem({
           }
           const v = ball.getVectorView(Fireball, 'velocity');
           v[0] = cmd.vel.x; v[1] = cmd.vel.y; v[2] = cmd.vel.z;
+          // Mirror the thrower's curveball (or clear it for a straight/bot throw).
+          const c = ball.getVectorView(Fireball, 'curl');
+          c[0] = cmd.curl?.x ?? 0;
+          c[1] = cmd.curl?.y ?? 0;
+          c[2] = cmd.curl?.z ?? 0;
           ball.setValue(Fireball, 'state', BallState.Flying);
           ball.setValue(Fireball, 'elapsed', 0);
           sfx.throwWhoosh();

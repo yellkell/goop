@@ -30,7 +30,7 @@ export type PeerMessage =
       acl?: number;
     }
   /** I punched my `hand` ball: it left from `pos` with velocity `vel`. */
-  | { k: 'throw'; hand: 0 | 1; pos: [number, number, number]; vel: [number, number, number] }
+  | { k: 'throw'; hand: 0 | 1; pos: [number, number, number]; vel: [number, number, number]; curl?: [number, number, number] }
   /**
    * I recalled my `hand` ball. If it carried an attachment that fired (a live
    * recall, not a dead ball), `att` is the effect (ATTACH.*), `dmg` the

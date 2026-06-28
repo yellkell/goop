@@ -30,6 +30,12 @@ export const Fireball = createComponent(
     state: { type: Types.Int32, default: 0 },
     /** World-space velocity in m/s (Flying / Dead fall). */
     velocity: { type: Types.Vec3, default: [0, 0, 0] as [number, number, number] },
+    /**
+     * Curveball spin: a world-space axis whose LENGTH is the turn rate (rad/s).
+     * While FLYING the velocity rotates about it and the rate decays, so the
+     * ball banks along the arc of the punch. Zero = a straight throw.
+     */
+    curl: { type: Types.Vec3, default: [0, 0, 0] as [number, number, number] },
     /** Orbit angle in radians. */
     phase: { type: Types.Float32, default: 0 },
     /** Seconds the trigger has been held in orbit (spins the orbit up). */
