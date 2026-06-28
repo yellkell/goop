@@ -109,9 +109,9 @@ class VelocityTracker {
 // Curveball tuning. The raw swing turn-rate (rad/s) is scaled by GAIN and capped,
 // then in flight the velocity rotates about the curl axis while the rate decays —
 // so the ball banks hard early (just off the fist) and straightens out.
-const CURL_GAIN = 0.35;
-const CURL_MAX = 2.0; // rad/s after gain (≈ caps total bend near 45°)
-const CURL_DECAY = 2.5; // per second
+const CURL_GAIN = 0.75;
+const CURL_MAX = 4.0; // rad/s after gain
+const CURL_DECAY = 2.0; // per second — lower = the bend carries further
 
 const _grip = new Vector3();
 const _gripQ = new Quaternion();
@@ -427,9 +427,12 @@ export class FireballSystem extends createSystem({
     // keeps its fixed point across the gap; arcade brawls assist whichever
     // enemy you're throwing TOWARD (best aligned with the swing), so a throw
     // forward goes forward instead of being yanked at a side platform.
-    this.aimTarget(obj.position, _dir, _aim);
-    _aim.sub(obj.position).normalize();
-    _dir.lerp(_aim, FIREBALL.aimAssist).normalize();
+    // ARC throws skip it entirely — the curve is a pure skill shot.
+    if (!app.ballArc[hand]) {
+      this.aimTarget(obj.position, _dir, _aim);
+      _aim.sub(obj.position).normalize();
+      _dir.lerp(_aim, FIREBALL.aimAssist).normalize();
+    }
 
     const speed = Math.min(
       FIREBALL.throwSpeedMax,
