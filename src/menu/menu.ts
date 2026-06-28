@@ -950,14 +950,16 @@ const BGAP = 18; // gap between tiles
 const TILE_W = (BALL_W - 2 * BMX - 2 * BGAP) / 3;
 const TILE_H = 92;
 const ROW_L_Y = 120; // left-fist tile row top
-const ROW_R_Y = 244; // right-fist tile row top
-const DESC_Y = 360;
+const ROW_R_Y = 262; // right-fist tile row top (clear of the left row's ARC box)
+const DESC_Y = 366;
 const tileX = (i: number): number => BMX + i * (TILE_W + BGAP);
 const ARC_BS = 26; // arc checkbox size
 const arcBox = (rowY: number): { x: number; y: number; s: number } => ({ x: BALL_W - BMX - ARC_BS, y: rowY - 40, s: ARC_BS });
 
 /** Last attachment whose description is shown in the box (−1 = none yet). */
 let ballDescIdx = -1;
+/** When true, the description box explains the ARC toggle instead. */
+let ballDescArc = false;
 
 /** A small arrowhead triangle at (x,y) pointing along `ang`. */
 function arrowHead(ctx: CanvasRenderingContext2D, x: number, y: number, ang: number, size: number): void {
@@ -1035,7 +1037,7 @@ function drawBallRow(ctx: CanvasRenderingContext2D, side: 0 | 1, label: string, 
   ctx.textAlign = 'right';
   ctx.font = '700 20px system-ui, sans-serif';
   ctx.fillStyle = on ? UI.emberBright : UI.textDim;
-  ctx.fillText('ARC', b.x - 12, rowY - 18);
+  ctx.fillText('CURVE', b.x - 12, rowY - 18);
   plate(ctx, b.x, b.y, b.s, b.s, {
     cut: 6,
     fill: on ? 'rgba(255,176,0,0.22)' : 'rgba(18,19,24,0.7)',
@@ -1088,7 +1090,14 @@ function drawBalls(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null
     rivets: false,
   });
   ctx.textAlign = 'left';
-  if (ballDescIdx < 0) {
+  if (ballDescArc) {
+    ctx.font = '800 24px system-ui, sans-serif';
+    ctx.fillStyle = UI.amber;
+    ctx.fillText('CURVE', BMX + 20, DESC_Y + 28);
+    ctx.font = '500 20px system-ui, sans-serif';
+    ctx.fillStyle = UI.text;
+    wrapText(ctx, 'The ball curves to follow the arc of your punch. Hook it past their guard.', BMX + 20, DESC_Y + 58, BALL_W - 2 * BMX - 40, 26);
+  } else if (ballDescIdx < 0) {
     ctx.font = '600 22px system-ui, sans-serif';
     ctx.fillStyle = UI.textDim;
     ctx.fillText('tap an attachment to read what it does', BMX + 20, DESC_Y + 52);
@@ -1113,6 +1122,7 @@ function clickBalls(u: number, v: number): boolean {
     if (x >= b.x && x <= b.x + b.s && y >= b.y && y <= b.y + b.s) {
       app.ballArc[side] = !app.ballArc[side];
       saveBallArc();
+      ballDescArc = true; // show what ARC does
       return true;
     }
   }
@@ -1124,6 +1134,7 @@ function clickBalls(u: number, v: number): boolean {
     if (x < tx || x > tx + TILE_W) return false;
     const type = TYPES[i];
     ballDescIdx = i;
+    ballDescArc = false;
     app.ballAttach[side] = app.ballAttach[side] === type ? 0 : type;
     saveBallAttach();
     return true;
