@@ -113,6 +113,10 @@ const CURL_MIN = 2.5; // rad/s dead zone: below this the punch is "straight" →
 const CURL_GAIN = 1.5; // applied to the swing rate ABOVE the dead zone
 const CURL_MAX = 4.0; // rad/s after gain
 const CURL_DECAY = 2.0; // per second — lower = the bend carries further
+// Curve only really bites on a committed, WIDE swing — small movements are too
+// jittery to read a clean arc, so the curve ramps in with hand speed (m/s).
+const CURL_SPEED_MIN = 2.6; // below this swing speed → essentially no curve
+const CURL_SPEED_FULL = 4.4; // at/above this → full curve
 
 const _grip = new Vector3();
 const _gripQ = new Quaternion();
@@ -450,9 +454,12 @@ export class FireballSystem extends createSystem({
     const c = ball.getVectorView(Fireball, 'curl');
     if (app.ballArc[hand]) {
       // Dead zone: a near-straight punch (low swing curvature) throws straight;
-      // only a deliberate hook past CURL_MIN bends the ball.
+      // only a deliberate hook past CURL_MIN bends the ball. And ramp the whole
+      // thing in with swing speed, so small/jittery movements stay controllable
+      // and only wide committed swipes curve.
       const raw = this.trackers[hand].curl(_curl, this.time);
-      const rate = raw <= CURL_MIN ? 0 : Math.min(CURL_MAX, (raw - CURL_MIN) * CURL_GAIN);
+      const speedK = Math.max(0, Math.min(1, (handSpeed - CURL_SPEED_MIN) / (CURL_SPEED_FULL - CURL_SPEED_MIN)));
+      const rate = (raw <= CURL_MIN ? 0 : Math.min(CURL_MAX, (raw - CURL_MIN) * CURL_GAIN)) * speedK;
       c[0] = _curl.x * rate;
       c[1] = _curl.y * rate;
       c[2] = _curl.z * rate;
