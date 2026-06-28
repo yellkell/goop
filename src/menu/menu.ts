@@ -1096,7 +1096,7 @@ function drawBalls(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null
     ctx.fillText('CURVE', BMX + 20, DESC_Y + 28);
     ctx.font = '500 20px system-ui, sans-serif';
     ctx.fillStyle = UI.text;
-    wrapText(ctx, 'The ball curves to follow the arc of your punch — hook it past their guard.', BMX + 20, DESC_Y + 58, BALL_W - 2 * BMX - 40, 26);
+    wrapText(ctx, 'The ball curves to follow the arc of your punch. Hook it past their guard.', BMX + 20, DESC_Y + 58, BALL_W - 2 * BMX - 40, 26);
   } else if (ballDescIdx < 0) {
     ctx.font = '600 22px system-ui, sans-serif';
     ctx.fillStyle = UI.textDim;
