@@ -986,21 +986,18 @@ function drawAttachIcon(ctx: CanvasRenderingContext2D, type: number, cx: number,
     return;
   }
   const grow = type === ATTACH.grow;
-  // Outer ring.
+  // Outer ring for reference.
   ctx.globalAlpha = 0.55;
   ctx.beginPath();
   ctx.arc(cx, cy, r * 0.82, 0, Math.PI * 2);
   ctx.stroke();
   ctx.globalAlpha = 1;
-  // Solid core — small for grow (about to grow), large for shrink.
-  ctx.beginPath();
-  ctx.arc(cx, cy, grow ? r * 0.26 : r * 0.5, 0, Math.PI * 2);
-  ctx.fill();
-  // Four arrows: outward for grow, inward for shrink.
+  // Just four arrows — outward = grows, inward = shrinks. No centre ball: a
+  // ball sized to the BEFORE state read backwards (small grow / big shrink).
   for (let k = 0; k < 4; k++) {
     const ang = Math.PI / 4 + (k * Math.PI) / 2;
-    const rad = grow ? r * 0.5 : r * 0.78;
-    arrowHead(ctx, cx + Math.cos(ang) * rad, cy + Math.sin(ang) * rad, grow ? ang : ang + Math.PI, r * 0.22);
+    const rad = grow ? r * 0.42 : r * 0.78;
+    arrowHead(ctx, cx + Math.cos(ang) * rad, cy + Math.sin(ang) * rad, grow ? ang : ang + Math.PI, r * 0.26);
   }
 }
 
