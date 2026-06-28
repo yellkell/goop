@@ -68,7 +68,7 @@ export const opponent: OpponentPose = opponents[0];
  * type serves every mode.
  */
 export type BallCommand =
-  | { type: 'throw'; slot?: number; hand: 0 | 1; pos: Vector3; vel: Vector3 }
+  | { type: 'throw'; slot?: number; hand: 0 | 1; pos: Vector3; vel: Vector3; curl?: Vector3 }
   /** Recall; `att`/`dmg`/`scl` carry a fired attachment (see protocol). */
   | { type: 'recall'; slot?: number; hand: 0 | 1; att?: number; dmg?: number; scl?: number }
   /** The other boxer's own sim reports their ball was spent (hit us / parried). */

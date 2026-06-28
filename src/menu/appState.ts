@@ -52,6 +52,12 @@ function loadBallAttach(): [number, number] {
   return [clamp(parts[0]), clamp(parts[1])];
 }
 
+/** Per-fist 'Arc' toggle — when on, that fist's ball curves along the punch. */
+function loadBallArc(): [boolean, boolean] {
+  const parts = (localStorage.getItem('ff-ballarc') ?? '').split(',');
+  return [parts[0] === '1', parts[1] === '1'];
+}
+
 function loadStats(): LifetimeStats {
   try {
     const raw = localStorage.getItem('ff-stats');
@@ -119,6 +125,8 @@ export const app: {
   accentLight: number;
   /** Ball attachment per fist: [left, right] (0 none/1 split/2 grow/3 shrink). */
   ballAttach: [number, number];
+  /** Per-fist 'Arc' toggle [left, right]: the ball curves along the punch. */
+  ballArc: [boolean, boolean];
   /** Which face the 1V1 panel shows: the mode list, or the private-match flow. */
   duelView: 'root' | 'private' | 'hosting' | 'keypad';
   /** The 5-digit code shown while hosting a private match. */
@@ -153,6 +161,7 @@ export const app: {
   accentHue: loadAccentHue(),
   accentLight: loadAccentLight(),
   ballAttach: loadBallAttach(),
+  ballArc: loadBallArc(),
   duelView: 'root',
   privateCode: '',
   codeEntry: '',
@@ -210,6 +219,14 @@ export function saveAccentLight(): void {
 export function saveBallAttach(): void {
   try {
     localStorage.setItem('ff-ballattach', `${app.ballAttach[0]},${app.ballAttach[1]}`);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function saveBallArc(): void {
+  try {
+    localStorage.setItem('ff-ballarc', `${app.ballArc[0] ? 1 : 0},${app.ballArc[1] ? 1 : 0}`);
   } catch {
     /* ignore */
   }

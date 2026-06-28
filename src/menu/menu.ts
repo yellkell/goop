@@ -18,7 +18,7 @@ import {
   PlaneGeometry,
   type Scene,
 } from 'three';
-import { app, DEFAULT_ACCENT_HUE, saveBallAttach } from './appState.js';
+import { app, DEFAULT_ACCENT_HUE, saveBallArc, saveBallAttach } from './appState.js';
 import { avatarOwned, customization, platformOwned } from './customization.js';
 import { rankBadge } from './rankBadges.js';
 import { coinImage } from './coinIcon.js';
@@ -953,6 +953,8 @@ const ROW_L_Y = 120; // left-fist tile row top
 const ROW_R_Y = 244; // right-fist tile row top
 const DESC_Y = 360;
 const tileX = (i: number): number => BMX + i * (TILE_W + BGAP);
+const ARC_BS = 26; // arc checkbox size
+const arcBox = (rowY: number): { x: number; y: number; s: number } => ({ x: BALL_W - BMX - ARC_BS, y: rowY - 40, s: ARC_BS });
 
 /** Last attachment whose description is shown in the box (−1 = none yet). */
 let ballDescIdx = -1;
@@ -1027,6 +1029,30 @@ function drawBallRow(ctx: CanvasRenderingContext2D, side: 0 | 1, label: string, 
   const eqName = equipped ? ATTACHMENTS[equipped - 1].name.toLowerCase() : 'none';
   ctx.fillText(`${label}  ·  ${eqName}`, BMX, rowY - 16);
 
+  // 'Arc' toggle for this fist — the ball curves along the punch when on.
+  const on = app.ballArc[side];
+  const b = arcBox(rowY);
+  ctx.textAlign = 'right';
+  ctx.font = '700 20px system-ui, sans-serif';
+  ctx.fillStyle = on ? UI.emberBright : UI.textDim;
+  ctx.fillText('ARC', b.x - 12, rowY - 18);
+  plate(ctx, b.x, b.y, b.s, b.s, {
+    cut: 6,
+    fill: on ? 'rgba(255,176,0,0.22)' : 'rgba(18,19,24,0.7)',
+    stroke: on ? UI.amber : UI.steelDim,
+    rivets: false,
+  });
+  if (on) {
+    ctx.strokeStyle = UI.amber;
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(b.x + 6, b.y + 13);
+    ctx.lineTo(b.x + 11, b.y + 19);
+    ctx.lineTo(b.x + 20, b.y + 7);
+    ctx.stroke();
+  }
+
   for (let i = 0; i < 3; i++) {
     const type = TYPES[i];
     const info = ATTACHMENTS[i];
@@ -1081,6 +1107,15 @@ function drawBalls(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null
 function clickBalls(u: number, v: number): boolean {
   const x = u * BALL_W;
   const y = (1 - v) * BALL_H;
+  // Arc checkboxes sit on each fist's label line, above the tiles.
+  for (const [side, rowY] of [[0, ROW_L_Y], [1, ROW_R_Y]] as const) {
+    const b = arcBox(rowY);
+    if (x >= b.x && x <= b.x + b.s && y >= b.y && y <= b.y + b.s) {
+      app.ballArc[side] = !app.ballArc[side];
+      saveBallArc();
+      return true;
+    }
+  }
   for (const [side, rowY] of [[0, ROW_L_Y], [1, ROW_R_Y]] as const) {
     if (y < rowY || y > rowY + TILE_H) continue;
     const i = Math.floor((x - BMX) / (TILE_W + BGAP));
