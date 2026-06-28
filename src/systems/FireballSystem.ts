@@ -109,7 +109,8 @@ class VelocityTracker {
 // Curveball tuning. The raw swing turn-rate (rad/s) is scaled by GAIN and capped,
 // then in flight the velocity rotates about the curl axis while the rate decays —
 // so the ball banks hard early (just off the fist) and straightens out.
-const CURL_GAIN = 0.75;
+const CURL_MIN = 2.5; // rad/s dead zone: below this the punch is "straight" → no curve
+const CURL_GAIN = 1.5; // applied to the swing rate ABOVE the dead zone
 const CURL_MAX = 4.0; // rad/s after gain
 const CURL_DECAY = 2.0; // per second — lower = the bend carries further
 
@@ -448,7 +449,10 @@ export class FireballSystem extends createSystem({
     // along that arc. Off → a dead-straight throw (zero curl).
     const c = ball.getVectorView(Fireball, 'curl');
     if (app.ballArc[hand]) {
-      const rate = Math.min(CURL_MAX, this.trackers[hand].curl(_curl, this.time) * CURL_GAIN);
+      // Dead zone: a near-straight punch (low swing curvature) throws straight;
+      // only a deliberate hook past CURL_MIN bends the ball.
+      const raw = this.trackers[hand].curl(_curl, this.time);
+      const rate = raw <= CURL_MIN ? 0 : Math.min(CURL_MAX, (raw - CURL_MIN) * CURL_GAIN);
       c[0] = _curl.x * rate;
       c[1] = _curl.y * rate;
       c[2] = _curl.z * rate;
