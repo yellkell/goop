@@ -60,7 +60,7 @@ import {
 import { canAfford, spendCoins } from '../menu/wallet.js';
 import { playCash, preloadCash } from '../audio/cash.js';
 import { setMenuMusicActive, toggleMusicMuted } from '../audio/menuMusic.js';
-import { stopBattleMusic } from '../audio/battleMusic.js';
+import { handoffToLobby } from '../audio/battleMusic.js';
 import { setVoiceEnabled, voiceEnabled } from '../audio/voicePref.js';
 import { buildBoxer, setAvatarAccent, solveTorso, type BoxerRig } from '../avatar/boxer.js';
 import {
@@ -908,10 +908,11 @@ export class MenuSystem extends createSystem({}) {
   private applyState(): void {
     const inLobby = app.state === 'menu' || app.state === 'queueing';
     this.menu.setVisible(inLobby);
-    // Back in the lobby: kill the battle score / victory sting FIRST, then bring
-    // the lobby music up — same function, so they can never overlap.
-    if (inLobby) stopBattleMusic();
-    setMenuMusicActive(inLobby); // pause the lobby music during a bout / training
+    // Back in the lobby: hand the audio over — the victory sting rings out, then
+    // (and only then) the lobby music fades up, so they never overlap. During a
+    // bout / training the lobby music just pauses.
+    if (inLobby) handoffToLobby();
+    else setMenuMusicActive(false);
     // Fresh board standings + the day's Gasket Gazette whenever you land back
     // in the lobby (both throttled).
     if (inLobby) {

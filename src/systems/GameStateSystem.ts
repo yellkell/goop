@@ -22,7 +22,7 @@ import { applyRoster } from '../combat/setup.js';
 import { applyArenaLayout } from '../arena/arena.js';
 import { app, saveStats, training, type AppMode } from '../menu/appState.js';
 import * as sfx from '../audio/sfx.js';
-import { playVictory, startBattleMusic, stopBattleMusic } from '../audio/battleMusic.js';
+import { playVictory, startBattleMusic, stopBattleTrack } from '../audio/battleMusic.js';
 import { announce, preloadAnnouncer } from '../audio/announcer.js';
 import { MATCH, modeTeams, teamColor, type ArcadeMode } from '../config.js';
 import { createScoreboard, type FighterHud, type Scoreboard } from '../ui/scoreboard.js';
@@ -86,7 +86,7 @@ export class GameStateSystem extends createSystem({
 
     if (app.state !== 'playing') {
       this.scoreboard?.setVisible(false);
-      if (this.wasPlaying) stopBattleMusic(); // bout ended / left — kill the score
+      if (this.wasPlaying) stopBattleTrack(); // bout ended/left — stop the loop (sting hands off)
       this.wasPlaying = false;
       return;
     }
