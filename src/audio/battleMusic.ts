@@ -19,8 +19,8 @@ const battleUrls = Object.values(
   >,
 );
 
-const BATTLE_VOLUME = 0.34; // a bit under the lobby music (0.5)
-const VICTORY_VOLUME = 0.42;
+const BATTLE_VOLUME = 0.18; // quiet background, well under the lobby music (0.5)
+const VICTORY_VOLUME = 0.26;
 
 let battle: HTMLAudioElement | null = null;
 let victory: HTMLAudioElement | null = null;
