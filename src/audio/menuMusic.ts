@@ -15,10 +15,19 @@
 import musicUrl from '../assets/music/dune-train-convoy.mp3?url';
 
 const MUTE_KEY = 'ibb-music-muted';
+const TARGET_VOLUME = 0.5;
 
 let audio: HTMLAudioElement | null = null;
 let entered = false; // has the player entered VR (the autoplay-unlocking gesture)?
 let lobbyActive = true; // are we in the menu/lobby (vs a bout or training)?
+let fadeTimer: number | null = null;
+
+function stopFade(): void {
+  if (fadeTimer !== null) {
+    clearInterval(fadeTimer);
+    fadeTimer = null;
+  }
+}
 
 export function isMusicMuted(): boolean {
   try {
@@ -40,7 +49,7 @@ function ensureAudio(): HTMLAudioElement {
   if (!audio) {
     audio = new Audio(musicUrl);
     audio.loop = true;
-    audio.volume = 0.5;
+    audio.volume = TARGET_VOLUME;
   }
   return audio;
 }
@@ -48,13 +57,42 @@ function ensureAudio(): HTMLAudioElement {
 /** Play only when we've entered VR, are in the lobby, and aren't muted —
  *  otherwise pause. Every state change funnels through here. */
 function sync(): void {
+  stopFade();
   if (entered && lobbyActive && !isMusicMuted()) {
-    void ensureAudio().play().catch(() => {
+    const a = ensureAudio();
+    a.volume = TARGET_VOLUME;
+    void a.play().catch(() => {
       /* autoplay blocked or decode failed — stay silent */
     });
   } else {
     audio?.pause();
   }
+}
+
+/** Bring the lobby music up with a gentle fade — used after the victory sting
+ *  hands off. Stays silent if muted, not entered, or out of the lobby. */
+export function fadeInMenuMusic(): void {
+  lobbyActive = true;
+  if (!(entered && !isMusicMuted())) {
+    stopFade();
+    audio?.pause();
+    return;
+  }
+  // Already up (e.g. just navigating menu ↔ queue) — leave it, don't re-fade.
+  if (audio && !audio.paused && fadeTimer === null) return;
+  stopFade();
+  const a = ensureAudio();
+  a.volume = 0;
+  void a.play().catch(() => {
+    /* blocked — stay silent */
+  });
+  const steps = 30; // ~1.5 s at 50 ms
+  let i = 0;
+  fadeTimer = window.setInterval(() => {
+    i += 1;
+    a.volume = Math.min(TARGET_VOLUME, (TARGET_VOLUME * i) / steps);
+    if (i >= steps) stopFade();
+  }, 50);
 }
 
 /**
