@@ -190,9 +190,18 @@ class NetClient {
       },
       onRequeue: () => {
         // We and another searcher both became hosts and saw each other; our host
-        // lobby is already dropped — re-enter matchmaking so we claim theirs.
-        const searching = app.state === 'queueing' || (app.state === 'playing' && app.mode === 'bot' && !app.onlyBots);
-        if (searching) this.queue();
+        // lobby is already dropped — re-enter matchmaking so we claim theirs. A
+        // small random delay desynchronises two lockstep peers so one reliably
+        // claims while the other is still hosting (instead of both re-hosting).
+        const stillSearching = (): boolean =>
+          app.state === 'queueing' || (app.state === 'playing' && app.mode === 'bot' && !app.onlyBots);
+        if (stillSearching()) {
+          // queue() disconnects the old (lobby-less) transport itself, so don't
+          // gate on this.transport here — only bail if we've since matched.
+          setTimeout(() => {
+            if (stillSearching() && !this.matched) this.queue();
+          }, Math.floor(Math.random() * 350));
+        }
       },
     };
   }

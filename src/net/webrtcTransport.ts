@@ -56,8 +56,11 @@ const ICE_SERVERS: RTCConfiguration = {
  *  long a ghost lingers before everyone ignores it. */
 const LOBBY_FRESH_MS = 40 * 1000;
 /** While waiting as a host: heartbeat our lobby AND re-scan for another host to
- *  pair with (so two simultaneous hosts don't deadlock). */
-const HOST_TICK_MS = 5_000;
+ *  pair with (so two simultaneous hosts don't deadlock). Kept short, and
+ *  per-client jitter is added on top, so two players who JUST played each other
+ *  — who re-enter the queue in lockstep and both become hosts — desynchronise
+ *  and pair within a tick instead of sitting forever. */
+const HOST_TICK_MS = 2_500;
 /** Private codes live longer — you share one and wait for a friend to type it. */
 const PRIVATE_FRESH_MS = 10 * 60 * 1000;
 /** Give P2P this long to come up before declaring failure. */
@@ -303,13 +306,23 @@ export class WebRtcTransport implements Transport {
   /** While hosting the public queue: every tick, keep our lobby fresh and look
    *  for another host to pair with. */
   private startHostHeartbeat(): void {
+    // Pair two simultaneous hosts IMMEDIATELY, not after a full tick: two
+    // players who just played re-enter the queue together, so both run
+    // tryClaimLobby before either lobby exists and both fall through to hosting.
+    // Scanning right now (rather than waiting HOST_TICK_MS) collapses the window
+    // where they'd both sit waiting — the deadlock behind "just played, can't
+    // find each other".
+    void this.crossOverIfRivalHost();
+    // Jitter the period per-client so two lockstep hosts don't keep heartbeating
+    // and re-scanning in perfect step (which could resync them indefinitely).
+    const period = HOST_TICK_MS + Math.floor(Math.random() * 1500);
     this.hostTimer = setInterval(() => {
       if (this.closed || this.matched || !this.lobbyRef) return;
       // Heartbeat: claimers ignore lobbies not SEEN recently, so a live host
       // stays claimable while an abandoned tab ages out fast.
       void updateDoc(this.lobbyRef, { seen: serverTimestamp() }).catch(() => {});
       void this.crossOverIfRivalHost();
-    }, HOST_TICK_MS);
+    }, period);
   }
 
   /** If another host is ALSO waiting, the NEWER of the two drops its lobby and
