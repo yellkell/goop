@@ -22,6 +22,7 @@ import { applyRoster } from '../combat/setup.js';
 import { applyArenaLayout } from '../arena/arena.js';
 import { app, saveStats, training, type AppMode } from '../menu/appState.js';
 import * as sfx from '../audio/sfx.js';
+import { playVictory, startBattleMusic, stopBattleMusic } from '../audio/battleMusic.js';
 import { announce, preloadAnnouncer } from '../audio/announcer.js';
 import { MATCH, modeTeams, teamColor, type ArcadeMode } from '../config.js';
 import { createScoreboard, type FighterHud, type Scoreboard } from '../ui/scoreboard.js';
@@ -85,6 +86,7 @@ export class GameStateSystem extends createSystem({
 
     if (app.state !== 'playing') {
       this.scoreboard?.setVisible(false);
+      if (this.wasPlaying) stopBattleMusic(); // bout ended / left — kill the score
       this.wasPlaying = false;
       return;
     }
@@ -222,6 +224,7 @@ export class GameStateSystem extends createSystem({
   private toMatchOverArcade(teams: number[]): void {
     match.phase = 'matchOver';
     match.resultTimer = MATCH.matchOverDelay;
+    playVictory(); // stops the battle score and rings the end-of-game sting
     const winner = this.topTeam(teams, (t) => match.teamScores[t] ?? 0);
     match.roundWinnerTeam = winner ?? -1;
     const win = winner === 0;
@@ -265,6 +268,9 @@ export class GameStateSystem extends createSystem({
     match.rematchTheirs = false;
     training.active = false;
     this.refill(actives);
+    if (!app.tutorial) startBattleMusic(); // quiet background score for the bout
+
+
 
     if (app.arcade !== '1v1') {
       this.beginCountdownArcade(actives, MATCH.startDelay); // 2v2 / FFA open on the 3-2-1 too
@@ -373,6 +379,7 @@ export class GameStateSystem extends createSystem({
   private toMatchOver(): void {
     match.phase = 'matchOver';
     match.resultTimer = MATCH.matchOverDelay;
+    playVictory(); // stops the battle score and rings the end-of-game sting
     const win = match.myScore > match.oppScore;
     match.message = win ? 'YOU WIN' : 'YOU LOSE';
     if (win) app.stats.wins += 1;
