@@ -63,21 +63,21 @@ const PRIVATE_FRESH_MS = 10 * 60 * 1000;
 /** Give P2P this long to come up before declaring failure. */
 const CONNECT_TIMEOUT_MS = 15_000;
 
-/** Hard backstop: even if the heartbeat write is somehow refused, a host stays
- *  claimable this long off its createdAt — so matching can never REGRESS. */
+/** Back-compat window for a lobby from an OLDER client that has no `seen` field
+ *  yet — fall back to createdAt so a mid-rollout peer can still be matched. */
 const LOBBY_LEGACY_FRESH_MS = 2 * 60 * 1000;
 
 function millis(v: unknown): number | undefined {
   return (v as { toMillis?: () => number } | undefined)?.toMillis?.();
 }
 
-/** Is this lobby a live host (heartbeated recently) — or, as a backstop against
- *  a refused heartbeat write, created recently? Ghosts fail both. */
+/** Is this lobby a LIVE host? A current client heartbeats `seen`, so trust it
+ *  strictly (ghosts go stale in seconds). A pre-heartbeat client has no `seen`,
+ *  so fall back to createdAt for the rollout. */
 function lobbyFresh(data: Record<string, unknown> | undefined, now: number): boolean {
   const seen = millis(data?.seen);
-  if (typeof seen === 'number' && now - seen <= LOBBY_FRESH_MS) return true;
-  const created = millis(data?.createdAt) ?? 0;
-  return now - created <= LOBBY_LEGACY_FRESH_MS;
+  if (typeof seen === 'number') return now - seen <= LOBBY_FRESH_MS;
+  return now - (millis(data?.createdAt) ?? 0) <= LOBBY_LEGACY_FRESH_MS;
 }
 
 let firebaseApp: FirebaseApp | undefined;
