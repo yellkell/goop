@@ -26,6 +26,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   getFirestore,
   limit,
@@ -50,12 +51,34 @@ const ICE_SERVERS: RTCConfiguration = {
   ],
 };
 
-/** Lobbies older than this are abandoned tabs — ignore them. */
-const LOBBY_FRESH_MS = 2 * 60 * 1000;
+/** A host lobby not SEEN (heartbeat) within this is an abandoned tab — skip it.
+ *  Short, because a live host heartbeats every HOST_TICK_MS; this is just how
+ *  long a ghost lingers before everyone ignores it. */
+const LOBBY_FRESH_MS = 40 * 1000;
+/** While waiting as a host: heartbeat our lobby AND re-scan for another host to
+ *  pair with (so two simultaneous hosts don't deadlock). */
+const HOST_TICK_MS = 5_000;
 /** Private codes live longer — you share one and wait for a friend to type it. */
 const PRIVATE_FRESH_MS = 10 * 60 * 1000;
 /** Give P2P this long to come up before declaring failure. */
 const CONNECT_TIMEOUT_MS = 15_000;
+
+/** Hard backstop: even if the heartbeat write is somehow refused, a host stays
+ *  claimable this long off its createdAt — so matching can never REGRESS. */
+const LOBBY_LEGACY_FRESH_MS = 2 * 60 * 1000;
+
+function millis(v: unknown): number | undefined {
+  return (v as { toMillis?: () => number } | undefined)?.toMillis?.();
+}
+
+/** Is this lobby a live host (heartbeated recently) — or, as a backstop against
+ *  a refused heartbeat write, created recently? Ghosts fail both. */
+function lobbyFresh(data: Record<string, unknown> | undefined, now: number): boolean {
+  const seen = millis(data?.seen);
+  if (typeof seen === 'number' && now - seen <= LOBBY_FRESH_MS) return true;
+  const created = millis(data?.createdAt) ?? 0;
+  return now - created <= LOBBY_LEGACY_FRESH_MS;
+}
 
 let firebaseApp: FirebaseApp | undefined;
 
@@ -75,6 +98,10 @@ export class WebRtcTransport implements Transport {
   private closed = false;
   private unsubs: Unsubscribe[] = [];
   private connectTimer: ReturnType<typeof setTimeout> | null = null;
+  private hostTimer: ReturnType<typeof setInterval> | null = null;
+  /** Server createdAt (ms) of our own host lobby — the tiebreaker so only the
+   *  NEWER of two hosts crosses over to claim the older. */
+  private myCreatedAt = 0;
   private micStream: MediaStream | null = null;
 
   constructor(private readonly events: TransportEvents) {}
@@ -94,11 +121,18 @@ export class WebRtcTransport implements Transport {
       this.armConnectTimeout();
     } else {
       this.isCaller = true;
-      const ref = await addDoc(lobbies, { open: true, createdAt: serverTimestamp() });
+      const ref = await addDoc(lobbies, { open: true, createdAt: serverTimestamp(), seen: serverTimestamp() });
       if (this.closed) return;
+      // Read our own createdAt back (FIXED — not the moving heartbeat) so the
+      // cross-over tiebreaker is "who started waiting first".
+      this.myCreatedAt = millis((await getDoc(ref)).data()?.createdAt) ?? Date.now();
       // Callers wait in the queue indefinitely; the clock starts when an
       // answer arrives (see runCallerOn).
       await this.runCallerOn(ref);
+      if (this.closed) return;
+      // While we wait: heartbeat our lobby AND re-scan for another waiting host
+      // to pair with, so two simultaneous searchers don't both sit forever.
+      this.startHostHeartbeat();
     }
   }
 
@@ -191,6 +225,8 @@ export class WebRtcTransport implements Transport {
     this.closed = true;
     this.matched = false;
     if (this.connectTimer) clearTimeout(this.connectTimer);
+    if (this.hostTimer) clearInterval(this.hostTimer);
+    this.hostTimer = null;
     for (const u of this.unsubs.splice(0)) u();
     for (const track of this.micStream?.getTracks() ?? []) track.stop();
     this.micStream = null;
@@ -249,8 +285,7 @@ export class WebRtcTransport implements Transport {
     const open = await getDocs(query(lobbies, where('open', '==', true), limit(10)));
     const now = Date.now();
     for (const snap of open.docs) {
-      const created = (snap.data().createdAt?.toMillis?.() as number | undefined) ?? 0;
-      if (now - created > LOBBY_FRESH_MS) continue;
+      if (!lobbyFresh(snap.data(), now)) continue; // a ghost — skip it
       try {
         await runTransaction(db(), async (txn) => {
           const fresh = await txn.get(snap.ref);
@@ -263,6 +298,45 @@ export class WebRtcTransport implements Transport {
       }
     }
     return null;
+  }
+
+  /** While hosting the public queue: every tick, keep our lobby fresh and look
+   *  for another host to pair with. */
+  private startHostHeartbeat(): void {
+    this.hostTimer = setInterval(() => {
+      if (this.closed || this.matched || !this.lobbyRef) return;
+      // Heartbeat: claimers ignore lobbies not SEEN recently, so a live host
+      // stays claimable while an abandoned tab ages out fast.
+      void updateDoc(this.lobbyRef, { seen: serverTimestamp() }).catch(() => {});
+      void this.crossOverIfRivalHost();
+    }, HOST_TICK_MS);
+  }
+
+  /** If another host is ALSO waiting, the NEWER of the two drops its lobby and
+   *  re-queues to claim the older one (the older stays put) — so two people who
+   *  both became hosts at the same moment actually find each other. */
+  private async crossOverIfRivalHost(): Promise<void> {
+    const lobbies = collection(db(), 'lobbies');
+    const open = await getDocs(query(lobbies, where('open', '==', true), limit(10)));
+    if (this.closed || this.matched || !this.lobbyRef) return;
+    const now = Date.now();
+    const myId = this.lobbyRef.id;
+    for (const snap of open.docs) {
+      if (snap.id === myId) continue;
+      if (!lobbyFresh(snap.data(), now)) continue;
+      const theirs = millis(snap.data().createdAt) ?? 0;
+      // Cross over only to an OLDER host (tie broken by id) so exactly one moves.
+      if (!(theirs < this.myCreatedAt || (theirs === this.myCreatedAt && snap.id < myId))) continue;
+      if (this.hostTimer) {
+        clearInterval(this.hostTimer);
+        this.hostTimer = null;
+      }
+      const mine = this.lobbyRef;
+      this.lobbyRef = null; // so close() doesn't try to delete it twice
+      await deleteDoc(mine).catch(() => {});
+      if (!this.closed && !this.matched) this.events.onRequeue?.();
+      return;
+    }
   }
 
   // --- caller (host, side 0) ---------------------------------------------------
@@ -379,6 +453,10 @@ export class WebRtcTransport implements Transport {
     if (this.matched || this.closed) return;
     this.matched = true;
     if (this.connectTimer) clearTimeout(this.connectTimer);
+    if (this.hostTimer) {
+      clearInterval(this.hostTimer);
+      this.hostTimer = null;
+    }
     // Signaling is done — the lobby doc has served its purpose.
     if (this.lobbyRef && this.isCaller) void deleteDoc(this.lobbyRef).catch(() => {});
     this.events.onMatched(this.isCaller ? 0 : 1);

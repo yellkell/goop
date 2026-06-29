@@ -177,6 +177,22 @@ class NetClient {
         const inBotBout = app.state === 'playing' && app.mode === 'bot';
         if (app.state !== 'menu' && !inBotBout) app.state = 'menu';
         if (app.duelView === 'hosting') app.duelView = 'root';
+        // Keep hunting the WHOLE bot bout: a background search that dropped (a
+        // dead lobby, a connect timeout…) restarts so we never silently stop
+        // looking — unless ONLY PLAY BOTS is on.
+        if (inBotBout && !app.onlyBots) {
+          setTimeout(() => {
+            if (app.state === 'playing' && app.mode === 'bot' && !app.onlyBots && !this.matched && !this.transport) {
+              this.queue();
+            }
+          }, 1500);
+        }
+      },
+      onRequeue: () => {
+        // We and another searcher both became hosts and saw each other; our host
+        // lobby is already dropped — re-enter matchmaking so we claim theirs.
+        const searching = app.state === 'queueing' || (app.state === 'playing' && app.mode === 'bot' && !app.onlyBots);
+        if (searching) this.queue();
       },
     };
   }
