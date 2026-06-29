@@ -14,9 +14,9 @@
 
 import { FIREBASE_ENABLED } from './firebaseConfig.js';
 
-/** Lobbies older than this are abandoned tabs — don't count them as searchers
- *  (mirrors LOBBY_FRESH_MS in webrtcTransport.ts). */
-const FRESH_MS = 2 * 60 * 1000;
+/** Lobbies not heartbeated within this are abandoned tabs — don't count them as
+ *  searchers (mirrors LOBBY_FRESH_MS in webrtcTransport.ts). */
+const FRESH_MS = 40 * 1000;
 
 type CountListener = (count: number) => void;
 
@@ -48,8 +48,9 @@ export function startQueueWatch(onCount: CountListener): void {
           const now = Date.now();
           let count = 0;
           snap.forEach((doc) => {
-            const created = (doc.data().createdAt?.toMillis?.() as number | undefined) ?? now;
-            if (now - created <= FRESH_MS) count += 1;
+            const data = doc.data();
+            const seen = (data.seen?.toMillis?.() as number | undefined) ?? (data.createdAt?.toMillis?.() as number | undefined) ?? now;
+            if (now - seen <= FRESH_MS) count += 1;
           });
           onCount(count);
         },

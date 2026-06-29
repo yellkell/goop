@@ -32,6 +32,7 @@ import { setSpeakerPosition, updateListener } from '../net/voice.js';
 import type { PeerMessage, PoseTuple } from '../net/protocol.js';
 import { spawnDamagePopup, spawnFireImpact, spawnGestureCue, spawnPopup } from '../fx/effects.js';
 import * as sfx from '../audio/sfx.js';
+import { playVictory } from '../audio/battleMusic.js';
 import { InputComponent } from '@iwsdk/core';
 import { FIREBALL, NET } from '../config.js';
 
@@ -275,6 +276,7 @@ export class NetworkSystem extends createSystem({
       if (msg.phase === 'playing') sfx.roundBell();
       else if (msg.phase === 'roundOver') sfx.roundEnd(this.roundCue(match.message));
       else if (msg.phase === 'matchOver') {
+        playVictory(); // guest side: stop the battle score, ring the sting too
         const win = match.myScore > match.oppScore;
         match.message = win ? 'YOU WIN' : 'YOU LOSE';
         if (win) app.stats.wins += 1;

@@ -21,6 +21,9 @@ export interface TransportEvents {
   onRemoteAudio?(stream: MediaStream): void;
   /** The bout/queue ended underneath us (peer left, connection lost…). */
   onClosed(reason: string): void;
+  /** Two players who both became hosts spotted each other: drop this host
+   *  lobby and re-enter matchmaking so one claims the other. P2P only. */
+  onRequeue?(): void;
 }
 
 export interface Transport {
