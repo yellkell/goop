@@ -61,6 +61,7 @@ import { spawnDamagePopup, spawnFireImpact, spawnGestureCue, spawnPopup } from '
 import * as sfx from '../../audio/sfx.js';
 import { announce, preloadAnnouncer } from '../../audio/announcer.js';
 import { playCash, preloadCash } from '../../audio/cash.js';
+import { playLanding, preloadLanding } from '../../audio/landing.js';
 import { addCoins } from '../../menu/wallet.js';
 import { pulseHand } from '../../input/haptics.js';
 import { FIGHT } from '../config.js';
@@ -305,6 +306,7 @@ export class FightSystem extends createSystem({}) {
   init(): void {
     preloadAnnouncer(); // decode 3/2/1/FIGHT so the countdown speaks like the arena
     preloadCash(); // the cash chime for a winning bet
+    preloadLanding(); // the landing chimes for an arena-thrown bet
     // The local fighter's body: an ember (team 0) torso wearing my avatar
     // skin, exactly like the arena's PlayerBodySystem. Only the torso joins
     // the scene (my gloves are the controllers; my own head stays unseen).
@@ -379,6 +381,7 @@ export class FightSystem extends createSystem({}) {
       }),
       bus.on('left', (id) => this.dropRemote(id)),
       bus.on('coinInserted', (slot) => this.onBet(slot)),
+      bus.on('betThrow', (side) => this.onArenaBet(side)),
     );
     this.renderConsoles();
     this.renderDisplay();
@@ -395,6 +398,19 @@ export class FightSystem extends createSystem({}) {
     if (!open || !f.sides[side] || this.amFighter()) return;
     this.bets[side] += 1;
     sfx.uiClick();
+    this.renderConsoles();
+  }
+
+  /** A coin was THROWN into the pit and settled on a fighter's half — stake it
+   *  on that corner, ringing a random landing chime as the confirmation. Same
+   *  guards as the tablet bet; CoinSystem already re-checks before it consumes
+   *  the coin, but we re-check here so a stray event can't bank a phantom stake. */
+  private onArenaBet(side: 0 | 1): void {
+    const f = pub.fight;
+    const open = f.round === 1 && (f.phase === 'starting' || f.phase === 'fighting');
+    if (!open || !f.sides[side] || this.amFighter()) return;
+    this.bets[side] += 1;
+    playLanding();
     this.renderConsoles();
   }
 

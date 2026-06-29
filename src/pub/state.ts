@@ -91,6 +91,9 @@ interface Events {
   adminResult: { ok: boolean; msg: string };
   /** A coin was fed into a machine ('snake' / 'jukebox') — it pays for a go. */
   coinInserted: string;
+  /** A coin was THROWN into the fight pit and settled on side 0/1's half —
+   *  the thrower's stake on that corner's fighter (arena-throw betting). */
+  betThrow: 0 | 1;
 }
 
 type Handler<T> = (payload: T) => void;

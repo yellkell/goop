@@ -500,11 +500,39 @@ export class CoinSystem extends createSystem({}) {
         coin.vel.set(0, 0, 0);
         coin.resting = true;
         coin.mesh.rotation.set(0, Math.random() * Math.PI * 2, 0); // lie flat on the surface
+        if (this.tryArenaBet(coin, p)) continue; // landed in the pit → spent as a bet
         pubSendEvent({ e: 'COIN_REST', id: coin.id, pos: [p.x, p.y, p.z] });
       } else if (stream) {
         pubSendEvent({ e: 'COIN_MOVE', id: coin.id, pos: [p.x, p.y, p.z] });
       }
     }
+  }
+
+  /**
+   * A coin of mine just settled — if it came down INSIDE the fight pit (the
+   * cage rect) while bets are open, it's a wager on whichever fighter's half it
+   * landed on: the +z half backs side 0 (south corner), the −z half side 1
+   * (north). The stake is staked + a landing chime rings (FightSystem), and the
+   * coin is spent — pulled from the room everywhere. Returns true if consumed.
+   *
+   * A coin resting on an empty corner's half, or while bets are shut, just lies
+   * there like any dropped coin (pick it back up). Fighters can't bet on their
+   * own bout, so their coins lie there too.
+   */
+  private tryArenaBet(coin: FloorCoin, p: Vector3): boolean {
+    const c = FIGHT.cage;
+    if (p.x < c.minX || p.x > c.maxX || p.z < c.minZ || p.z > c.maxZ) return false;
+    if (!this.betsOpen()) return false;
+    const f = pub.fight;
+    if (f.sides[0] === pub.myId || f.sides[1] === pub.myId) return false; // a fighter can't bet
+    const side: 0 | 1 = p.z >= 0 ? 0 : 1; // pit midline (z=0) splits the two corners' halves
+    if (!f.sides[side]) return false; // that corner's empty — nobody to back
+    bus.emit('betThrow', side); // stake it + ring the confirmation chime
+    pubSendEvent({ e: 'COIN_TAKE', id: coin.id }); // the coin is spent — clear it for everyone
+    if (this.litCoin?.id === coin.id) this.litCoin = null;
+    this.disposeCoinMesh(coin.mesh);
+    this.floor.delete(coin.id);
+    return true;
   }
 
   // --- inbound events -------------------------------------------------------
