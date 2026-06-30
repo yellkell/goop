@@ -60,6 +60,8 @@ export interface PubRefs {
   /** The jukebox cabinet root (its origin = world position) + its marquee. */
   jukebox: Group;
   jukeboxPanel: Panel;
+  /** The fight-hall disco ball — spun by MusicSystem. */
+  discoball: Group;
 }
 
 interface Events {
