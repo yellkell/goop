@@ -29,6 +29,7 @@ import { pubSendEvent } from '../net.js';
 import { bus, pub } from '../state.js';
 import { BOOTH_CENTRES, FIGHT, PUB, SURFACES, type Surface } from '../config.js';
 import type { PubEvent, Vec3T } from '../protocol.js';
+import { clearRestCircle, resolveOverlap, restCirclesByPrefix, setRestCircle, type RestCircle } from '../restCircles.js';
 
 const WRIST_TOUCH = 0.13; // how close a hand must come to a wrist to grab/bank
 const COIN_GRAB = 0.2; // direct touch-grab reach for a coin
@@ -195,7 +196,17 @@ export class CoinSystem extends createSystem({}) {
     // Your wallet is your own business — the only coin traffic we listen to is
     // the physical coins others drop and pick up. Nobody broadcasts a balance,
     // so nobody can see anyone else's stash.
-    this.cleanupFuncs.push(bus.on('gameEvent', ({ from, ev }) => this.onEvent(from, ev)));
+    this.cleanupFuncs.push(
+      bus.on('gameEvent', ({ from, ev }) => this.onEvent(from, ev)),
+      // A player who disconnects mid-throw (after COIN_DROP, before COIN_REST)
+      // leaves no further coin events for us to clean up after — sweep any of
+      // their still-loose coins now so a dropped connection never leaves a
+      // permanent phantom coin on the floor.
+      bus.on('left', (id) => {
+        const theirs = [...this.floor.keys()].filter((coinId) => coinId.startsWith(`${id}:`));
+        for (const coinId of theirs) this.removeFloorCoin(coinId);
+      }),
+    );
   }
 
   update(delta: number): void {
@@ -378,6 +389,7 @@ export class CoinSystem extends createSystem({}) {
           const picked = this.grabCandidate(hand);
           if (picked) {
             this.floor.delete(picked.id);
+            clearRestCircle(`coin:${picked.id}`);
             if (this.litCoin === picked) this.litCoin = null;
             setCoinGlow(picked.mesh, false);
             pubSendEvent({ e: 'COIN_TAKE', id: picked.id });
@@ -500,7 +512,12 @@ export class CoinSystem extends createSystem({}) {
         coin.vel.set(0, 0, 0);
         coin.resting = true;
         coin.mesh.rotation.set(0, Math.random() * Math.PI * 2, 0); // lie flat on the surface
+        // Bet eligibility (pit bounds + which corner's half) is decided on the
+        // coin's ACTUAL landing spot — check it before any overlap nudge could
+        // shift it across the pit boundary or the corner midline.
         if (this.tryArenaBet(coin, p)) continue; // landed in the pit → spent as a bet
+        this.resolveCoinRest(coin, p); // nudge clear of any coin/glass already there
+        setRestCircle(`coin:${coin.id}`, p.x, p.y, p.z, COIN_R);
         pubSendEvent({ e: 'COIN_REST', id: coin.id, pos: [p.x, p.y, p.z] });
       } else if (stream) {
         pubSendEvent({ e: 'COIN_MOVE', id: coin.id, pos: [p.x, p.y, p.z] });
@@ -532,7 +549,24 @@ export class CoinSystem extends createSystem({}) {
     if (this.litCoin?.id === coin.id) this.litCoin = null;
     this.disposeCoinMesh(coin.mesh);
     this.floor.delete(coin.id);
+    clearRestCircle(`coin:${coin.id}`);
     return true;
+  }
+
+  /** Nudge a just-landed coin's (x,z) clear of any other resting coin OR pint
+   *  glass already sitting there, so coins never visually overlap each other
+   *  or a glass — they end up lying side by side instead. Coin-vs-coin checks
+   *  this.floor directly (always fresh); coin-vs-glass reads the shared
+   *  registry, since PropSystem's glasses are a different module's state. */
+  private resolveCoinRest(coin: FloorCoin, p: Vector3): void {
+    const obstacles: RestCircle[] = [];
+    for (const other of this.floor.values()) {
+      if (other === coin || !other.resting) continue;
+      obstacles.push({ id: other.id, x: other.mesh.position.x, y: other.mesh.position.y, z: other.mesh.position.z, r: COIN_R });
+    }
+    obstacles.push(...restCirclesByPrefix('glass:'));
+    const resolved = resolveOverlap(p.x, p.y, p.z, COIN_R, obstacles, (x, z, fromY) => coinRestY(x, z, fromY));
+    p.set(resolved.x, resolved.y, resolved.z);
   }
 
   // --- inbound events -------------------------------------------------------
@@ -545,15 +579,23 @@ export class CoinSystem extends createSystem({}) {
         break;
       case 'COIN_MOVE':
       case 'COIN_REST': {
-        const coin = this.floor.get(ev.id);
+        let coin = this.floor.get(ev.id);
         if (coin) {
           coin.mesh.position.set(ev.pos[0], ev.pos[1], ev.pos[2]);
-          if (ev.e === 'COIN_REST') {
-            coin.resting = true;
-            coin.mesh.rotation.set(0, coin.mesh.rotation.y, 0); // settle flat
-          }
         } else {
+          // First we've ever heard of this coin (e.g. we joined mid-flight and
+          // missed its COIN_DROP) — place it now so a bare COIN_REST still
+          // resolves below instead of silently creating an un-rested orphan.
           this.remotePlace(ev.id, ev.pos);
+          coin = this.floor.get(ev.id)!;
+        }
+        if (ev.e === 'COIN_REST') {
+          coin.resting = true;
+          coin.mesh.rotation.set(0, coin.mesh.rotation.y, 0); // settle flat
+          // The owner already resolved overlap before sending this — just
+          // mirror their final resting spot into the shared registry so OUR
+          // glasses (PropSystem) know to avoid it too.
+          setRestCircle(`coin:${coin.id}`, ev.pos[0], ev.pos[1], ev.pos[2], COIN_R);
         }
         break;
       }
@@ -583,6 +625,7 @@ export class CoinSystem extends createSystem({}) {
     (coin.mesh.material as MeshStandardMaterial).dispose();
     coin.mesh.geometry.dispose();
     this.floor.delete(id);
+    clearRestCircle(`coin:${id}`);
   }
 
   private newId(): string {
