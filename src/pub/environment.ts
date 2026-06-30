@@ -25,6 +25,7 @@ import {
   MeshStandardMaterial,
   PlaneGeometry,
   PointLight,
+  SphereGeometry,
   SRGBColorSpace,
   TorusGeometry,
   Vector2,
@@ -603,7 +604,7 @@ export function buildPub(world: World): PubRefs {
   }
 
   // --- the fight hall through the west door ---------------------------------
-  const { consolePanels, fightDisplay, fightDisplay2, fightRims, fightSlabs } = buildFightHall(root);
+  const { consolePanels, fightDisplay, fightDisplay2, fightRims, fightSlabs, discoball } = buildFightHall(root);
 
   world.scene.add(root);
 
@@ -629,6 +630,7 @@ export function buildPub(world: World): PubRefs {
     fightSlabs,
     jukebox,
     jukeboxPanel,
+    discoball,
   };
 }
 
@@ -739,6 +741,7 @@ function buildFightHall(root: Group): {
   fightDisplay2: Panel;
   fightRims: [Mesh, Mesh];
   fightSlabs: [Mesh, Mesh];
+  discoball: Group;
 } {
   const hall = FIGHT.hall;
   const cx = (hall.minX + hall.maxX) / 2;
@@ -987,13 +990,85 @@ function buildFightHall(root: Group): {
   fightDisplay2.mesh.rotation.y = -Math.PI / 2;
   root.add(fightDisplay2.mesh);
 
+  // A huge mirror-tiled DISCO BALL hung dead-centre over the pit (between the
+  // two platforms at z = 0), spun by MusicSystem. The faceted metal catches the
+  // pit's two main spotlights and the RoomEnvironment, so it glints as it turns.
+  const ballY = 3.0; // centre height — bottom sits ~2.0 m up, well over the action
+  const disco = buildDiscoball();
+  disco.position.set(cx, ballY, 0);
+  root.add(disco);
+  // Static hanging gear (does NOT spin): a cable up to a ceiling mount.
+  const cableMat = new MeshStandardMaterial({ color: 0x0c0d10, metalness: 0.6, roughness: 0.6 });
+  const cableBot = ballY + DISCO_R + 0.16; // just above the ball's top cap
+  const cableLen = Math.max(0.1, h - cableBot);
+  const cable = new Mesh(new CylinderGeometry(0.025, 0.025, cableLen, 8), cableMat);
+  cable.position.set(cx, cableBot + cableLen / 2, 0);
+  root.add(cable);
+  const mount = new Mesh(new CylinderGeometry(0.2, 0.2, 0.08, 12), cableMat);
+  mount.position.set(cx, h - 0.04, 0);
+  root.add(mount);
+
   return {
     consolePanels: [consolePanels[0], consolePanels[1]],
     fightDisplay,
     fightDisplay2,
     fightRims: [fightRims[0], fightRims[1]],
     fightSlabs: [fightSlabs[0], fightSlabs[1]],
+    discoball: disco,
   };
+}
+
+/** Radius of the fight-hall disco ball (metres) — big, it's a centrepiece. */
+const DISCO_R = 1.0;
+
+/** Mirror-tile texture for the disco ball: a grid of bright facets with dark
+ *  grout between them, so the sphere reads as tiled glass even before it
+ *  catches a light. Brightness is varied per tile by a cheap hash. */
+function discoTileTexture(): CanvasTexture {
+  const S = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = S;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#08090c'; // grout
+  ctx.fillRect(0, 0, S, S);
+  const n = 16;
+  const gap = 1.5;
+  const cell = S / n;
+  for (let y = 0; y < n; y++) {
+    for (let x = 0; x < n; x++) {
+      const b = 150 + ((x * 7 + y * 13) % 11) * 9; // 150..240, varied per tile
+      ctx.fillStyle = `rgb(${b},${b},${Math.min(255, b + 22)})`;
+      ctx.fillRect(x * cell + gap, y * cell + gap, cell - gap * 2, cell - gap * 2);
+    }
+  }
+  const tex = new CanvasTexture(canvas);
+  tex.colorSpace = SRGBColorSpace;
+  return tex;
+}
+
+/** Build the disco ball: a flat-shaded mirror sphere (faceted, so it sparkles)
+ *  under a small steel cap. Origin at the ball's centre; spun by MusicSystem. */
+function buildDiscoball(): Group {
+  const g = new Group();
+  g.name = 'discoball';
+  const ballMat = new MeshStandardMaterial({
+    map: discoTileTexture(),
+    metalness: 1,
+    roughness: 0.18,
+    emissive: 0x2a3550,
+    emissiveIntensity: 0.22,
+    flatShading: true, // facets give the mirror-tile sparkle as it turns
+  });
+  const ball = new Mesh(new SphereGeometry(DISCO_R, 32, 24), ballMat);
+  g.add(ball);
+  // Top cap where the cable meets the ball (small — fine to spin with it).
+  const cap = new Mesh(
+    new CylinderGeometry(0.1, 0.15, 0.14, 12),
+    new MeshStandardMaterial({ color: 0x1a1c20, metalness: 0.8, roughness: 0.5 }),
+  );
+  cap.position.set(0, DISCO_R + 0.04, 0);
+  g.add(cap);
+  return g;
 }
 
 /**

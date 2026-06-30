@@ -82,6 +82,9 @@ export class MusicSystem extends createSystem({}) {
 
   update(delta: number): void {
     if (!this.player || !pub.refs) return;
+    // Spin the fight-hall disco ball — always turning, a touch livelier with a
+    // station on so it picks up when the music does.
+    pub.refs.discoball.rotation.y += delta * (pub.music >= 0 ? 0.6 : 0.25);
     pub.refs.jukebox.getWorldPosition(_box); // floor centre — for distance volume
     this.camera.getWorldPosition(_cam);
     const jukeDist = Math.hypot(_cam.x - _box.x, _cam.z - _box.z);
