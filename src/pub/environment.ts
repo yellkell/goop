@@ -37,7 +37,7 @@ import { diamondPlateTextures } from '../materials/diamondPlate.js';
 import { octagonSlab } from '../arena/octagon.js';
 import { BOOTH_CENTRES, FIGHT, JUKEBOX, PUB } from './config.js';
 import { Panel } from './panel.js';
-import { buildSign } from './signs.js';
+import { buildPoster, buildSign } from './signs.js';
 import type { PubRefs } from './state.js';
 import { corkTexture, dartboardTexture, fabricTexture, steelWallTexture, woodTexture } from './textures.js';
 
@@ -602,6 +602,34 @@ export function buildPub(world: World): PubRefs {
   for (let i = 0; i < PUB.glassMax; i++) {
     glassSlots.push([-2.1 + i * 0.6, bar.top + 0.002, bar.z - 0.24]);
   }
+
+  // --- effect posters on the bare walls -------------------------------------
+  // The SPLIT / SHRINK / GROW ball-effect prints, a few of each, only on the
+  // genuinely BARE walls: the whole east wall, and the two west-wall segments
+  // flanking the fight-hall doorway. North (bar/bottles/dartboard) and south
+  // (booths/jukebox/door) are full, so they're left alone. Each hangs in a Group
+  // so the wonky roll stays in-plane while the group turns it to face the room.
+  const POSTER_W = 0.55;
+  const POSTER_H = 0.78;
+  const placePoster = (url: string, x: number, y: number, z: number, ry: number, tilt: number): void => {
+    const holder = new Group();
+    holder.position.set(x, y, z);
+    holder.rotation.y = ry;
+    holder.add(buildPoster(url, POSTER_W, POSTER_H, tilt));
+    root.add(holder);
+  };
+  const EAST = W - 0.04; // proud of the east wall, facing −x into the room
+  const WEST = -W + 0.04; // …and the west wall, facing +x
+  const RY_E = -Math.PI / 2;
+  const RY_W = Math.PI / 2;
+  // East wall (long + clear) — spaced down its length, a couple hung wonky.
+  placePoster('posters/split.png', EAST, 1.5, -2.3, RY_E, 0.06);
+  placePoster('posters/shrink.jpg', EAST, 1.58, -0.6, RY_E, 0);
+  placePoster('posters/grow.png', EAST, 1.5, 1.1, RY_E, -0.07);
+  placePoster('posters/shrink.jpg', EAST, 1.55, 2.6, RY_E, 0.03);
+  // West wall, either side of the doorway.
+  placePoster('posters/grow.png', WEST, 1.5, -1.5, RY_W, 0.05);
+  placePoster('posters/split.png', WEST, 1.55, 2.7, RY_W, -0.04);
 
   // --- the fight hall through the west door ---------------------------------
   const { consolePanels, fightDisplay, fightDisplay2, fightRims, fightSlabs, discoball } = buildFightHall(root);
