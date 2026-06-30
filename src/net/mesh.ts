@@ -36,6 +36,10 @@ class Mesh {
   capacity = 0;
   /** Seat → member id ('' = still empty); mirrors the room doc. */
   occupants: string[] = [];
+  /** Seat → that player's callsign, learned from their `iam` message (empty
+   *  until it arrives). The HUD reads this so brawlers show real names, not
+   *  the bot-bout 'ALLY'/'BOT' placeholders. */
+  names: string[] = [];
   /** Seat → that peer's remote voice stream, set by the impl on `ontrack`. */
   voice = new Map<number, MediaStream>();
   /** True once every seat is filled by a human. */
@@ -85,6 +89,7 @@ class Mesh {
     this.inbox.length = 0;
     this.mySeat = 0;
     this.occupants = [];
+    this.names = [];
     this.voice.clear();
   }
 }
