@@ -975,6 +975,14 @@ function buildFightHall(root: Group): {
     // standing reader — lookAt keeps the plate square (no roll).
     panel.mesh.lookAt(px + 2.4, 1.66, pz);
     root.add(panel.mesh);
+    // Give the screen real depth: a chunky steel slab behind it, matching the
+    // panel's recline, so the tablet reads as a thick unit instead of a flat
+    // plane. Slightly oversized so it frames the screen with a steel bezel.
+    const tabletBack = new Mesh(new BoxGeometry(0.88, 0.64, 0.1), gunmetal(0.35));
+    tabletBack.position.copy(panel.mesh.position);
+    tabletBack.quaternion.copy(panel.mesh.quaternion);
+    tabletBack.translateZ(-0.055); // sit just behind the screen face (panel faces +local z)
+    root.add(tabletBack);
     consolePanels.push(panel);
   }
 
