@@ -37,7 +37,7 @@ import { diamondPlateTextures } from '../materials/diamondPlate.js';
 import { octagonSlab } from '../arena/octagon.js';
 import { BOOTH_CENTRES, FIGHT, JUKEBOX, PUB } from './config.js';
 import { Panel } from './panel.js';
-import { buildSign } from './signs.js';
+import { buildPoster, buildSign } from './signs.js';
 import type { PubRefs } from './state.js';
 import { corkTexture, dartboardTexture, fabricTexture, steelWallTexture, woodTexture } from './textures.js';
 
@@ -332,6 +332,11 @@ export function buildPub(world: World): PubRefs {
   sign.position.set(0, 1.95, -D + 0.03);
   root.add(sign);
 
+  // Flat-screen TV hung over the bar (off to the bar's west end so it clears the
+  // central pub sign), facing into the room. TvSystem paints the live Discord
+  // chat on its screen. Hung from the ceiling on a short bracket.
+  const pubTv = buildPubTv(root, -1.7, 1.78, bar.z - 0.3);
+
   // Stools at the bar.
   for (const x of [-1.6, -0.8, 0.8, 1.6]) {
     const stool = new Group();
@@ -603,6 +608,34 @@ export function buildPub(world: World): PubRefs {
     glassSlots.push([-2.1 + i * 0.6, bar.top + 0.002, bar.z - 0.24]);
   }
 
+  // --- effect posters on the bare walls -------------------------------------
+  // The SPLIT / SHRINK / GROW ball-effect prints, a few of each, only on the
+  // genuinely BARE walls: the whole east wall, and the two west-wall segments
+  // flanking the fight-hall doorway. North (bar/bottles/dartboard) and south
+  // (booths/jukebox/door) are full, so they're left alone. Each hangs in a Group
+  // so the wonky roll stays in-plane while the group turns it to face the room.
+  const POSTER_W = 0.55;
+  const POSTER_H = 0.78;
+  const placePoster = (url: string, x: number, y: number, z: number, ry: number, tilt: number): void => {
+    const holder = new Group();
+    holder.position.set(x, y, z);
+    holder.rotation.y = ry;
+    holder.add(buildPoster(url, POSTER_W, POSTER_H, tilt));
+    root.add(holder);
+  };
+  const EAST = W - 0.04; // proud of the east wall, facing −x into the room
+  const WEST = -W + 0.04; // …and the west wall, facing +x
+  const RY_E = -Math.PI / 2;
+  const RY_W = Math.PI / 2;
+  // East wall (long + clear) — spaced down its length, a couple hung wonky.
+  placePoster('posters/split.png', EAST, 1.5, -2.3, RY_E, 0.06);
+  placePoster('posters/shrink.jpg', EAST, 1.58, -0.6, RY_E, 0);
+  placePoster('posters/grow.png', EAST, 1.5, 1.1, RY_E, -0.07);
+  placePoster('posters/shrink.jpg', EAST, 1.55, 2.6, RY_E, 0.03);
+  // West wall, either side of the doorway.
+  placePoster('posters/grow.png', WEST, 1.5, -1.5, RY_W, 0.05);
+  placePoster('posters/split.png', WEST, 1.55, 2.7, RY_W, -0.04);
+
   // --- the fight hall through the west door ---------------------------------
   const { consolePanels, fightDisplay, fightDisplay2, fightRims, fightSlabs, discoball } = buildFightHall(root);
 
@@ -631,6 +664,7 @@ export function buildPub(world: World): PubRefs {
     jukebox,
     jukeboxPanel,
     discoball,
+    pubTv,
   };
 }
 
@@ -1008,6 +1042,29 @@ function buildFightHall(root: Group): {
   mount.position.set(cx, h - 0.04, 0);
   root.add(mount);
 
+  // Effect posters on the hall's bare OUTER walls — north, south and far-west.
+  // The east wall carries the scoreboards + doorway, and the benches are low, so
+  // eye-height prints read cleanly above the crowd. A few of each, some wonky.
+  // Bigger than the pub-room ones to suit the venue's tall walls.
+  const HP_W = 0.7;
+  const HP_H = 1.0;
+  const hallPoster = (url: string, x: number, y: number, z: number, ry: number, tilt: number): void => {
+    const holder = new Group();
+    holder.position.set(x, y, z);
+    holder.rotation.y = ry;
+    holder.add(buildPoster(url, HP_W, HP_H, tilt));
+    root.add(holder);
+  };
+  const NZ = hall.minZ + 0.05; // north wall (faces +z)
+  const SZ = hall.maxZ - 0.05; // south wall (faces −z)
+  const WX = hall.minX + 0.05; // far-west wall (faces +x)
+  hallPoster('posters/split.png', cx + 2.6, 1.95, NZ, 0, 0.05);
+  hallPoster('posters/grow.png', cx - 3.0, 2.05, NZ, 0, -0.04);
+  hallPoster('posters/shrink.jpg', cx - 2.4, 1.95, SZ, Math.PI, 0.06);
+  hallPoster('posters/split.png', cx + 3.2, 1.85, SZ, Math.PI, -0.03);
+  hallPoster('posters/grow.png', WX, 2.0, -3.2, Math.PI / 2, 0.04);
+  hallPoster('posters/shrink.jpg', WX, 1.9, 3.6, Math.PI / 2, -0.05);
+
   return {
     consolePanels: [consolePanels[0], consolePanels[1]],
     fightDisplay,
@@ -1016,6 +1073,42 @@ function buildFightHall(root: Group): {
     fightSlabs: [fightSlabs[0], fightSlabs[1]],
     discoball: disco,
   };
+}
+
+/**
+ * The bar TV: a dark-bezel flat screen on a short ceiling bracket, hung over
+ * the bar and facing into the room. The screen is a Panel that TvSystem paints
+ * with the live Discord chat. Returns the screen panel for the refs.
+ */
+function buildPubTv(root: Group, x: number, y: number, z: number): Panel {
+  const g = new Group();
+  g.name = 'pub-tv';
+  g.position.set(x, y, z); // screen faces +z (into the room)
+
+  const SCREEN_W = 1.34;
+  const SCREEN_H = 0.75; // ~16:9
+  const bezelMat = new MeshStandardMaterial({ color: 0x0a0b0d, metalness: 0.25, roughness: 0.55 });
+  const bezel = new Mesh(new BoxGeometry(SCREEN_W + 0.12, SCREEN_H + 0.12, 0.06), bezelMat);
+  bezel.position.set(0, 0, -0.035);
+  g.add(bezel);
+
+  const panel = new Panel(SCREEN_W, SCREEN_H, 640); // crisp enough for chat text
+  panel.mesh.position.set(0, 0, 0.002); // proud of the bezel face
+  g.add(panel.mesh);
+
+  // Hang it: a short post up to a ceiling plate (PUB.ceiling above the screen).
+  const mountMat = darkSteel();
+  const topLocal = SCREEN_H / 2 + 0.06;
+  const ceilLocal = PUB.ceiling - y;
+  const post = new Mesh(new BoxGeometry(0.05, Math.max(0.08, ceilLocal - topLocal), 0.05), mountMat);
+  post.position.set(0, (topLocal + ceilLocal) / 2, -0.05);
+  g.add(post);
+  const plate = new Mesh(new BoxGeometry(0.22, 0.03, 0.18), mountMat);
+  plate.position.set(0, ceilLocal - 0.015, -0.05);
+  g.add(plate);
+
+  root.add(g);
+  return panel;
 }
 
 /** Radius of the fight-hall disco ball (metres) — big, it's a centrepiece. */

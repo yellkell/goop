@@ -6,7 +6,7 @@
 
 import type { Group, Mesh, MeshStandardMaterial, Object3D } from 'three';
 import type { BoxerRig } from '../avatar/boxer.js';
-import type { BoardRow, FightNet, PoseTuple, PropNet, PubEvent, SnakeHi } from './protocol.js';
+import type { BoardRow, DiscordMsg, FightNet, PoseTuple, PropNet, PubEvent, SnakeHi } from './protocol.js';
 import type { Panel } from './panel.js';
 
 export interface RemotePunter {
@@ -62,6 +62,8 @@ export interface PubRefs {
   jukeboxPanel: Panel;
   /** The fight-hall disco ball — spun by MusicSystem. */
   discoball: Group;
+  /** The bar TV screen — TvSystem paints the live Discord chat on it. */
+  pubTv: Panel;
 }
 
 interface Events {
@@ -93,6 +95,8 @@ interface Events {
   adminResult: { ok: boolean; msg: string };
   /** A coin was fed into a machine ('snake' / 'jukebox') — it pays for a go. */
   coinInserted: string;
+  /** The bar-TV Discord chat changed (full current list, oldest first). */
+  discord: DiscordMsg[];
   /** A coin was THROWN into the fight pit and settled on side 0/1's half —
    *  the thrower's stake on that corner's fighter (arena-throw betting). */
   betThrow: 0 | 1;
@@ -169,6 +173,8 @@ export const pub = {
   fight: defaultFight(),
   /** Selected jukebox station, −1 = off (server-synced; whole room shares it). */
   music: -1,
+  /** Live Discord chat for the bar TV (oldest first), server-relayed. */
+  discord: [] as DiscordMsg[],
   /** A coin-operated machine the local player is currently holding a coin up
    *  to ('snake' / 'jukebox' / null) — the machine lights its INSERT COIN cue. */
   coinHover: null as string | null,

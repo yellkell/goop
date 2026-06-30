@@ -98,6 +98,7 @@ function handle(msg: PubServerMsg): void {
       pub.snakePlayer = msg.snakePlayer;
       pub.fight = normalizeFight(msg.fight);
       pub.music = msg.music ?? -1;
+      pub.discord = msg.discord ?? [];
       for (const prop of msg.props) pub.props.set(prop.id, prop);
       for (const p of msg.players) if (p.id !== msg.id) spawnHook?.(p);
       bus.emit('connected', undefined);
@@ -105,6 +106,7 @@ function handle(msg: PubServerMsg): void {
       bus.emit('snakeHi', msg.snakeHi);
       bus.emit('fight', pub.fight);
       bus.emit('music', pub.music);
+      bus.emit('discord', pub.discord);
       break;
     case 'full':
       console.warn('[pub] room is full (12 punters max)');
@@ -179,6 +181,11 @@ function handle(msg: PubServerMsg): void {
     case 'music':
       pub.music = msg.station;
       bus.emit('music', msg.station);
+      break;
+    case 'discord':
+      // Append the new lines, keep the tail bounded (the TV shows the latest).
+      pub.discord = [...pub.discord, ...msg.messages].slice(-30);
+      bus.emit('discord', pub.discord);
       break;
     case 'ev':
       bus.emit('gameEvent', { from: msg.from, ev: msg.ev });

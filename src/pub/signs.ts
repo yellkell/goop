@@ -13,6 +13,7 @@ import {
   LinearFilter,
   Mesh,
   MeshBasicMaterial,
+  MeshStandardMaterial,
   PlaneGeometry,
   SRGBColorSpace,
   TextureLoader,
@@ -102,6 +103,44 @@ export function buildSign(url: string, wMeters: number, hMeters: number): Mesh {
     undefined,
     () => {
       /* no PNG yet — keep the neon fallback */
+    },
+  );
+  return mesh;
+}
+
+/**
+ * A printed POSTER on the wall: a matte, LIT plane (not glowing signage like
+ * buildSign) tinted down a touch so it sits back into the gloom instead of
+ * shouting. `tilt` rolls it a few degrees for a hand-stuck-on wonky look. The
+ * art letterbox-fits the w×h box (never stretched). Returns the mesh facing +z;
+ * the caller orients it onto a wall (e.g. inside a Group rotated to face in).
+ */
+export function buildPoster(url: string, wMeters: number, hMeters: number, tilt = 0): Mesh {
+  // Dark matte stand-in until the image loads — a missing file is just a dim
+  // rectangle, never a bright blank.
+  const mat = new MeshStandardMaterial({ color: 0x14141a, roughness: 0.95, metalness: 0 });
+  const mesh = new Mesh(new PlaneGeometry(wMeters, hMeters), mat);
+  mesh.name = 'pub-poster';
+  mesh.rotation.z = tilt; // in-plane roll (the wonk) — applied before the wall facing
+  new TextureLoader().load(
+    url,
+    (tex) => {
+      tex.colorSpace = SRGBColorSpace;
+      tex.minFilter = LinearFilter;
+      mat.map = tex;
+      mat.color.setHex(0xa8a8a8); // knock the print back so it doesn't stand out
+      mat.needsUpdate = true;
+      const img = tex.image as { width?: number; height?: number } | undefined;
+      if (img?.width && img.height) {
+        const imgAspect = img.width / img.height;
+        const boxAspect = wMeters / hMeters;
+        if (imgAspect > boxAspect) mesh.scale.y = boxAspect / imgAspect;
+        else mesh.scale.x = imgAspect / boxAspect;
+      }
+    },
+    undefined,
+    () => {
+      /* image not present — leave the dim plate */
     },
   );
   return mesh;

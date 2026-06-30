@@ -383,6 +383,111 @@ function livekitToken(identity, name, room) {
   return `${header}.${payload}.${sig}`;
 }
 
+// --- live Discord chat for the bar TV -------------------------------------------
+// Poll a Discord channel via the bot REST API and relay new messages to the
+// room; TvSystem paints them on the TV over the bar. The bot TOKEN stays HERE —
+// clients only ever receive the rendered text. Configure on Render:
+//   DISCORD_BOT_TOKEN   a bot token. The bot must be in the channel's server
+//                       with the View Channel + Read Message History perms.
+//   DISCORD_CHANNEL_ID  (optional) overrides the default channel below.
+const DISCORD_TOKEN = process.env.DISCORD_BOT_TOKEN || '';
+const DISCORD_CHANNEL_ID = process.env.DISCORD_CHANNEL_ID || '1515843357060894762';
+const DISCORD_POLL_MS = 7000; // well within Discord's REST rate limits
+const DISCORD_CACHE_MAX = 25; // recent history handed to each joiner
+let discordCache = []; // chronological (oldest first)
+let discordLastId = null;
+let discordWarned = false;
+
+function hslToRgbInt(h, s, l) {
+  const a = s * Math.min(l, 1 - l);
+  const f = (n) => {
+    const k = (n + h * 12) % 12;
+    return Math.round(255 * (l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1))));
+  };
+  return (f(0) << 16) | (f(8) << 8) | f(4);
+}
+
+/** A stable, pleasant colour for an author from their id. */
+function authorColor(id) {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
+  return hslToRgbInt((((h % 360) + 360) % 360) / 360, 0.62, 0.7);
+}
+
+/** Flatten a message to plain TV text: resolve mentions, strip markup, cap. */
+function cleanDiscord(m) {
+  let c = String(m.content || '');
+  if (Array.isArray(m.mentions)) {
+    for (const u of m.mentions) {
+      const name = `@${u.global_name || u.username || 'user'}`;
+      c = c.split(`<@${u.id}>`).join(name).split(`<@!${u.id}>`).join(name);
+    }
+  }
+  c = c.replace(/<a?:(\w+):\d+>/g, ':$1:').replace(/<#\d+>/g, '#channel').replace(/<@&\d+>/g, '@role');
+  c = c.replace(/\s+/g, ' ').trim();
+  if (!c && Array.isArray(m.attachments) && m.attachments.length) c = '[image]';
+  if (!c && Array.isArray(m.embeds) && m.embeds.length) c = '[link]';
+  return c.length > 280 ? c.slice(0, 277) + '…' : c;
+}
+
+async function pollDiscord() {
+  try {
+    const res = await fetch(
+      `https://discord.com/api/v10/channels/${DISCORD_CHANNEL_ID}/messages?limit=20`,
+      { headers: { Authorization: `Bot ${DISCORD_TOKEN}` } },
+    );
+    if (!res.ok) {
+      if (!discordWarned) {
+        console.warn(`[iron-balls-pub] discord fetch ${res.status} — check DISCORD_BOT_TOKEN and the bot's access to the channel`);
+        discordWarned = true;
+      }
+      return;
+    }
+    discordWarned = false;
+    const arr = await res.json();
+    if (!Array.isArray(arr)) return;
+    const mapped = arr
+      .reverse() // the API returns newest-first → make it chronological
+      .filter((m) => m && (m.type === 0 || m.type === 19)) // default + reply only
+      .map((m) => ({
+        id: m.id,
+        author: String(m.author?.global_name || m.author?.username || '???').slice(0, 24),
+        color: authorColor(String(m.author?.id || m.author?.username || '')),
+        content: cleanDiscord(m),
+        ts: Date.parse(m.timestamp || '') || Date.now(),
+      }))
+      .filter((m) => m.content);
+    if (mapped.length === 0) return;
+
+    // New = anything with a higher snowflake than the last we relayed. (Robust to
+    // edits/deletes; the first poll seeds the cache silently with no broadcast.)
+    let newOnes = [];
+    if (discordLastId) {
+      const last = BigInt(discordLastId);
+      newOnes = mapped.filter((m) => {
+        try {
+          return BigInt(m.id) > last;
+        } catch {
+          return false;
+        }
+      });
+    }
+    discordCache = mapped.slice(-DISCORD_CACHE_MAX);
+    discordLastId = mapped[mapped.length - 1].id;
+    if (newOnes.length) broadcast({ t: 'discord', messages: newOnes });
+  } catch {
+    /* network hiccup (or no global fetch) — just try again next tick */
+  }
+}
+
+if (DISCORD_TOKEN) {
+  pollDiscord();
+  setInterval(pollDiscord, DISCORD_POLL_MS);
+  console.log(`[iron-balls-pub] discord chat relay ON — channel ${DISCORD_CHANNEL_ID}`);
+} else {
+  console.log('[iron-balls-pub] discord chat relay OFF — set DISCORD_BOT_TOKEN to light up the bar TV');
+}
+
 // --- wiring ---------------------------------------------------------------------
 const http = createServer((req, res) => {
   const url = new URL(req.url, 'http://localhost');
@@ -479,6 +584,7 @@ wss.on('connection', (ws, req) => {
         snakePlayer,
         fight: fightNet(),
         music,
+        discord: discordCache,
       });
       broadcast({ t: 'join', player: playerNet(myId) }, myId);
       console.log(`[iron-balls-pub] ${myId} (${players.get(myId).name}) in — ${players.size}/${MAX_PLAYERS}`);
