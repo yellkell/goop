@@ -26,6 +26,7 @@ import { GLASS, PROP_PHYS, PUB, SURFACES } from '../config.js';
 import { pubSendRaw } from '../net.js';
 import type { PropKind, QuatT, Vec3T } from '../protocol.js';
 import { buildDart, buildPintGlass, fadeOpacity, restoreOpacity, setGlassFill, setPropHighlight } from '../props.js';
+import { clearRestCircle, resolveOverlap, restCirclesByPrefix, setRestCircle, type RestCircle } from '../restCircles.js';
 import { bus, pub } from '../state.js';
 import { scoreFromUV } from '../textures.js';
 
@@ -81,6 +82,22 @@ const _q = new Quaternion();
 
 const recs: PropRec[] = [];
 const byId = new Map<number, PropRec>();
+
+/** A glass's world-space footprint radius — the wider TOP of the taper, so the
+ *  overlap check is conservative (no flared rims clipping a neighbour). */
+const GLASS_FOOT_R = GLASS.radiusTop * GLASS.scale;
+
+/** The y a glass standing at (x,z) rests at: a table/bar top if it's over one,
+ *  else the floor. A simplified re-snap (no "falling from above" gating) —
+ *  used only to re-derive height after a small overlap-avoidance nudge, where
+ *  the new spot is almost always still over the same surface. */
+function glassLandY(x: number, z: number): number {
+  let y = 0;
+  for (const s of SURFACES) {
+    if (x >= s.minX && x <= s.maxX && z >= s.minZ && z <= s.maxZ && s.y > y) y = s.y;
+  }
+  return y;
+}
 
 /** Build all props at their home slots. Called from main.ts after the pub. */
 export function buildProps(world: World): void {
@@ -195,6 +212,7 @@ export class PropSystem extends createSystem({
         // grabbed and lost the race: yield and let the network drive it.
         if (rec.mesh.parent !== this.scene) this.scene.attach(rec.mesh);
         rec.manualHand = null;
+        if (rec.kind === 'glass') clearRestCircle(`glass:${rec.id}`); // no longer resting
         rec.mode = 'remote';
         restoreOpacity(rec.mesh);
       }),
@@ -208,6 +226,7 @@ export class PropSystem extends createSystem({
           rec.mesh.quaternion.copy(rec.netQuat);
           rec.hasNetTarget = true;
         }
+        if (rec.kind === 'glass') clearRestCircle(`glass:${rec.id}`); // moving, not resting
         rec.mode = 'remote';
       }),
       bus.on('propSettled', ({ id, pos, quat }) => {
@@ -223,6 +242,9 @@ export class PropSystem extends createSystem({
         rec.mesh.position.set(pos[0], pos[1], pos[2]);
         rec.mesh.quaternion.set(quat[0], quat[1], quat[2], quat[3]);
         restoreOpacity(rec.mesh);
+        // The owner already resolved overlap before sending this — mirror
+        // their final resting spot so coins (CoinSystem) know to avoid it.
+        if (rec.kind === 'glass') setRestCircle(`glass:${rec.id}`, pos[0], pos[1], pos[2], GLASS_FOOT_R);
       }),
     );
   }
@@ -328,6 +350,7 @@ export class PropSystem extends createSystem({
     if (rec.mode === 'stuck') return;
     this.clearHighlight(rec);
     restoreOpacity(rec.mesh);
+    if (rec.kind === 'glass') clearRestCircle(`glass:${rec.id}`); // no longer resting
     rec.mode = 'held';
     rec.manualHand = null;
     rec.hasNetTarget = false;
@@ -508,6 +531,7 @@ export class PropSystem extends createSystem({
     this.clearHighlight(rec);
     restoreOpacity(rec.mesh);
     rec.mesh.visible = true; // a dart pulled from the box appears in-hand now
+    if (rec.kind === 'glass') clearRestCircle(`glass:${rec.id}`); // no longer resting
     rec.mode = 'held';
     rec.manualHand = hand;
     rec.hasNetTarget = false;
@@ -659,7 +683,24 @@ export class PropSystem extends createSystem({
       p.x = topX;
       p.z = topZ;
       p.y = topBase! + GLASS.stackRise;
+    } else {
+      // Not stacking — clear it of any neighbour sitting at the SAME level
+      // instead of letting it clip: another glass just outside stack-snap
+      // range, or a resting coin (coin positions live in PropSystem's sibling
+      // module, CoinSystem, so read them from the shared registry).
+      const obstacles: RestCircle[] = [];
+      for (const other of recs) {
+        if (other === rec || other.kind !== 'glass') continue;
+        if (other.mode !== 'rest' && other.mode !== 'remote') continue;
+        obstacles.push({ id: `glass:${other.id}`, x: other.mesh.position.x, y: other.mesh.position.y, z: other.mesh.position.z, r: GLASS_FOOT_R });
+      }
+      obstacles.push(...restCirclesByPrefix('coin:'));
+      const resolved = resolveOverlap(p.x, p.y, p.z, GLASS_FOOT_R, obstacles, (x, z) => glassLandY(x, z));
+      p.x = resolved.x;
+      p.y = resolved.y;
+      p.z = resolved.z;
     }
+    setRestCircle(`glass:${rec.id}`, p.x, p.y, p.z, GLASS_FOOT_R);
     // Glass-on-glass clinks; glass-on-surface gives a soft tap.
     if (stacked) glassClink();
     else glassTap(false);
@@ -794,6 +835,7 @@ export class PropSystem extends createSystem({
     rec.mesh.quaternion.identity();
     rec.mode = 'rest';
     rec.entity.addComponent(OneHandGrabbable, { rotate: true });
+    setRestCircle(`glass:${rec.id}`, rec.mesh.position.x, rec.mesh.position.y, rec.mesh.position.z, GLASS_FOOT_R);
     if (animate) {
       glassTap(false); // a soft glass clink as it's set down
       setGlassFill(rec.mesh, 0);
@@ -817,6 +859,13 @@ export class PropSystem extends createSystem({
         rec.mesh.quaternion.set(net.quat[0], net.quat[1], net.quat[2], net.quat[3]);
       }
       rec.mode = net.holder && net.holder !== pub.myId ? 'remote' : 'rest';
+      if (rec.kind === 'glass') {
+        if (rec.mode === 'rest') {
+          setRestCircle(`glass:${rec.id}`, rec.mesh.position.x, rec.mesh.position.y, rec.mesh.position.z, GLASS_FOOT_R);
+        } else {
+          clearRestCircle(`glass:${rec.id}`);
+        }
+      }
     }
   }
 }
