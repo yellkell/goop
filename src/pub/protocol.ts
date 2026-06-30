@@ -70,6 +70,18 @@ export interface SnakeHi {
   score: number;
 }
 
+/** One Discord chat line relayed from the pub server for the bar TV. The bot
+ *  token stays server-side; clients only ever see this rendered text. */
+export interface DiscordMsg {
+  id: string;
+  author: string;
+  /** Author colour (0xRRGGBB), a stable hash of their id. */
+  color: number;
+  content: string;
+  /** Posted-at epoch ms. */
+  ts: number;
+}
+
 /** Fight-hall match lifecycle (server-driven). */
 export type FightPhase = 'idle' | 'starting' | 'fighting' | 'roundOver' | 'over';
 
@@ -184,6 +196,9 @@ export type PubServerMsg =
       fight: FightNet;
       /** Jukebox station the room is currently on (−1 = off). */
       music: number;
+      /** Recent Discord chat for the bar TV (oldest first); omitted if the
+       *  relay isn't configured on the server. */
+      discord?: DiscordMsg[];
     }
   | { t: 'full' }
   | { t: 'join'; player: PubPlayerNet }
@@ -207,6 +222,8 @@ export type PubServerMsg =
   | { t: 'glass-out'; id: number }
   /** The room's jukebox is now on `station` (−1 = off). */
   | { t: 'music'; station: number }
+  /** New Discord chat lines for the bar TV (oldest first). */
+  | { t: 'discord'; messages: DiscordMsg[] }
   /** You've been removed by an admin (sent just before the socket closes). */
   | { t: 'banned' }
   /** Result of an admin action, sent back to the admin who asked. */

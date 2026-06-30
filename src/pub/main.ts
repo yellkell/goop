@@ -37,6 +37,7 @@ import { FightSystem } from './systems/FightSystem.js';
 import { PubPlayerSystem } from './systems/PubPlayerSystem.js';
 import { SnakeSystem } from './systems/SnakeSystem.js';
 import { MusicSystem } from './systems/MusicSystem.js';
+import { TvSystem } from './systems/TvSystem.js';
 import { TeleportSystem } from './systems/TeleportSystem.js';
 import { ClimbSystem } from './systems/ClimbSystem.js';
 import { FXSystem } from '../systems/FXSystem.js';
@@ -120,6 +121,7 @@ World.create(container, {
   world.registerSystem(DartsSystem);
   world.registerSystem(SnakeSystem);
   world.registerSystem(MusicSystem);
+  world.registerSystem(TvSystem);
   world.registerSystem(FightSystem);
   world.registerSystem(BartenderSystem);
   // Animates and self-destructs transient effects (clap gesture cues, fire
