@@ -366,17 +366,27 @@ export function buildFactory(): Factory {
   flatRect(sandMat, -350, hx0, hz0, hz1, sandY, statics);
   flatRect(sandMat, hx1, 350, hz0, hz1, sandY, statics);
 
-  // Cracked concrete floor, framed around the hole. Each piece clones the
-  // concrete texture with a size-proportional repeat so the texel size stays even.
+  // Cracked concrete floor, framed around the hole. ONE shared texture +
+  // material across all four pieces — the size-proportional repeat is baked into
+  // each piece's UVs instead of cloning the texture per piece. That keeps the
+  // texel size even AND lets collapseStatic merge the four pieces into a single
+  // draw call + one texture (cloning per piece defeated both — a real perf cost).
   const floorTex = concreteTexture();
+  floorTex.wrapS = floorTex.wrapT = RepeatWrapping;
+  const floorMat = new MeshStandardMaterial({ map: floorTex, roughness: 0.95, metalness: 0.05 });
   const DENSITY = 0.46;
   const floorPiece = (x0: number, x1: number, z0: number, z1: number): void => {
     if (x1 - x0 < 1e-3 || z1 - z0 < 1e-3) return;
-    const tex = floorTex.clone();
-    tex.needsUpdate = true;
-    tex.wrapS = tex.wrapT = RepeatWrapping;
-    tex.repeat.set((x1 - x0) * DENSITY, (z1 - z0) * DENSITY);
-    flatRect(new MeshStandardMaterial({ map: tex, roughness: 0.95, metalness: 0.05 }), x0, x1, z0, z1, FLOOR_Y);
+    const geo = new PlaneGeometry(x1 - x0, z1 - z0);
+    // Bake the per-piece repeat into the UVs (PlaneGeometry UVs run 0..1).
+    const ru = (x1 - x0) * DENSITY;
+    const rv = (z1 - z0) * DENSITY;
+    const uv = geo.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * ru, uv.getY(i) * rv);
+    const m = new Mesh(geo, floorMat);
+    m.rotation.x = -Math.PI / 2;
+    m.position.set((x0 + x1) / 2, FLOOR_Y, (z0 + z1) / 2);
+    statics.add(m);
   };
   floorPiece(HALL.minX, HALL.maxX, HALL.minZ, hz0); // north band (full width)
   floorPiece(HALL.minX, HALL.maxX, hz1, HALL.maxZ); // south band

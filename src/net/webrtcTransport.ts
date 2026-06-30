@@ -26,7 +26,6 @@ import {
   collection,
   deleteDoc,
   doc,
-  getDoc,
   getDocs,
   getFirestore,
   limit,
@@ -41,6 +40,7 @@ import {
   type Unsubscribe,
 } from 'firebase/firestore';
 import { firebaseConfig } from './firebaseConfig.js';
+import { serverNow, syncServerClock } from './serverClock.js';
 import { voiceEnabled } from '../audio/voicePref.js';
 import type { PeerMessage } from './protocol.js';
 import type { Transport, TransportEvents } from './transport.js';
@@ -56,8 +56,11 @@ const ICE_SERVERS: RTCConfiguration = {
  *  long a ghost lingers before everyone ignores it. */
 const LOBBY_FRESH_MS = 40 * 1000;
 /** While waiting as a host: heartbeat our lobby AND re-scan for another host to
- *  pair with (so two simultaneous hosts don't deadlock). */
-const HOST_TICK_MS = 5_000;
+ *  pair with (so two simultaneous hosts don't deadlock). Kept short, and
+ *  per-client jitter is added on top, so two players who JUST played each other
+ *  — who re-enter the queue in lockstep and both become hosts — desynchronise
+ *  and pair within a tick instead of sitting forever. */
+const HOST_TICK_MS = 2_500;
 /** Private codes live longer — you share one and wait for a friend to type it. */
 const PRIVATE_FRESH_MS = 10 * 60 * 1000;
 /** Give P2P this long to come up before declaring failure. */
@@ -99,15 +102,19 @@ export class WebRtcTransport implements Transport {
   private unsubs: Unsubscribe[] = [];
   private connectTimer: ReturnType<typeof setTimeout> | null = null;
   private hostTimer: ReturnType<typeof setInterval> | null = null;
-  /** Server createdAt (ms) of our own host lobby — the tiebreaker so only the
-   *  NEWER of two hosts crosses over to claim the older. */
-  private myCreatedAt = 0;
+  /** Quick one-off cross-over scans fired just after we become a host. */
+  private earlyScans: ReturnType<typeof setTimeout>[] = [];
   private micStream: MediaStream | null = null;
 
   constructor(private readonly events: TransportEvents) {}
 
   async queue(): Promise<void> {
     this.events.onStatus('matchmaking…');
+    // Correct for device clock skew BEFORE judging any lobby's freshness — a
+    // headset clock off by >LOBBY_FRESH_MS otherwise sees every live lobby as
+    // stale and never matches (the "both searching, never pair" bug).
+    await syncServerClock();
+    if (this.closed) return;
     const lobbies = collection(db(), 'lobbies');
 
     const claimed = await this.tryClaimLobby(lobbies);
@@ -123,9 +130,6 @@ export class WebRtcTransport implements Transport {
       this.isCaller = true;
       const ref = await addDoc(lobbies, { open: true, createdAt: serverTimestamp(), seen: serverTimestamp() });
       if (this.closed) return;
-      // Read our own createdAt back (FIXED — not the moving heartbeat) so the
-      // cross-over tiebreaker is "who started waiting first".
-      this.myCreatedAt = millis((await getDoc(ref)).data()?.createdAt) ?? Date.now();
       // Callers wait in the queue indefinitely; the clock starts when an
       // answer arrives (see runCallerOn).
       await this.runCallerOn(ref);
@@ -142,6 +146,7 @@ export class WebRtcTransport implements Transport {
    */
   async hostPrivate(): Promise<string> {
     this.events.onStatus('creating private match…');
+    await syncServerClock();
     if (!(await this.setupConnection())) throw new Error('cancelled');
     this.isCaller = true;
     const code = await this.allocateCode();
@@ -154,6 +159,7 @@ export class WebRtcTransport implements Transport {
   /** Join a private match by code: claim its lobby and answer the host's offer. */
   async joinPrivate(code: string): Promise<void> {
     this.events.onStatus('joining…');
+    await syncServerClock();
     const ref = doc(collection(db(), 'privateLobbies'), code);
     // Claim it first (validates the code) so a bad code never prompts for mic.
     await runTransaction(db(), async (txn) => {
@@ -161,7 +167,7 @@ export class WebRtcTransport implements Transport {
       if (!snap.exists()) throw new Error('code not found');
       if (snap.data()?.open !== true) throw new Error('match already started');
       const created = (snap.data()?.createdAt?.toMillis?.() as number | undefined) ?? 0;
-      if (Date.now() - created > PRIVATE_FRESH_MS) throw new Error('code expired');
+      if (serverNow() - created > PRIVATE_FRESH_MS) throw new Error('code expired');
       txn.update(ref, { open: false, claimedAt: serverTimestamp() });
     });
     if (this.closed) return;
@@ -191,7 +197,7 @@ export class WebRtcTransport implements Transport {
           if (snap.exists()) {
             const created = (snap.data()?.createdAt?.toMillis?.() as number | undefined) ?? 0;
             // Only reuse a code whose lobby is dead; a live one is taken.
-            if (snap.data()?.open === true && Date.now() - created < PRIVATE_FRESH_MS) {
+            if (snap.data()?.open === true && serverNow() - created < PRIVATE_FRESH_MS) {
               throw new Error('taken');
             }
           }
@@ -227,6 +233,8 @@ export class WebRtcTransport implements Transport {
     if (this.connectTimer) clearTimeout(this.connectTimer);
     if (this.hostTimer) clearInterval(this.hostTimer);
     this.hostTimer = null;
+    for (const t of this.earlyScans) clearTimeout(t);
+    this.earlyScans = [];
     for (const u of this.unsubs.splice(0)) u();
     for (const track of this.micStream?.getTracks() ?? []) track.stop();
     this.micStream = null;
@@ -283,7 +291,7 @@ export class WebRtcTransport implements Transport {
     lobbies: ReturnType<typeof collection>,
   ): Promise<DocumentReference | null> {
     const open = await getDocs(query(lobbies, where('open', '==', true), limit(10)));
-    const now = Date.now();
+    const now = serverNow();
     for (const snap of open.docs) {
       if (!lobbyFresh(snap.data(), now)) continue; // a ghost — skip it
       try {
@@ -303,30 +311,54 @@ export class WebRtcTransport implements Transport {
   /** While hosting the public queue: every tick, keep our lobby fresh and look
    *  for another host to pair with. */
   private startHostHeartbeat(): void {
+    // Pair two simultaneous hosts IMMEDIATELY, not after a full tick: two
+    // players who just played re-enter the queue together, so both run
+    // tryClaimLobby before either lobby exists and both fall through to hosting.
+    // Scanning right now (rather than waiting HOST_TICK_MS) collapses the window
+    // where they'd both sit waiting — the deadlock behind "just played, can't
+    // find each other".
+    void this.crossOverIfRivalHost();
+    // A couple of quick follow-up scans cover the case where the rival's lobby
+    // wasn't visible to our first scan yet (both created at the same instant),
+    // so we pair in well under a second instead of waiting for a full tick.
+    this.earlyScans = [700, 1600].map((ms) => setTimeout(() => void this.crossOverIfRivalHost(), ms));
+    // Jitter the period per-client so two lockstep hosts don't keep heartbeating
+    // and re-scanning in perfect step (which could resync them indefinitely).
+    const period = HOST_TICK_MS + Math.floor(Math.random() * 1500);
     this.hostTimer = setInterval(() => {
       if (this.closed || this.matched || !this.lobbyRef) return;
       // Heartbeat: claimers ignore lobbies not SEEN recently, so a live host
       // stays claimable while an abandoned tab ages out fast.
       void updateDoc(this.lobbyRef, { seen: serverTimestamp() }).catch(() => {});
       void this.crossOverIfRivalHost();
-    }, HOST_TICK_MS);
+    }, period);
   }
 
-  /** If another host is ALSO waiting, the NEWER of the two drops its lobby and
-   *  re-queues to claim the older one (the older stays put) — so two people who
-   *  both became hosts at the same moment actually find each other. */
+  /**
+   * If another host is ALSO waiting, exactly ONE of the two must drop its lobby
+   * and re-queue to claim the other — otherwise two people who searched at the
+   * same instant (both found nothing, both became hosts) sit forever.
+   *
+   * The tiebreaker is the lobby document IDs: the host with the SMALLER id stays
+   * put, the larger-id host crosses over. This is deliberately CLOCK-FREE. The
+   * old code compared `createdAt`, but a just-created lobby's `serverTimestamp()`
+   * reads back null (it's a pending write), so a host's own "createdAt" silently
+   * became its LOCAL clock while it read rivals' as resolved SERVER stamps —
+   * mixing two clocks. With any skew both peers could decide "not me", and they
+   * deadlocked. Both peers see the same two ids identically, so id order picks
+   * exactly one mover with no timestamps involved.
+   */
   private async crossOverIfRivalHost(): Promise<void> {
     const lobbies = collection(db(), 'lobbies');
     const open = await getDocs(query(lobbies, where('open', '==', true), limit(10)));
     if (this.closed || this.matched || !this.lobbyRef) return;
-    const now = Date.now();
+    const now = serverNow();
     const myId = this.lobbyRef.id;
     for (const snap of open.docs) {
       if (snap.id === myId) continue;
       if (!lobbyFresh(snap.data(), now)) continue;
-      const theirs = millis(snap.data().createdAt) ?? 0;
-      // Cross over only to an OLDER host (tie broken by id) so exactly one moves.
-      if (!(theirs < this.myCreatedAt || (theirs === this.myCreatedAt && snap.id < myId))) continue;
+      if (myId < snap.id) continue; // we hold the smaller id — we're the keeper, they cross to us
+      // We're the larger id → drop our lobby and re-queue to claim theirs.
       if (this.hostTimer) {
         clearInterval(this.hostTimer);
         this.hostTimer = null;

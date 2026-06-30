@@ -92,6 +92,18 @@ const FIST_LANE_RADIUS = 0.34;
 const FIST_CLOSING_SPEED = 1.35;
 const FIST_LOCAL_HAND_SPEED = 1.2;
 
+// Curveball tuning — identical to the arena (FireballSystem). The raw swing
+// turn-rate (rad/s) is scaled by GAIN and capped, then in flight the velocity
+// rotates about the curl axis while the rate decays — so the ball banks hard
+// early (just off the fist) and straightens out. Only applied when the fist's
+// "Curve" loadout toggle is on (ff-ballarc), exactly like the arena.
+const CURL_MIN = 2.5; // rad/s dead zone: below this the punch is "straight" → no curve
+const CURL_GAIN = 1.5; // applied to the swing rate ABOVE the dead zone
+const CURL_MAX = 4.0; // rad/s after gain
+const CURL_DECAY = 2.0; // per second — lower = the bend carries further
+const CURL_SPEED_MIN = 2.6; // below this swing speed → essentially no curve
+const CURL_SPEED_FULL = 4.4; // at/above this → full curve
+
 /** Ring buffer of recent hand positions → smoothed punch velocity. */
 class VelocityTracker {
   private samples: { pos: Vector3; t: number }[] = [];
@@ -117,6 +129,46 @@ class VelocityTracker {
     return out.copy(newest.pos).sub(oldest.pos).multiplyScalar(1 / dt);
   }
 
+  /**
+   * The swing's CURVATURE at release: how fast its direction is turning, as an
+   * axis (filled into `outAxis`) whose returned magnitude is rad/s. Compares the
+   * earlier half of the recent window to the later half — a hook turns the
+   * direction, a straight jab doesn't. Returns 0 if the swing is too slow or
+   * straight to read a curve. Ported verbatim from the arena's VelocityTracker.
+   */
+  curl(outAxis: Vector3, now: number): number {
+    outAxis.set(0, 0, 0);
+    const s = this.samples;
+    if (s.length < 4) return 0;
+    const win = [];
+    for (let i = s.length - 1; i >= 0; i--) {
+      if (now - s[i].t <= 0.14) win.unshift(s[i]);
+      else break;
+    }
+    if (win.length < 4) return 0;
+    const mid = win.length >> 1;
+    const a0 = win[0];
+    const a1 = win[mid];
+    const a2 = win[win.length - 1];
+    const dt1 = a1.t - a0.t;
+    const dt2 = a2.t - a1.t;
+    if (dt1 < 1e-3 || dt2 < 1e-3) return 0;
+    _cA.copy(a1.pos).sub(a0.pos).divideScalar(dt1);
+    _cB.copy(a2.pos).sub(a1.pos).divideScalar(dt2);
+    const lenA = _cA.length();
+    const lenB = _cB.length();
+    if (lenA < 0.4 || lenB < 0.4) return 0; // too slow to read a reliable curve
+    outAxis.copy(_cA).cross(_cB);
+    const sinMag = outAxis.length() / (lenA * lenB);
+    if (sinMag < 1e-3) {
+      outAxis.set(0, 0, 0);
+      return 0;
+    }
+    outAxis.divideScalar(outAxis.length()); // normalize
+    const angle = Math.atan2(sinMag, _cA.dot(_cB) / (lenA * lenB));
+    return angle / ((dt1 + dt2) / 2);
+  }
+
   reset(): void {
     this.samples.length = 0;
   }
@@ -140,6 +192,10 @@ interface LocalBall {
   dmgScale: number;
   /** Fan slot for a split recall (0 = the main ball; shards take 1..N-1). */
   shardIndex: number;
+  /** In-flight curve: world-space axis whose LENGTH is the turn rate (rad/s).
+   *  Set on a thrown ball when the fist's "Curve" toggle is on; decays in
+   *  flight. Zero = a straight throw. */
+  curl: Vector3;
 }
 
 /** A split recall's extra returning ball — homes to its fist, fanning out. */
@@ -197,6 +253,18 @@ function loadBallAttach(): [number, number] {
   }
 }
 
+/** The local player's per-fist "Curve" toggle ([left, right]) — the SAME
+ *  'ff-ballarc' the arena menu writes, so a fist set to curve in the arena also
+ *  curves its throws in a pub bout. */
+function loadBallArc(): [boolean, boolean] {
+  try {
+    const parts = (localStorage.getItem('ff-ballarc') ?? '').split(',');
+    return [parts[0] === '1', parts[1] === '1'];
+  } catch {
+    return [false, false];
+  }
+}
+
 const _grip = new Vector3();
 const _gripQ = new Quaternion();
 const _vel = new Vector3();
@@ -214,6 +282,9 @@ const _oppFist = new Vector3();
 const _ggMid = new Vector3();
 const _ggLift = new Vector3();
 const _rimLocal = new Vector3();
+const _cA = new Vector3();
+const _cB = new Vector3();
+const _curl = new Vector3();
 
 /** One octagon-edge wall of the rim barrier (local to the platform group). */
 interface RimEdge {
@@ -259,6 +330,8 @@ export class FightSystem extends createSystem({}) {
   private remoteShards = new Map<string, GhostShard[]>();
   /** This fighter's ball loadout per fist (refreshed when a pair is created). */
   private loadout: [number, number] = [0, 0];
+  /** Per-fist "Curve" toggle, refreshed alongside the loadout. */
+  private ballArc: [boolean, boolean] = [false, false];
   private trackers: [VelocityTracker, VelocityTracker] = [new VelocityTracker(), new VelocityTracker()];
   /** Remote fighters' streamed balls, keyed by player id. */
   private remoteBalls = new Map<string, [RemoteBall, RemoteBall]>();
@@ -943,6 +1016,7 @@ export class FightSystem extends createSystem({}) {
   private ensureMyBalls(): void {
     if (this.myBalls) return;
     this.loadout = loadBallAttach(); // your arena ball loadout walks into the pub
+    this.ballArc = loadBallArc(); // …and your per-fist curve toggle with it
     const team = this.teamFor(pub.myId); // a fighter's own fire is always ember
     const mk = (hand: Hand): LocalBall => {
       const visual = createFireVisual(team);
@@ -963,6 +1037,7 @@ export class FightSystem extends createSystem({}) {
         scl: 1,
         dmgScale: 1,
         shardIndex: 0,
+        curl: new Vector3(),
       };
     };
     this.myBalls = [mk(0), mk(1)];
@@ -1056,6 +1131,7 @@ export class FightSystem extends createSystem({}) {
     ball.scl = 1;
     ball.dmgScale = 1;
     ball.shardIndex = 0;
+    ball.curl.set(0, 0, 0);
     ball.visual.group.scale.setScalar(1);
   }
 
@@ -1200,6 +1276,14 @@ export class FightSystem extends createSystem({}) {
           break;
         }
         case FLYING: {
+          // Curve: rotate the velocity about the curl axis, bleeding the rate so
+          // the ball banks early then straightens (arena parity). Then gravity.
+          const cm = ball.curl.length();
+          if (cm > 1e-4) {
+            _curl.copy(ball.curl).divideScalar(cm);
+            ball.vel.applyAxisAngle(_curl, cm * delta);
+            ball.curl.multiplyScalar(Math.exp(-CURL_DECAY * delta));
+          }
           ball.vel.y -= FIREBALL.gravity * delta;
           ball.pos.addScaledVector(ball.vel, delta);
           if (this.clampToCage(ball.pos)) {
@@ -1234,15 +1318,28 @@ export class FightSystem extends createSystem({}) {
 
   private throwBall(ball: LocalBall, hand: Hand, handSpeed: number): void {
     _dir.copy(_vel).normalize();
-    // Aim assist: blend toward the other fighter's chest.
-    this.opponentChest(_aim);
-    _aim.sub(ball.pos).normalize();
-    _dir.lerp(_aim, FIREBALL.aimAssist).normalize();
+    // Aim assist blends toward the foe's chest — but a CURVE throw is a pure
+    // skill shot (arena parity), so skip the assist when this fist curves.
+    if (!this.ballArc[hand]) {
+      this.opponentChest(_aim);
+      _aim.sub(ball.pos).normalize();
+      _dir.lerp(_aim, FIREBALL.aimAssist).normalize();
+    }
     const speed = Math.min(
       FIREBALL.throwSpeedMax,
       Math.max(FIREBALL.throwSpeedMin, handSpeed * FIREBALL.punchGain),
     );
     ball.vel.copy(_dir).multiplyScalar(speed);
+    // Curve: read the swing's turn-rate, gate it on a committed (fast) swing,
+    // and store axis × rate as the in-flight curl. Same maths as the arena.
+    if (this.ballArc[hand]) {
+      const raw = this.trackers[hand].curl(_curl, this.time);
+      const speedK = Math.max(0, Math.min(1, (handSpeed - CURL_SPEED_MIN) / (CURL_SPEED_FULL - CURL_SPEED_MIN)));
+      const rate = (raw <= CURL_MIN ? 0 : Math.min(CURL_MAX, (raw - CURL_MIN) * CURL_GAIN)) * speedK;
+      ball.curl.copy(_curl).multiplyScalar(rate);
+    } else {
+      ball.curl.set(0, 0, 0);
+    }
     ball.state = FLYING;
     ball.elapsed = 0;
     ball.recallLock = 0;
