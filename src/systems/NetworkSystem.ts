@@ -32,7 +32,7 @@ import { setSpeakerPosition, updateListener } from '../net/voice.js';
 import type { PeerMessage, PoseTuple } from '../net/protocol.js';
 import { spawnDamagePopup, spawnFireImpact, spawnGestureCue, spawnPopup } from '../fx/effects.js';
 import * as sfx from '../audio/sfx.js';
-import { playVictory } from '../audio/battleMusic.js';
+import { playVictory, startBattleMusic } from '../audio/battleMusic.js';
 import { InputComponent } from '@iwsdk/core';
 import { FIREBALL, NET } from '../config.js';
 
@@ -298,6 +298,12 @@ export class NetworkSystem extends createSystem({
       for (const e of this.queries.combatants.entities) {
         e.setValue(Health, 'current', e.getValue(Health, 'max') ?? 100);
       }
+      // Restart the battle score. The guest never runs startMatch, so without
+      // this a REMATCH (matchOver -> countdown) left the victory sting ringing
+      // out and battle music never came back. startBattleMusic is idempotent:
+      // it stops any sting and no-ops if the loop is already playing (a normal
+      // between-rounds countdown), so this only truly restarts after a victory.
+      if (!app.tutorial) startBattleMusic();
     }
   }
 
