@@ -35,7 +35,7 @@ import { BartenderSystem } from './systems/BartenderSystem.js';
 import { DartsSystem } from './systems/DartsSystem.js';
 import { FightSystem } from './systems/FightSystem.js';
 import { PubPlayerSystem } from './systems/PubPlayerSystem.js';
-import { SnakeSystem } from './systems/SnakeSystem.js';
+import { DroneHuntSystem } from './systems/DroneHuntSystem.js';
 import { MusicSystem } from './systems/MusicSystem.js';
 import { TvSystem } from './systems/TvSystem.js';
 import { TeleportSystem } from './systems/TeleportSystem.js';
@@ -119,7 +119,7 @@ World.create(container, {
   world.registerSystem(PropSystem);
   world.registerSystem(CoinSystem);
   world.registerSystem(DartsSystem);
-  world.registerSystem(SnakeSystem);
+  world.registerSystem(DroneHuntSystem);
   world.registerSystem(MusicSystem);
   world.registerSystem(TvSystem);
   world.registerSystem(FightSystem);

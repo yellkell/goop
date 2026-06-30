@@ -1263,7 +1263,7 @@ function buildBanquette(centres: number[]): Group {
 /** Classic upright cabinet: marquee, angled screen, control deck, side art. */
 function buildArcadeCabinet(): { cabinet: Group; screen: Mesh; stick: Group } {
   const cabinet = new Group();
-  cabinet.name = 'iron-snake-cabinet';
+  cabinet.name = 'arcade-cabinet';
 
   const body = new Mesh(new BoxGeometry(0.62, 1.75, 0.6), gunmetal(0.45));
   body.position.y = 0.875;
@@ -1290,8 +1290,8 @@ function buildArcadeCabinet(): { cabinet: Group; screen: Mesh; stick: Group } {
   const marquee = new Mesh(
     new BoxGeometry(0.62, 0.22, 0.18),
     new MeshStandardMaterial({
-      color: 0x0d2a0d,
-      emissive: 0x39ff14,
+      color: 0x2a160a,
+      emissive: 0xff8c1a,
       emissiveIntensity: 0.35,
       roughness: 0.4,
     }),
@@ -1299,7 +1299,7 @@ function buildArcadeCabinet(): { cabinet: Group; screen: Mesh; stick: Group } {
   marquee.position.set(0, 1.86, 0.26); // proud of the body face (0.30) so the
   cabinet.add(marquee);                //  marquee/body fronts don't z-fight
   const marqueeText = new Panel(0.6, 0.2);
-  marqueeText.setLines([{ text: 'IRON SNAKE', size: 60, colour: '#39ff14', bold: true }]);
+  marqueeText.setLines([{ text: 'DRONE HUNT', size: 56, colour: '#ff8c1a', bold: true }]);
   // Sit the text clearly PROUD of the marquee face (front now at z 0.35).
   marqueeText.mesh.position.set(0, 1.86, 0.36);
   cabinet.add(marqueeText.mesh);
@@ -1312,9 +1312,9 @@ function buildArcadeCabinet(): { cabinet: Group; screen: Mesh; stick: Group } {
   cabinet.add(bezel);
   const screen = new Mesh(
     new PlaneGeometry(0.46, 0.36),
-    new MeshBasicMaterial({ color: 0x041204 }),
+    new MeshBasicMaterial({ color: 0x0a0c12 }),
   );
-  screen.name = 'snake-screen';
+  screen.name = 'arcade-screen';
   screen.position.set(0, 1.42, 0.372);
   screen.rotation.x = -0.18;
   cabinet.add(screen);
@@ -1329,10 +1329,11 @@ function buildArcadeCabinet(): { cabinet: Group; screen: Mesh; stick: Group } {
   const bracket = new Mesh(new BoxGeometry(0.5, 0.1, 0.22), darkSteel());
   bracket.position.set(0, 0.92, 0.4);
   cabinet.add(bracket);
-  // The joystick pivots at its base — SnakeSystem tilts this group when a
-  // hand pushes the stick around.
+  // Legacy joystick group. DRONE HUNT is a light-gun game (you aim the
+  // controller at the screen), so DroneHuntSystem hides this at runtime — it's
+  // kept only so the cabinet still builds a plausible control deck.
   const stick = new Group();
-  stick.name = 'snake-joystick';
+  stick.name = 'arcade-joystick';
   stick.position.set(-0.12, 1.04, 0.5);
   const shaft = new Mesh(new CylinderGeometry(0.012, 0.012, 0.1, 6), darkSteel());
   shaft.position.y = 0.05;
@@ -1358,7 +1359,7 @@ function buildArcadeCabinet(): { cabinet: Group; screen: Mesh; stick: Group } {
   }
 
   // Glow under the marquee so the corner reads from across the room.
-  const glow = new PointLight(0x39ff14, 1.6, 2.2, 1.8);
+  const glow = new PointLight(0xff8c1a, 1.6, 2.2, 1.8);
   glow.position.set(0, 1.6, 0.45);
   cabinet.add(glow);
 
