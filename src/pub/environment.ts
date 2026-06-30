@@ -1036,6 +1036,29 @@ function buildFightHall(root: Group): {
   mount.position.set(cx, h - 0.04, 0);
   root.add(mount);
 
+  // Effect posters on the hall's bare OUTER walls — north, south and far-west.
+  // The east wall carries the scoreboards + doorway, and the benches are low, so
+  // eye-height prints read cleanly above the crowd. A few of each, some wonky.
+  // Bigger than the pub-room ones to suit the venue's tall walls.
+  const HP_W = 0.7;
+  const HP_H = 1.0;
+  const hallPoster = (url: string, x: number, y: number, z: number, ry: number, tilt: number): void => {
+    const holder = new Group();
+    holder.position.set(x, y, z);
+    holder.rotation.y = ry;
+    holder.add(buildPoster(url, HP_W, HP_H, tilt));
+    root.add(holder);
+  };
+  const NZ = hall.minZ + 0.05; // north wall (faces +z)
+  const SZ = hall.maxZ - 0.05; // south wall (faces −z)
+  const WX = hall.minX + 0.05; // far-west wall (faces +x)
+  hallPoster('posters/split.png', cx + 2.6, 1.95, NZ, 0, 0.05);
+  hallPoster('posters/grow.png', cx - 3.0, 2.05, NZ, 0, -0.04);
+  hallPoster('posters/shrink.jpg', cx - 2.4, 1.95, SZ, Math.PI, 0.06);
+  hallPoster('posters/split.png', cx + 3.2, 1.85, SZ, Math.PI, -0.03);
+  hallPoster('posters/grow.png', WX, 2.0, -3.2, Math.PI / 2, 0.04);
+  hallPoster('posters/shrink.jpg', WX, 1.9, 3.6, Math.PI / 2, -0.05);
+
   return {
     consolePanels: [consolePanels[0], consolePanels[1]],
     fightDisplay,
