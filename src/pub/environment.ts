@@ -1085,14 +1085,14 @@ function buildPubTv(root: Group, x: number, y: number, z: number): Panel {
   g.name = 'pub-tv';
   g.position.set(x, y, z); // screen faces +z (into the room)
 
-  const SCREEN_W = 1.0;
-  const SCREEN_H = 0.56; // ~16:9
+  const SCREEN_W = 0.78;
+  const SCREEN_H = 0.44; // ~16:9
   const bezelMat = new MeshStandardMaterial({ color: 0x0a0b0d, metalness: 0.25, roughness: 0.55 });
   const bezel = new Mesh(new BoxGeometry(SCREEN_W + 0.12, SCREEN_H + 0.12, 0.06), bezelMat);
   bezel.position.set(0, 0, -0.035);
   g.add(bezel);
 
-  const panel = new Panel(SCREEN_W, SCREEN_H, 640); // crisp enough for chat text
+  const panel = new Panel(SCREEN_W, SCREEN_H, 900); // higher dpi so the small screen stays crisp
   panel.mesh.position.set(0, 0, 0.002); // proud of the bezel face
   g.add(panel.mesh);
 
