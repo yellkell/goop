@@ -19,6 +19,8 @@ import { Combatant } from '../components/Combatant.js';
 import { Health } from '../components/Health.js';
 import { match } from '../combat/matchState.js';
 import { applyRoster } from '../combat/setup.js';
+import { localLayout } from '../combat/layout.js';
+import { mesh } from '../net/mesh.js';
 import { applyArenaLayout } from '../arena/arena.js';
 import { app, saveStats, training, type AppMode } from '../menu/appState.js';
 import * as sfx from '../audio/sfx.js';
@@ -143,7 +145,13 @@ export class GameStateSystem extends createSystem({
         let name: string;
         if (slot === 0) name = app.mode === 'net' ? displayName(myName(), 'YOU') : 'YOU';
         else if (duel) name = app.mode === 'net' ? displayName(rival.name, 'RIVAL') : 'BOT';
-        else name = team === 0 ? 'ALLY' : 'BOT';
+        else if (app.mode === 'net') {
+          // 2v2 / FFA online: show the real fighter at this seat (their `iam`
+          // callsign), falling back to ALLY/BOT only until their name arrives.
+          const canonical = localLayout()[slot]?.canonical;
+          const peerName = canonical != null ? mesh.names[canonical] : undefined;
+          name = displayName(peerName ?? '', team === 0 ? 'ALLY' : 'BOT');
+        } else name = team === 0 ? 'ALLY' : 'BOT';
         return { name, neon: teamNeon(team), hpFrac: hp / hpMax, pips, team };
       });
   }

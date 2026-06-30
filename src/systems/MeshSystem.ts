@@ -27,6 +27,8 @@ import { localIndexOf, localLayout, peerPos, peerQuat, peerVel } from '../combat
 import { match } from '../combat/matchState.js';
 import { app, saveStats } from '../menu/appState.js';
 import { mesh } from '../net/mesh.js';
+import { myElo, myName } from '../net/leaderboard.js';
+import { customization } from '../menu/customization.js';
 import { packPose } from '../net/client.js';
 import { attachMeshVoice, detachAllMeshVoice, detachMeshVoice, setMeshSpeaker, updateListener } from '../net/voice.js';
 import { reportArcade } from '../net/leaderboard.js';
@@ -67,6 +69,8 @@ export class MeshSystem extends createSystem({
   private stateTimer = 0;
   private lastReset = -1;
   private guestOverTimer = 0;
+  /** Counts down to the next `iam` (callsign) broadcast while in a live bout. */
+  private iamTimer = 0;
   /** Host: seconds a short-handed FFA (3 players) has waited for a 4th. */
   private ffaGraceTimer = 0;
   /** Seats whose spatial voice we've hooked up this bout. */
@@ -108,6 +112,7 @@ export class MeshSystem extends createSystem({
           app.side = mesh.isHost() ? 0 : 1;
           app.mySlot = mesh.mySeat;
           this.lastReset = -1;
+          this.iamTimer = 0; // introduce myself the moment the bout goes live
         }
       }
       return;
@@ -125,6 +130,7 @@ export class MeshSystem extends createSystem({
     app.side = mesh.isHost() ? 0 : 1;
 
     this.receive();
+    this.broadcastIam(delta);
     this.smooth(delta);
     this.sendPose(delta);
     this.updateVoice();
@@ -195,6 +201,28 @@ export class MeshSystem extends createSystem({
     mesh.send({ k: 'pose', head: headPose, left: hands[0], right: hands[1], orbit, fist, hp: this.myHp(), acc: app.accentHue, acl: app.accentLight });
   }
 
+  /**
+   * Tell every peer my callsign (+ skins), repeated on a slow cadence so a peer
+   * whose data channel opened a beat late still learns it. Tiny reliable message;
+   * the HUD reads mesh.names so brawlers show real names, not 'ALLY'/'BOT'.
+   * (During the room-filling phase the inbox is flushed each frame, so names are
+   * only exchanged once the bout is live — which is exactly when the HUD needs them.)
+   */
+  private broadcastIam(delta: number): void {
+    this.iamTimer -= delta;
+    if (this.iamTimer > 0) return;
+    this.iamTimer = 2;
+    mesh.send({
+      k: 'iam',
+      name: myName(),
+      elo: myElo(),
+      av: customization.avatar,
+      pf: customization.platform,
+      avc: customization.colorHue,
+      avl: customization.colorLight,
+    });
+  }
+
   /** HOST → guests: the authoritative match state on a cadence + on resets. */
   private echoState(delta: number): void {
     this.stateTimer -= delta;
@@ -222,6 +250,13 @@ export class MeshSystem extends createSystem({
   private apply(seat: number, msg: PeerMessage): void {
     if (msg.k === 'astate') {
       if (!mesh.isHost()) this.applyHostState(msg);
+      return;
+    }
+    // A peer's callsign — store it by their canonical seat so the HUD can show
+    // real names. Handled BEFORE the local-index gate (the name is keyed by
+    // seat, not by whether they map to one of my opponent slots).
+    if (msg.k === 'iam') {
+      mesh.names[seat] = msg.name;
       return;
     }
 
