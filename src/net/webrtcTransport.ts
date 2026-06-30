@@ -40,6 +40,7 @@ import {
   type Unsubscribe,
 } from 'firebase/firestore';
 import { firebaseConfig } from './firebaseConfig.js';
+import { serverNow, syncServerClock } from './serverClock.js';
 import { voiceEnabled } from '../audio/voicePref.js';
 import type { PeerMessage } from './protocol.js';
 import type { Transport, TransportEvents } from './transport.js';
@@ -109,6 +110,11 @@ export class WebRtcTransport implements Transport {
 
   async queue(): Promise<void> {
     this.events.onStatus('matchmaking…');
+    // Correct for device clock skew BEFORE judging any lobby's freshness — a
+    // headset clock off by >LOBBY_FRESH_MS otherwise sees every live lobby as
+    // stale and never matches (the "both searching, never pair" bug).
+    await syncServerClock();
+    if (this.closed) return;
     const lobbies = collection(db(), 'lobbies');
 
     const claimed = await this.tryClaimLobby(lobbies);
@@ -140,6 +146,7 @@ export class WebRtcTransport implements Transport {
    */
   async hostPrivate(): Promise<string> {
     this.events.onStatus('creating private match…');
+    await syncServerClock();
     if (!(await this.setupConnection())) throw new Error('cancelled');
     this.isCaller = true;
     const code = await this.allocateCode();
@@ -152,6 +159,7 @@ export class WebRtcTransport implements Transport {
   /** Join a private match by code: claim its lobby and answer the host's offer. */
   async joinPrivate(code: string): Promise<void> {
     this.events.onStatus('joining…');
+    await syncServerClock();
     const ref = doc(collection(db(), 'privateLobbies'), code);
     // Claim it first (validates the code) so a bad code never prompts for mic.
     await runTransaction(db(), async (txn) => {
@@ -159,7 +167,7 @@ export class WebRtcTransport implements Transport {
       if (!snap.exists()) throw new Error('code not found');
       if (snap.data()?.open !== true) throw new Error('match already started');
       const created = (snap.data()?.createdAt?.toMillis?.() as number | undefined) ?? 0;
-      if (Date.now() - created > PRIVATE_FRESH_MS) throw new Error('code expired');
+      if (serverNow() - created > PRIVATE_FRESH_MS) throw new Error('code expired');
       txn.update(ref, { open: false, claimedAt: serverTimestamp() });
     });
     if (this.closed) return;
@@ -189,7 +197,7 @@ export class WebRtcTransport implements Transport {
           if (snap.exists()) {
             const created = (snap.data()?.createdAt?.toMillis?.() as number | undefined) ?? 0;
             // Only reuse a code whose lobby is dead; a live one is taken.
-            if (snap.data()?.open === true && Date.now() - created < PRIVATE_FRESH_MS) {
+            if (snap.data()?.open === true && serverNow() - created < PRIVATE_FRESH_MS) {
               throw new Error('taken');
             }
           }
@@ -283,7 +291,7 @@ export class WebRtcTransport implements Transport {
     lobbies: ReturnType<typeof collection>,
   ): Promise<DocumentReference | null> {
     const open = await getDocs(query(lobbies, where('open', '==', true), limit(10)));
-    const now = Date.now();
+    const now = serverNow();
     for (const snap of open.docs) {
       if (!lobbyFresh(snap.data(), now)) continue; // a ghost — skip it
       try {
@@ -344,7 +352,7 @@ export class WebRtcTransport implements Transport {
     const lobbies = collection(db(), 'lobbies');
     const open = await getDocs(query(lobbies, where('open', '==', true), limit(10)));
     if (this.closed || this.matched || !this.lobbyRef) return;
-    const now = Date.now();
+    const now = serverNow();
     const myId = this.lobbyRef.id;
     for (const snap of open.docs) {
       if (snap.id === myId) continue;

@@ -13,6 +13,7 @@
  */
 
 import { FIREBASE_ENABLED } from './firebaseConfig.js';
+import { serverNow, syncServerClock } from './serverClock.js';
 
 /** Lobbies not heartbeated within this are abandoned tabs — don't count them as
  *  searchers (mirrors LOBBY_FRESH_MS in webrtcTransport.ts). */
@@ -42,10 +43,11 @@ export function startQueueWatch(onCount: CountListener): void {
       const appFb = apps.length ? getApp() : initializeApp(firebaseConfig);
       const lobbies = collection(getFirestore(appFb), 'lobbies');
 
+      void syncServerClock(); // correct for device clock skew (see serverClock.ts)
       const unsub = onSnapshot(
         query(lobbies, where('open', '==', true)),
         (snap) => {
-          const now = Date.now();
+          const now = serverNow();
           let count = 0;
           snap.forEach((doc) => {
             const data = doc.data();
