@@ -87,7 +87,7 @@ export class TvSystem extends createSystem({}) {
       ctx.textAlign = 'left';
       ctx.fillStyle = '#ffffff';
       ctx.font = "700 26px 'Arial Narrow', system-ui, sans-serif";
-      ctx.fillText('#  iron-balls  ·  live chat', PAD, HEADER_H / 2 + 2);
+      ctx.fillText('#  discord', PAD, HEADER_H / 2 + 2);
       const live = pub.online && pub.discord.length > 0;
       ctx.fillStyle = live ? '#3ba55d' : '#a0a4ab';
       ctx.beginPath();

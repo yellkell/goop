@@ -1046,8 +1046,8 @@ function buildFightHall(root: Group): {
   // The east wall carries the scoreboards + doorway, and the benches are low, so
   // eye-height prints read cleanly above the crowd. A few of each, some wonky.
   // Bigger than the pub-room ones to suit the venue's tall walls.
-  const HP_W = 0.7;
-  const HP_H = 1.0;
+  const HP_W = 1.05;
+  const HP_H = 1.5;
   const hallPoster = (url: string, x: number, y: number, z: number, ry: number, tilt: number): void => {
     const holder = new Group();
     holder.position.set(x, y, z);
@@ -1058,12 +1058,12 @@ function buildFightHall(root: Group): {
   const NZ = hall.minZ + 0.05; // north wall (faces +z)
   const SZ = hall.maxZ - 0.05; // south wall (faces −z)
   const WX = hall.minX + 0.05; // far-west wall (faces +x)
-  hallPoster('posters/split.png', cx + 2.6, 1.95, NZ, 0, 0.05);
-  hallPoster('posters/grow.png', cx - 3.0, 2.05, NZ, 0, -0.04);
-  hallPoster('posters/shrink.jpg', cx - 2.4, 1.95, SZ, Math.PI, 0.06);
-  hallPoster('posters/split.png', cx + 3.2, 1.85, SZ, Math.PI, -0.03);
-  hallPoster('posters/grow.png', WX, 2.0, -3.2, Math.PI / 2, 0.04);
-  hallPoster('posters/shrink.jpg', WX, 1.9, 3.6, Math.PI / 2, -0.05);
+  hallPoster('posters/split.png', cx + 2.8, 2.2, NZ, 0, 0.05);
+  hallPoster('posters/grow.png', cx - 3.2, 2.3, NZ, 0, -0.04);
+  hallPoster('posters/shrink.jpg', cx - 2.6, 2.2, SZ, Math.PI, 0.06);
+  hallPoster('posters/split.png', cx + 3.4, 2.1, SZ, Math.PI, -0.03);
+  hallPoster('posters/grow.png', WX, 2.25, -3.4, Math.PI / 2, 0.04);
+  hallPoster('posters/shrink.jpg', WX, 2.15, 3.8, Math.PI / 2, -0.05);
 
   return {
     consolePanels: [consolePanels[0], consolePanels[1]],
@@ -1085,8 +1085,8 @@ function buildPubTv(root: Group, x: number, y: number, z: number): Panel {
   g.name = 'pub-tv';
   g.position.set(x, y, z); // screen faces +z (into the room)
 
-  const SCREEN_W = 1.34;
-  const SCREEN_H = 0.75; // ~16:9
+  const SCREEN_W = 1.0;
+  const SCREEN_H = 0.56; // ~16:9
   const bezelMat = new MeshStandardMaterial({ color: 0x0a0b0d, metalness: 0.25, roughness: 0.55 });
   const bezel = new Mesh(new BoxGeometry(SCREEN_W + 0.12, SCREEN_H + 0.12, 0.06), bezelMat);
   bezel.position.set(0, 0, -0.035);
@@ -1112,7 +1112,7 @@ function buildPubTv(root: Group, x: number, y: number, z: number): Panel {
 }
 
 /** Radius of the fight-hall disco ball (metres) — big, it's a centrepiece. */
-const DISCO_R = 1.0;
+const DISCO_R = 0.8;
 
 /** Mirror-tile texture for the disco ball: a grid of bright facets with dark
  *  grout between them, so the sphere reads as tiled glass even before it
@@ -1129,8 +1129,8 @@ function discoTileTexture(): CanvasTexture {
   const cell = S / n;
   for (let y = 0; y < n; y++) {
     for (let x = 0; x < n; x++) {
-      const b = 150 + ((x * 7 + y * 13) % 11) * 9; // 150..240, varied per tile
-      ctx.fillStyle = `rgb(${b},${b},${Math.min(255, b + 22)})`;
+      const b = 190 + ((x * 7 + y * 13) % 11) * 6; // 190..250, bright varied tiles
+      ctx.fillStyle = `rgb(${b},${b},${Math.min(255, b + 18)})`;
       ctx.fillRect(x * cell + gap, y * cell + gap, cell - gap * 2, cell - gap * 2);
     }
   }
@@ -1146,10 +1146,10 @@ function buildDiscoball(): Group {
   g.name = 'discoball';
   const ballMat = new MeshStandardMaterial({
     map: discoTileTexture(),
-    metalness: 1,
-    roughness: 0.18,
-    emissive: 0x2a3550,
-    emissiveIntensity: 0.22,
+    metalness: 0.9, // a touch less mirror so the bright tiles read in the dim hall
+    roughness: 0.26,
+    emissive: 0x5566aa,
+    emissiveIntensity: 0.6, // self-lit so it never goes murky between glints
     flatShading: true, // facets give the mirror-tile sparkle as it turns
   });
   const ball = new Mesh(new SphereGeometry(DISCO_R, 32, 24), ballMat);

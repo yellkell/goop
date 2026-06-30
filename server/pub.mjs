@@ -396,7 +396,17 @@ const DISCORD_POLL_MS = 7000; // well within Discord's REST rate limits
 const DISCORD_CACHE_MAX = 25; // recent history handed to each joiner
 let discordCache = []; // chronological (oldest first)
 let discordLastId = null;
-let discordWarned = false;
+/** Human-readable relay state, surfaced at GET / for quick diagnosis. */
+let discordStatus = DISCORD_TOKEN ? 'starting' : 'off (no DISCORD_BOT_TOKEN)';
+let lastLoggedStatus = '';
+
+function setDiscordStatus(s) {
+  discordStatus = s;
+  if (s !== lastLoggedStatus) {
+    lastLoggedStatus = s;
+    console.log(`[iron-balls-pub] discord: ${s}`);
+  }
+}
 
 function hslToRgbInt(h, s, l) {
   const a = s * Math.min(l, 1 - l);
@@ -431,21 +441,30 @@ function cleanDiscord(m) {
 }
 
 async function pollDiscord() {
+  if (typeof fetch !== 'function') {
+    setDiscordStatus('error: this Node has no global fetch (need Node 18+)');
+    return;
+  }
   try {
     const res = await fetch(
       `https://discord.com/api/v10/channels/${DISCORD_CHANNEL_ID}/messages?limit=20`,
       { headers: { Authorization: `Bot ${DISCORD_TOKEN}` } },
     );
     if (!res.ok) {
-      if (!discordWarned) {
-        console.warn(`[iron-balls-pub] discord fetch ${res.status} — check DISCORD_BOT_TOKEN and the bot's access to the channel`);
-        discordWarned = true;
-      }
+      const hint =
+        res.status === 401 ? 'bad token'
+        : res.status === 403 ? "bot not in the server, or missing View Channel / Read Message History"
+        : res.status === 404 ? 'channel id not found (or bot cannot see it)'
+        : res.status === 429 ? 'rate limited — backing off'
+        : '';
+      setDiscordStatus(`http ${res.status}${hint ? ` — ${hint}` : ''}`);
       return;
     }
-    discordWarned = false;
     const arr = await res.json();
-    if (!Array.isArray(arr)) return;
+    if (!Array.isArray(arr)) {
+      setDiscordStatus('error: unexpected response shape');
+      return;
+    }
     const mapped = arr
       .reverse() // the API returns newest-first → make it chronological
       .filter((m) => m && (m.type === 0 || m.type === 19)) // default + reply only
@@ -457,7 +476,13 @@ async function pollDiscord() {
         ts: Date.parse(m.timestamp || '') || Date.now(),
       }))
       .filter((m) => m.content);
-    if (mapped.length === 0) return;
+    if (mapped.length === 0) {
+      // Got messages but none had readable text — almost always the privileged
+      // Message Content Intent being off (toggle it on the bot's page).
+      const hadAny = arr.some((m) => m && (m.type === 0 || m.type === 19));
+      setDiscordStatus(hadAny ? 'connected but messages have NO content — enable Message Content Intent' : 'connected — channel has no messages yet');
+      return;
+    }
 
     // New = anything with a higher snowflake than the last we relayed. (Robust to
     // edits/deletes; the first poll seeds the cache silently with no broadcast.)
@@ -474,9 +499,10 @@ async function pollDiscord() {
     }
     discordCache = mapped.slice(-DISCORD_CACHE_MAX);
     discordLastId = mapped[mapped.length - 1].id;
+    setDiscordStatus(`ok — ${discordCache.length} cached`);
     if (newOnes.length) broadcast({ t: 'discord', messages: newOnes });
-  } catch {
-    /* network hiccup (or no global fetch) — just try again next tick */
+  } catch (err) {
+    setDiscordStatus(`error: ${err?.message || err}`);
   }
 }
 
@@ -516,6 +542,13 @@ const http = createServer((req, res) => {
       punters: players.size,
       snakeHi: data.snakeHi,
       voice: LK_READY ? 'livekit' : 'off',
+      // Quick Discord-relay diagnosis — open this URL in a browser to read it.
+      discord: {
+        configured: Boolean(DISCORD_TOKEN),
+        channel: DISCORD_CHANNEL_ID,
+        cached: discordCache.length,
+        status: discordStatus,
+      },
     }),
   );
 });
