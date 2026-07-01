@@ -181,10 +181,11 @@ export class WebRtcTransport implements Transport {
    * Host a PUBLIC ranked room, listed in the server browser: create an open
    * doc in `rankedRooms` tagged with your name, publish an offer, and wait for
    * a challenger to pick it out of the list. Heartbeats `seen` so a dropped
-   * host ages out of everyone's browser. Resolves once the room is live and
-   * waiting (you're the caller, side 0).
+   * host ages out of everyone's browser. Resolves with the room's doc id once
+   * it's live and waiting (you're the caller, side 0) — the browser uses that
+   * id to mark your own row in the list.
    */
-  async hostRanked(name: string): Promise<void> {
+  async hostRanked(name: string): Promise<string> {
     this.events.onStatus('opening your server…');
     await syncServerClock();
     if (!(await this.setupConnection())) throw new Error('cancelled');
@@ -201,7 +202,8 @@ export class WebRtcTransport implements Transport {
     if (this.closed) throw new Error('cancelled');
     // Keep the room fresh in the browser until a challenger claims it.
     this.startRankedHeartbeat();
-    this.events.onStatus('waiting for a challenger…');
+    this.events.onStatus('waiting for an opponent…');
+    return ref.id;
   }
 
   /** Join a listed ranked room by its doc id: claim it, then answer the host. */
