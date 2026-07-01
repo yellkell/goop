@@ -348,6 +348,23 @@ function drawDuelRoot(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | n
     rankedOff,
   );
 
+  // Live "N open" badge on the RANKED plate — how many servers are up to join.
+  if (!queueing && !rankedOff && app.rankedRooms.length > 0) {
+    const label = `${app.rankedRooms.length} OPEN`;
+    ctx.font = '800 16px system-ui, sans-serif';
+    const pillW = ctx.measureText(label).width + 34, pillH = 24;
+    const px = PW - 70 - pillW, py = 90;
+    plate(ctx, px, py, pillW, pillH, { cut: 8, fill: 'rgba(79,183,255,0.22)', stroke: UI.cool, rivets: false });
+    ctx.fillStyle = UI.coolBright;
+    ctx.beginPath();
+    ctx.arc(px + 14, py + pillH / 2, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.textAlign = 'left';
+    ctx.fillStyle = UI.coolBright;
+    ctx.fillText(label, px + 24, py + pillH / 2 + 1);
+    ctx.textAlign = 'center';
+  }
+
   // QUICK MATCH — drops you straight onto a bot, but keeps hunting; a human who
   // turns up pulls you into the live bout.
   buttonPlate(ctx, 70, 156, PW - 140, 66, 'QUICK MATCH', UI.ember, hoverAction === 'quick-match');

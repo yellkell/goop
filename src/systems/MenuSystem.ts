@@ -979,14 +979,15 @@ export class MenuSystem extends createSystem({}) {
     if (inLobby && app.state === 'menu' && app.fromRanked && app.duelView === 'root') {
       app.duelView = 'browser';
     }
-    // The ranked room list is polled only while the browser is actually open.
-    if (inLobby && app.duelView === 'browser') {
+    // Watch the open ranked rooms across the whole lobby (not just inside the
+    // browser) so the RANKED button can show a live "N open" count.
+    if (inLobby) {
       startRankedWatch((rooms) => {
         app.rankedRooms = rooms;
       });
     } else {
       stopRankedWatch();
-      if (!inLobby) app.rankedRooms = [];
+      app.rankedRooms = [];
     }
 
     // The action panel only lives inside training runs and bouts; the
