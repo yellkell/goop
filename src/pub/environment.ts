@@ -328,8 +328,8 @@ export function buildPub(world: World): PubRefs {
   // The hand-made IRON BALLS CLUB nixie-tube sign on the back-bar wall (the webp
   // if present, procedural neon fallback otherwise — see signs.ts). buildSign
   // letterbox-fits the art to its true aspect, so the box size just caps it.
-  const sign = buildSign('signs/nixiepng.png', 1.12, 1.12);
-  sign.position.set(0, 1.95, -D + 0.03);
+  const sign = buildSign('signs/nixiepng.png', 1.5, 1.0);
+  sign.position.set(0, 1.9, -D + 0.03);
   root.add(sign);
 
   // Flat-screen TV hung over the bar (off to the bar's west end so it clears the
@@ -1009,8 +1009,8 @@ function buildFightHall(root: Group): {
   // (PNG, neon fallback) above a health/status panel — no "FIRE FIGHT" text.
   // West: high on the far wall, facing back toward the door (+x).
   // buildSign letterbox-fits the art, so these boxes just cap the size.
-  const fightSign1 = buildSign('signs/nixiepng.png', 1.68, 1.68);
-  fightSign1.position.set(hall.minX + 0.04, 3.45, 0);
+  const fightSign1 = buildSign('signs/nixiepng.png', 2.85, 1.9);
+  fightSign1.position.set(hall.minX + 0.04, 3.55, 0);
   fightSign1.rotation.y = Math.PI / 2;
   root.add(fightSign1);
   const fightDisplay = new Panel(3.2, 1.1);
@@ -1022,8 +1022,8 @@ function buildFightHall(root: Group): {
 
   // East: above the door you came in by, facing into the hall (−x).
   const doorMidZ = (FIGHT.door.z0 + FIGHT.door.z1) / 2;
-  const fightSign2 = buildSign('signs/nixiepng.png', 1.4, 1.4);
-  fightSign2.position.set(hall.maxX - 0.04, 3.8, doorMidZ);
+  const fightSign2 = buildSign('signs/nixiepng.png', 1.8, 1.2);
+  fightSign2.position.set(hall.maxX - 0.04, 3.9, doorMidZ);
   fightSign2.rotation.y = -Math.PI / 2;
   root.add(fightSign2);
   const fightDisplay2 = new Panel(3.0, 1.0);
