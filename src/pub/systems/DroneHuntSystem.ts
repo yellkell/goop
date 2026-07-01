@@ -1,5 +1,5 @@
 /**
- * DRONE HUNT — the corner arcade cabinet (replaces IRON SNAKE).
+ * OCTA HUNT — the corner arcade cabinet (replaces IRON SNAKE).
  *
  * A light-gun shooter: NO joystick. You point your controller at the screen and
  * pull the trigger — a crosshair tracks your aim, scrap drones fly across the
@@ -421,10 +421,10 @@ export class DroneHuntSystem extends createSystem({}) {
     const k = KINDS[d.kind];
     ctx.save();
     ctx.translate(d.x, d.y);
-    // Hex body.
+    // Octagon body (flat top/bottom) — the "octa" you're hunting.
     ctx.beginPath();
-    for (let i = 0; i < 6; i++) {
-      const a = (i / 6) * Math.PI * 2 + Math.PI / 6;
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
       const px = Math.cos(a) * d.r;
       const py = Math.sin(a) * d.r;
       if (i === 0) ctx.moveTo(px, py);
@@ -542,7 +542,7 @@ export class DroneHuntSystem extends createSystem({}) {
     ctx.textAlign = 'center';
     ctx.fillStyle = '#ff8c1a';
     ctx.font = '900 38px "Courier New", monospace';
-    ctx.fillText('DRONE HUNT', W / 2, 96);
+    ctx.fillText('OCTA HUNT', W / 2, 96);
     ctx.font = '16px "Courier New", monospace';
     ctx.fillStyle = '#9fc4d6';
     ctx.fillText(`HI-SCORE  ${hi.score}  ${hi.name.slice(0, 10).toUpperCase()}`, W / 2, 134);

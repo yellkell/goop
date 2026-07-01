@@ -1815,7 +1815,9 @@ export class FightSystem extends createSystem({}) {
         ctx.fillStyle = colour;
         ctx.fillText(name.toUpperCase().slice(0, 12), x + 28, boardY + 56);
         this.drawPips(ctx, x + boardW - 26, boardY + 52, pips, colour);
-        solidBar(ctx, x + 28, boardY + 92, boardW - 56, 58, hp, colour);
+        // Health bar goes red in the danger zone (below a quarter), matching
+        // the arena HUD, so spectators can read who's on the ropes.
+        solidBar(ctx, x + 28, boardY + 92, boardW - 56, 58, hp, hp < 0.25 ? UI.danger : colour);
       }
 
       // Centre column: the verdict headline above a big round clock on its own

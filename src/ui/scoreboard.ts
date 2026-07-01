@@ -205,12 +205,14 @@ function fmtTime(seconds: number): string {
 
 function verdictAccent(message: string): string {
   if (message.includes('LOSE') || message === 'LOSS' || message === "KO'D") return UI.coolBright;
-  // Match the countdown art: 3 & 2 glow blue, 1 glows red (like FIGHT).
+  // Match the neon plate art: the countdown digits 3 & 2 glow blue, 1 glows red
+  // (like FIGHT); the verdict plates (KO / WIN / TIME) are all blue neon, so
+  // their auras glow blue to sit under them cleanly.
   if (message === '3' || message === '2') return UI.cool;
   if (message === '1') return UI.danger;
   if (message === 'DRAW') return UI.amber;
-  if (message === 'FIGHT' || message === 'TIME') return UI.danger;
-  if (message === 'WIN') return UI.amber;
+  if (message === 'FIGHT') return UI.danger;
+  if (message === 'KO' || message === 'WIN' || message === 'YOU WIN' || message === 'TIME') return UI.cool;
   return UI.emberBright;
 }
 
@@ -365,7 +367,10 @@ export function createScoreboard(scene: Scene): Scoreboard {
     // The health readout gets the only solid-ish backing on the board — one
     // continuous bar that slides with every point (no chunky 5-point steps).
     plate(ctx, 28, 124, W - 56, 110, { cut: 16, fill: UI.ink, rivets: false });
-    solidBar(ctx, 52, 148, W - 104, 60, hpFrac, neon);
+    // Fighter in the danger zone: the bar goes red once health dips below a
+    // quarter, so a glance reads "nearly out" even on a teammate's board.
+    const barColour = hpFrac < 0.25 ? UI.danger : neon;
+    solidBar(ctx, 52, 148, W - 104, 60, hpFrac, barColour);
     scorePips(ctx, 70, 308, pips, neon);
     tex.needsUpdate = true;
   };

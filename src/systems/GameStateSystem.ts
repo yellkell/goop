@@ -230,7 +230,7 @@ export class GameStateSystem extends createSystem({
     match.phase = 'roundOver';
     match.resultTimer = MATCH.roundOverDelay;
     match.message =
-      winnerTeam === undefined ? 'DRAW' : result === 'ko' ? (iWon ? 'KO' : "KO'D") : iWon ? 'WIN' : 'LOSS';
+      winnerTeam === undefined ? 'DRAW' : result === 'ko' ? (iWon ? 'KO' : "KO'D") : 'TIME';
     sfx.roundEnd(winnerTeam === undefined ? 'draw' : iWon);
   }
 
@@ -384,7 +384,7 @@ export class GameStateSystem extends createSystem({
     }
     match.phase = 'roundOver';
     match.resultTimer = MATCH.roundOverDelay;
-    match.message = outcome === 'draw' ? 'DRAW' : result === 'ko' ? (outcome === 'win' ? 'KO' : "KO'D") : outcome === 'win' ? 'WIN' : 'LOSS';
+    match.message = outcome === 'draw' ? 'DRAW' : result === 'ko' ? (outcome === 'win' ? 'KO' : "KO'D") : 'TIME';
     sfx.roundEnd(outcome === 'draw' ? 'draw' : outcome === 'win');
     if (app.mode === 'net') this.echoState();
   }

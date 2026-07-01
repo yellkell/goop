@@ -108,7 +108,7 @@ function buildPanel(): HTMLDivElement {
   const head = document.createElement('div');
   head.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;';
   const title = document.createElement('strong');
-  title.textContent = 'PUB ADMIN';
+  title.textContent = 'CLUB ADMIN';
   title.style.cssText = 'letter-spacing:0.06em;color:#ffb000;';
   const close = document.createElement('button');
   close.textContent = '✕';

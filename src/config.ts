@@ -65,7 +65,7 @@ export const CURRENCY = {
 };
 
 /**
- * Where the IRON BALLS PUB social area lives. It builds side by side with
+ * Where the IRON BALLS CLUB social area lives. It builds side by side with
  * the arena in this same app (see vite.config.ts rollup inputs: pub.html),
  * so the lobby button is one page hop away. Override with ?pub=<url>.
  */

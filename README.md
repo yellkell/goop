@@ -139,7 +139,7 @@ Lineage: forked gameplay skeleton from `yellkell/glasston` (Blaston-style
 play space, IK body hitboxes, match flow) and the fire rendering from
 `yellkell/flamethrowerxr`, rebuilt into one game.
 
-## Iron Balls Pub (pub social scene — `/pub.html`)
+## Iron Balls Club (pub social scene — `/pub.html`)
 
 A separate 10–12 player social hangout that ships alongside the arena: an
 English pub done in the same gritty diamond-plate / gunmetal / hazard-amber

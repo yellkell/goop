@@ -1,5 +1,5 @@
 /**
- * IRON BALLS PUB — entry point for the pub social scene.
+ * IRON BALLS CLUB — entry point for the pub social scene.
  *
  * A 10–12 player VR local: low steel ceiling, diamond-plate underfoot, pints
  * you can stack (or lob at your mates, who can catch them), communal darts
@@ -74,12 +74,12 @@ function resolveName(): string {
 
 let fullNotice: Panel | null = null;
 
-/** Hang a "PUB IS FULL" stencil sign at eye level just inside the door. */
+/** Hang a "CLUB IS FULL" stencil sign at eye level just inside the door. */
 function showFullNotice(world: World): void {
   if (fullNotice) return; // only once
   const panel = new Panel(1.5, 0.82, 384);
   panel.setLines([
-    { text: 'THE PUB IS FULL', size: 58, colour: '#ffb000', bold: true },
+    { text: 'THE CLUB IS FULL', size: 58, colour: '#ffb000', bold: true },
     { text: '12 / 12 PUNTERS IN', size: 30 },
     { text: "You're in a quiet side room —", size: 26, colour: '#aeb6c2' },
     { text: 'come back when a stool frees up.', size: 26, colour: '#aeb6c2' },
@@ -174,5 +174,5 @@ World.create(container, {
   }
 
   // eslint-disable-next-line no-console
-  console.info('[IRON BALLS PUB] Doors open. Mind the low beams.');
+  console.info('[IRON BALLS CLUB] Doors open. Mind the low beams.');
 });

@@ -512,7 +512,7 @@ function hitInfo(_u: number, v: number): MenuAction | null {
 function drawInfoRoot(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
   panelBg(ctx, false, UI.text, GAME_TITLE);
 
-  buttonPlate(ctx, 70, 104, PW - 140, 96, 'IRON BALLS PUB', UI.cool, hoverAction === 'open-pub');
+  buttonPlate(ctx, 70, 104, PW - 140, 96, 'IRON BALLS CLUB', UI.cool, hoverAction === 'open-pub');
 
   // Live headcount riding the top-right of the PUB plate — the mirror of the
   // 1V1 panel's searcher badge, but the total occupancy across pub regions.
@@ -554,9 +554,9 @@ function hitInfoRoot(v: number): MenuAction | null {
 }
 
 /** The pub-region picker — pick EU or USA, each with its live `X/12` headcount,
- *  shown when you tap IRON BALLS PUB. One plate per region, then BACK. */
+ *  shown when you tap IRON BALLS CLUB. One plate per region, then BACK. */
 function drawPubPicker(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
-  panelBg(ctx, false, UI.text, 'PICK A PUB');
+  panelBg(ctx, false, UI.text, 'PICK A CLUB');
 
   const accents = [UI.cool, UI.ember, UI.amber, UI.coolBright];
   const top = 96;
