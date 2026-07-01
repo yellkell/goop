@@ -1,5 +1,5 @@
 /**
- * IRON BALLS PUB — the pub itself.
+ * IRON BALLS CLUB — the pub itself.
  *
  * A low-ceilinged steel boozer in the FIRE FIGHT language: diamond-plate
  * floor, riveted gunmetal walls, hazard-amber trim, I-beams you can almost
@@ -325,7 +325,7 @@ export function buildPub(world: World): PubRefs {
     root.add(bottle);
   }
 
-  // The hand-made IRON BALLS PUB nixie-tube sign on the back-bar wall (the webp
+  // The hand-made IRON BALLS CLUB nixie-tube sign on the back-bar wall (the webp
   // if present, procedural neon fallback otherwise — see signs.ts). buildSign
   // letterbox-fits the art to its true aspect, so the box size just caps it.
   const sign = buildSign('signs/nixiepng.png', 1.12, 1.12);

@@ -1,5 +1,5 @@
 /**
- * Wire protocol for IRON BALLS PUB — the pub social scene. JSON over a
+ * Wire protocol for IRON BALLS CLUB — the pub social scene. JSON over a
  * WebSocket to server/pub.mjs: one shared room, up to 12 punters.
  *
  * Unlike the 1v1 bout relay, the pub server holds real state:

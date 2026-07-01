@@ -1,5 +1,5 @@
 /**
- * IRON BALLS PUB — layout + tunables for the pub social scene.
+ * IRON BALLS CLUB — layout + tunables for the pub social scene.
  *
  * One low-ceilinged steel boozer, roughly 9 m × 6 m, everything in metres
  * and world space (no mirroring — all twelve punters share one room):
