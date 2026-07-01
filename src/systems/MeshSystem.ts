@@ -39,6 +39,10 @@ import { FIREBALL, MODE_LAYOUT, NET } from '../config.js';
 
 const HANDS = ['left', 'right'] as const;
 const STALE_MS = 7000; // no pose from a seat for this long → its peer is dead
+// The host echoes `astate` ~every 0.4 s; no echo for this long → the host has
+// died. Faster than the pose backstop so authority migrates quickly, but well
+// above normal jitter so a brief lag spike doesn't wrongly depose a live host.
+const HOST_STALE_MS = 3000;
 const _p = new Vector3();
 const _q = new Quaternion();
 const _v = new Vector3();
@@ -70,6 +74,9 @@ export class MeshSystem extends createSystem({
    *  for STALE_MS is declared dead (headset died / froze), faster than WebRTC's
    *  own ICE timeout. */
   private lastPose: number[] = [];
+  /** Wall-clock (ms) of the last `astate` from the host — no echo for
+   *  HOST_STALE_MS means the host died, so we depose it and authority migrates. */
+  private lastAstate = 0;
   private sendTimer = 0;
   private stateTimer = 0;
   private lastReset = -1;
@@ -119,6 +126,7 @@ export class MeshSystem extends createSystem({
           this.lastReset = -1;
           this.iamTimer = 0; // introduce myself the moment the bout goes live
           this.lastPose = []; // fresh pose-staleness windows for this bout
+          this.lastAstate = performance.now(); // grace before watching the host
         }
       }
       return;
@@ -137,6 +145,7 @@ export class MeshSystem extends createSystem({
 
     this.receive();
     this.checkStalePeers();
+    this.checkHostAlive();
     this.broadcastIam(delta);
     this.smooth(delta);
     this.sendPose(delta);
@@ -275,8 +284,26 @@ export class MeshSystem extends createSystem({
     }
   }
 
+  /**
+   * Depose a dead host fast. A guest that hasn't heard the host's `astate` for
+   * HOST_STALE_MS drops the host seat, so authority migrates to the next live
+   * seat (mesh.isHost is the lowest live seat) instead of everyone freezing for
+   * the full pose-staleness window. Re-arms the clock on each depose so the new
+   * authority gets its own grace to start echoing (no cascade).
+   */
+  private checkHostAlive(): void {
+    if (mesh.isHost()) return; // I'm authority — nothing to watch
+    const now = performance.now();
+    if (this.lastAstate && now - this.lastAstate > HOST_STALE_MS) {
+      const host = mesh.hostSeat();
+      if (host >= 0 && host !== mesh.mySeat) mesh.dropSeat(host);
+      this.lastAstate = now; // grace for the new authority to start echoing
+    }
+  }
+
   private apply(seat: number, msg: PeerMessage): void {
     if (msg.k === 'astate') {
+      this.lastAstate = performance.now(); // the host is alive and echoing
       if (!mesh.isHost()) this.applyHostState(msg);
       return;
     }

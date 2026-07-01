@@ -204,6 +204,9 @@ export class MeshImpl {
 
   /** Publish `occupants` from the raw seats with any dropped ids masked to ''. */
   private applyOccupants(): void {
+    // Forget a drop once the doc no longer holds that dead id there (seat freed
+    // or reclaimed by a fresh player), so a replacement isn't wrongly masked.
+    for (const [seat, id] of this.droppedIds) if (this.rawSeats[seat] !== id) this.droppedIds.delete(seat);
     this.state.occupants = this.rawSeats.map((s, i) => (s && this.droppedIds.get(i) === s ? '' : s));
     this.state.full = this.state.occupants.length > 0 && this.state.occupants.every((s) => s);
   }
@@ -219,6 +222,26 @@ export class MeshImpl {
     if (!id || this.droppedIds.get(seat) === id) return;
     this.droppedIds.set(seat, id);
     this.applyOccupants();
+    this.vacateSeatInDoc(seat, id);
+  }
+
+  /** Free a dead player's seat in the room doc so a replacement can claim it —
+   *  a hard-disconnected client never cleans up its own seat. Best-effort +
+   *  idempotent (every survivor may attempt it; the id guard makes all but the
+   *  first bail). Only re-opens the room to joiners if it's still FILLING; a
+   *  live (locked) bout stays closed. */
+  private vacateSeatInDoc(seat: number, deadId: string): void {
+    const ref = this.roomRef;
+    if (!ref) return;
+    void runTransaction(db(), async (txn) => {
+      const snap = await txn.get(ref);
+      if (!snap.exists()) return;
+      const seats = (snap.data().seats as string[]) ?? [];
+      if (seats[seat] !== deadId) return; // already vacated / reclaimed
+      seats[seat] = '';
+      const locked = snap.data().open === false; // live bout — don't reopen mid-fight
+      txn.update(ref, { seats, open: locked ? false : !seats.every((s) => s) });
+    }).catch(() => {});
   }
 
   // --- mesh signalling (one pair = one `sig` doc) --------------------------

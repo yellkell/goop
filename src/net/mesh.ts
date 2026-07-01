@@ -61,6 +61,11 @@ class Mesh {
     return -1;
   }
 
+  /** The seat currently holding match authority (lowest live seat), or -1. */
+  hostSeat(): number {
+    return this.lowestSeat();
+  }
+
   /** True while I hold match authority — normally seat 0, but if the host's
    *  headset dies I become authority the moment I'm the lowest live seat, so
    *  the bout doesn't freeze for everyone with no one running it. */
