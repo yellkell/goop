@@ -18,7 +18,7 @@ import { createSystem, type Entity } from '@iwsdk/core';
 import { Combatant } from '../components/Combatant.js';
 import { Health } from '../components/Health.js';
 import { match } from '../combat/matchState.js';
-import { applyRoster } from '../combat/setup.js';
+import { applyRoster, syncNetRoster } from '../combat/setup.js';
 import { localLayout } from '../combat/layout.js';
 import { mesh } from '../net/mesh.js';
 import { applyArenaLayout } from '../arena/arena.js';
@@ -113,6 +113,11 @@ export class GameStateSystem extends createSystem({
     }
     this.lastMode = app.mode;
     this.lastArcade = app.arcade;
+
+    // A brawler whose headset died counts as DEAD: deactivate + zero them so
+    // the round resolves and we play on short-handed (not against a frozen,
+    // un-hittable statue). Runs on every client so their local view agrees.
+    if (app.mode === 'net' && app.arcade !== '1v1') syncNetRoster();
 
     const authority = app.mode === 'bot' || app.side === 0;
     if (authority) {

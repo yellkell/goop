@@ -80,6 +80,35 @@ export function applyRoster(): void {
   }
 }
 
+/**
+ * Mid-bout reconciliation for a LIVE mesh brawl: any non-local fighter whose
+ * canonical seat is no longer occupied (a peer whose headset died / dropped)
+ * is marked ELIMINATED — deactivated AND zeroed. That stops it being an
+ * un-hittable frozen statue, drops it out of the HUD, and removes its (frozen,
+ * often full) health from its team's total — so the round resolves by KO and
+ * the bout plays out short-handed instead of running the clock against a ghost.
+ *
+ * Unlike {@link applyRoster} this NEVER refills a living fighter's health and
+ * never re-activates a seat, so it's safe to call every frame. No-op outside a
+ * live net arcade bout. Returns true if a fighter was just eliminated.
+ */
+export function syncNetRoster(): boolean {
+  if (!(app.mode === 'net' && app.arcade !== '1v1')) return false;
+  const roster = localLayout();
+  let changed = false;
+  for (let slot = 1; slot < fighters.length; slot++) {
+    const e = fighters[slot];
+    if (!e || (e.getValue(Combatant, 'active') ?? 0) !== 1) continue; // already out
+    const canonical = slot < roster.length ? roster[slot].canonical : -1;
+    if (canonical < 0 || !mesh.occupants[canonical]) {
+      e.setValue(Combatant, 'active', 0);
+      e.setValue(Health, 'current', 0);
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 /** The combatant entity for a fighter slot (0 = you), if it exists. */
 export function fighterAt(slot: number): Entity | undefined {
   return fighters[slot];

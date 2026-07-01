@@ -24,6 +24,7 @@ interface MeshImplApi {
   queue(mode: ArcadeMode): Promise<void>;
   send(msg: PeerMessage): void;
   lock(): void;
+  dropSeat(seat: number): void;
   close(): void;
 }
 
@@ -52,9 +53,24 @@ class Mesh {
 
   private impl: MeshImplApi | null = null;
 
-  /** True while I host the room (seat 0) — owns match state. */
+  /** The lowest still-occupied seat (dropped seats are masked out of
+   *  `occupants`), or -1 before any occupancy is known. This is the match
+   *  authority — it MIGRATES if the current host disconnects. */
+  private lowestSeat(): number {
+    for (let i = 0; i < this.occupants.length; i++) if (this.occupants[i]) return i;
+    return -1;
+  }
+
+  /** The seat currently holding match authority (lowest live seat), or -1. */
+  hostSeat(): number {
+    return this.lowestSeat();
+  }
+
+  /** True while I hold match authority — normally seat 0, but if the host's
+   *  headset dies I become authority the moment I'm the lowest live seat, so
+   *  the bout doesn't freeze for everyone with no one running it. */
   isHost(): boolean {
-    return this.joined && this.mySeat === 0;
+    return this.joined && this.lowestSeat() === this.mySeat;
   }
 
   /** Begin matchmaking for a mode; lazily loads the Firestore/WebRTC impl. */
@@ -74,6 +90,11 @@ class Mesh {
   /** Host: close the room so it goes live short-handed (FFA after the grace). */
   lock(): void {
     this.impl?.lock();
+  }
+
+  /** Declare a seat dead — its peer went silent (pose-staleness backstop). */
+  dropSeat(seat: number): void {
+    this.impl?.dropSeat(seat);
   }
 
   cancel(): void {
