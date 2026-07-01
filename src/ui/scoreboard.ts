@@ -210,9 +210,9 @@ function verdictAccent(message: string): string {
   // their auras glow blue to sit under them cleanly.
   if (message === '3' || message === '2') return UI.cool;
   if (message === '1') return UI.danger;
-  if (message === 'DRAW') return UI.amber;
   if (message === 'FIGHT') return UI.danger;
-  if (message === 'KO' || message === 'WIN' || message === 'YOU WIN' || message === 'TIME') return UI.cool;
+  if (message === 'KO' || message === 'WIN' || message === 'YOU WIN' || message === 'TIME' || message === 'DRAW')
+    return UI.cool;
   return UI.emberBright;
 }
 
