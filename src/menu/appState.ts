@@ -127,8 +127,18 @@ export const app: {
   ballAttach: [number, number];
   /** Per-fist 'Arc' toggle [left, right]: the ball curves along the punch. */
   ballArc: [boolean, boolean];
-  /** Which face the 1V1 panel shows: the mode list, or the private-match flow. */
-  duelView: 'root' | 'private' | 'hosting' | 'keypad';
+  /**
+   * Which face the 1V1 panel shows: the mode list, the private-match flow, or
+   * the RANKED server browser ('browser') / its host-or-join waiting screen
+   * ('rankedwait').
+   */
+  duelView: 'root' | 'private' | 'hosting' | 'keypad' | 'browser' | 'rankedwait';
+  /** Open ranked rooms for the server browser (live from rankedWatch). */
+  rankedRooms: { id: string; host: string }[];
+  /** In the ranked wait screen: are we the host (true) or a joiner (false)? */
+  rankedHost: boolean;
+  /** We entered the current bout from the ranked browser — return there after. */
+  fromRanked: boolean;
   /** The 5-digit code shown while hosting a private match. */
   privateCode: string;
   /** Digits typed on the join keypad (up to 5). */
@@ -163,6 +173,9 @@ export const app: {
   ballAttach: loadBallAttach(),
   ballArc: loadBallArc(),
   duelView: 'root',
+  rankedRooms: [],
+  rankedHost: false,
+  fromRanked: false,
   privateCode: '',
   codeEntry: '',
   stats: loadStats(),

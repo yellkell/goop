@@ -126,6 +126,48 @@ class NetClient {
     })();
   }
 
+  /** Host a PUBLIC ranked room, listed in the server browser (always P2P). */
+  hostRanked(name: string): void {
+    this.disconnect();
+    const events = this.makeEvents();
+    void (async () => {
+      try {
+        const { WebRtcTransport } = await import('./webrtcTransport.js');
+        const t = new WebRtcTransport(events);
+        this.transport = t;
+        await t.hostRanked(name);
+      } catch (err) {
+        app.netStatus = err instanceof Error ? err.message : 'could not open server';
+        this.disconnect();
+        if (app.state === 'queueing') {
+          app.state = 'menu';
+          app.duelView = 'browser'; // back to the server list
+        }
+      }
+    })();
+  }
+
+  /** Join a listed ranked room by its id (always P2P). */
+  joinRanked(id: string): void {
+    this.disconnect();
+    const events = this.makeEvents();
+    void (async () => {
+      try {
+        const { WebRtcTransport } = await import('./webrtcTransport.js');
+        const t = new WebRtcTransport(events);
+        this.transport = t;
+        await t.joinRanked(id);
+      } catch (err) {
+        app.netStatus = err instanceof Error ? err.message : 'could not join';
+        this.disconnect();
+        if (app.state === 'queueing') {
+          app.state = 'menu';
+          app.duelView = 'browser'; // back to the server list to try another
+        }
+      }
+    })();
+  }
+
   /** Leave the queue (or tear down a live bout). */
   cancel(): void {
     this.disconnect();
@@ -177,6 +219,8 @@ class NetClient {
         const inBotBout = app.state === 'playing' && app.mode === 'bot';
         if (app.state !== 'menu' && !inBotBout) app.state = 'menu';
         if (app.duelView === 'hosting') app.duelView = 'root';
+        // A dropped ranked host/join lands back on the server list, not the menu.
+        if (app.duelView === 'rankedwait') app.duelView = 'browser';
         // Keep hunting the WHOLE bot bout: a background search that dropped (a
         // dead lobby, a connect timeout…) restarts so we never silently stop
         // looking — unless ONLY PLAY BOTS is on.

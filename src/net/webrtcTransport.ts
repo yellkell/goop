@@ -177,6 +177,66 @@ export class WebRtcTransport implements Transport {
     this.armConnectTimeout();
   }
 
+  /**
+   * Host a PUBLIC ranked room, listed in the server browser: create an open
+   * doc in `rankedRooms` tagged with your name, publish an offer, and wait for
+   * a challenger to pick it out of the list. Heartbeats `seen` so a dropped
+   * host ages out of everyone's browser. Resolves once the room is live and
+   * waiting (you're the caller, side 0).
+   */
+  async hostRanked(name: string): Promise<void> {
+    this.events.onStatus('opening your server…');
+    await syncServerClock();
+    if (!(await this.setupConnection())) throw new Error('cancelled');
+    this.isCaller = true;
+    const rooms = collection(db(), 'rankedRooms');
+    const ref = await addDoc(rooms, {
+      open: true,
+      host: name.slice(0, 14) || 'BOXER',
+      createdAt: serverTimestamp(),
+      seen: serverTimestamp(),
+    });
+    if (this.closed) throw new Error('cancelled');
+    await this.runCallerOn(ref);
+    if (this.closed) throw new Error('cancelled');
+    // Keep the room fresh in the browser until a challenger claims it.
+    this.startRankedHeartbeat();
+    this.events.onStatus('waiting for a challenger…');
+  }
+
+  /** Join a listed ranked room by its doc id: claim it, then answer the host. */
+  async joinRanked(id: string): Promise<void> {
+    this.events.onStatus('joining…');
+    await syncServerClock();
+    const ref = doc(collection(db(), 'rankedRooms'), id);
+    // Claim it first so a full/stale room fails before we prompt for the mic.
+    await runTransaction(db(), async (txn) => {
+      const snap = await txn.get(ref);
+      if (!snap.exists()) throw new Error('server not found');
+      if (snap.data()?.open !== true) throw new Error('server already full');
+      if (!lobbyFresh(snap.data(), serverNow())) throw new Error('server went stale');
+      txn.update(ref, { open: false, claimedAt: serverTimestamp() });
+    });
+    if (this.closed) return;
+    if (!(await this.setupConnection())) return;
+    this.isCaller = false;
+    await this.runCallee(ref);
+    this.armConnectTimeout();
+  }
+
+  /**
+   * While hosting a listed ranked room: heartbeat `seen` so a dropped host ages
+   * out of the browser. No cross-over scan (unlike the public queue) — ranked
+   * rooms are joined only by an explicit pick from the list, so two waiting
+   * hosts never need to auto-pair.
+   */
+  private startRankedHeartbeat(): void {
+    this.hostTimer = setInterval(() => {
+      if (this.closed || this.matched || !this.lobbyRef) return;
+      void updateDoc(this.lobbyRef, { seen: serverTimestamp() }).catch(() => {});
+    }, HOST_TICK_MS);
+  }
+
   /** Build the peer connection + voice. Returns false if cancelled meanwhile. */
   private async setupConnection(): Promise<boolean> {
     this.pc = new RTCPeerConnection(ICE_SERVERS);
