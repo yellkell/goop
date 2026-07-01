@@ -64,6 +64,12 @@ export class MeshImpl {
   private mode: ArcadeMode = '2v2';
   private roomRef: DocumentReference | null = null;
   private peers = new Map<number, Peer>();
+  /** Latest raw `seats` from the room doc (before masking dropped peers). */
+  private rawSeats: string[] = [];
+  /** seat → the id we've declared DEAD (headset died / went silent). Masked out
+   *  of `occupants` so a hard-disconnected player stops counting as present,
+   *  even though they never cleaned up their own seat in the room doc. */
+  private droppedIds = new Map<number, string>();
   private roomUnsub: Unsubscribe | null = null;
   private closed = false;
   private micStream: MediaStream | null = null;
@@ -117,6 +123,8 @@ export class MeshImpl {
       peer.pc.close();
     }
     this.peers.clear();
+    this.rawSeats = [];
+    this.droppedIds.clear();
     for (const track of this.micStream?.getTracks() ?? []) track.stop();
     this.micStream = null;
     this.state.voice.clear();
@@ -181,17 +189,36 @@ export class MeshImpl {
     if (!this.roomRef) return;
     this.roomUnsub = onSnapshot(this.roomRef, (snap) => {
       if (!snap.exists() || this.closed) return;
-      const seats = (snap.data().seats as string[]) ?? [];
-      this.state.occupants = seats;
-      this.state.full = seats.length > 0 && seats.every((s) => s);
+      this.rawSeats = (snap.data().seats as string[]) ?? [];
+      this.applyOccupants();
       this.state.locked = snap.data().open === false;
       if (this.state.full) this.state.onStatus('all players in — fight!');
-      for (let seat = 0; seat < seats.length; seat++) {
-        if (seat === this.state.mySeat || !seats[seat] || this.peers.has(seat)) continue;
+      const occ = this.state.occupants; // masked — never (re)connect a dropped seat
+      for (let seat = 0; seat < occ.length; seat++) {
+        if (seat === this.state.mySeat || !occ[seat] || this.peers.has(seat)) continue;
         if (this.state.mySeat < seat) void this.connectAsOfferer(seat);
         else void this.connectAsAnswerer(seat);
       }
     });
+  }
+
+  /** Publish `occupants` from the raw seats with any dropped ids masked to ''. */
+  private applyOccupants(): void {
+    this.state.occupants = this.rawSeats.map((s, i) => (s && this.droppedIds.get(i) === s ? '' : s));
+    this.state.full = this.state.occupants.length > 0 && this.state.occupants.every((s) => s);
+  }
+
+  /** Declare a seat dead (its peer died / went silent). Reachable from the pose
+   *  staleness backstop in MeshSystem, as well as from dropPeer on RTC failure. */
+  dropSeat(seat: number): void {
+    this.dropPeer(seat);
+  }
+
+  private markDropped(seat: number): void {
+    const id = this.rawSeats[seat];
+    if (!id || this.droppedIds.get(seat) === id) return;
+    this.droppedIds.set(seat, id);
+    this.applyOccupants();
   }
 
   // --- mesh signalling (one pair = one `sig` doc) --------------------------
@@ -334,12 +361,16 @@ export class MeshImpl {
 
   private dropPeer(seat: number): void {
     const peer = this.peers.get(seat);
-    if (!peer) return;
-    for (const u of peer.unsubs) u();
-    peer.evt?.close();
-    peer.pose?.close();
-    peer.pc.close();
-    this.peers.delete(seat);
+    if (peer) {
+      for (const u of peer.unsubs) u();
+      peer.evt?.close();
+      peer.pose?.close();
+      peer.pc.close();
+      this.peers.delete(seat);
+    }
     this.state.voice.delete(seat);
+    // Mask the seat so the roster/match layer sees the player as gone — even
+    // though a hard-disconnected client never vacates its own seat in the doc.
+    this.markDropped(seat);
   }
 }

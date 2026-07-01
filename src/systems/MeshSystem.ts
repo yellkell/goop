@@ -38,6 +38,7 @@ import * as sfx from '../audio/sfx.js';
 import { FIREBALL, MODE_LAYOUT, NET } from '../config.js';
 
 const HANDS = ['left', 'right'] as const;
+const STALE_MS = 7000; // no pose from a seat for this long → its peer is dead
 const _p = new Vector3();
 const _q = new Quaternion();
 const _v = new Vector3();
@@ -65,6 +66,10 @@ export class MeshSystem extends createSystem({
   balls: { required: [Fireball] },
 }) {
   private targets: PoseTarget[] = Array.from({ length: MAX_OPPONENTS }, makeTarget);
+  /** Wall-clock (ms) of the last pose from each seat — a seat that goes silent
+   *  for STALE_MS is declared dead (headset died / froze), faster than WebRTC's
+   *  own ICE timeout. */
+  private lastPose: number[] = [];
   private sendTimer = 0;
   private stateTimer = 0;
   private lastReset = -1;
@@ -113,6 +118,7 @@ export class MeshSystem extends createSystem({
           app.mySlot = mesh.mySeat;
           this.lastReset = -1;
           this.iamTimer = 0; // introduce myself the moment the bout goes live
+          this.lastPose = []; // fresh pose-staleness windows for this bout
         }
       }
       return;
@@ -130,6 +136,7 @@ export class MeshSystem extends createSystem({
     app.side = mesh.isHost() ? 0 : 1;
 
     this.receive();
+    this.checkStalePeers();
     this.broadcastIam(delta);
     this.smooth(delta);
     this.sendPose(delta);
@@ -247,6 +254,27 @@ export class MeshSystem extends createSystem({
     for (const { seat, msg } of mesh.inbox.splice(0)) this.apply(seat, msg);
   }
 
+  /**
+   * Backstop for a dead/frozen peer: a live fighter streams poses continuously,
+   * so a seat that goes silent for STALE_MS has died (headset off) — declare it
+   * dead now rather than waiting ~30 s for WebRTC's ICE timeout to fire dropPeer.
+   * dropSeat masks the seat, so next frame syncNetRoster eliminates that fighter
+   * and the round can resolve short-handed. Self-limiting: once masked, the seat
+   * is empty in occupants and skipped here.
+   */
+  private checkStalePeers(): void {
+    const now = performance.now();
+    for (let seat = 0; seat < mesh.occupants.length; seat++) {
+      if (seat === mesh.mySeat || !mesh.occupants[seat] || localIndexOf(seat) <= 0) continue;
+      const last = this.lastPose[seat];
+      if (last == null) {
+        this.lastPose[seat] = now; // first sight — start its grace window
+      } else if (now - last > STALE_MS) {
+        mesh.dropSeat(seat);
+      }
+    }
+  }
+
   private apply(seat: number, msg: PeerMessage): void {
     if (msg.k === 'astate') {
       if (!mesh.isHost()) this.applyHostState(msg);
@@ -267,6 +295,7 @@ export class MeshSystem extends createSystem({
 
     switch (msg.k) {
       case 'pose': {
+        this.lastPose[seat] = performance.now();
         const t = this.targets[oppIdx];
         peerPos(t.headPos, seat, msg.head[0], msg.head[1], msg.head[2]);
         peerQuat(t.headQuat, seat, msg.head[3], msg.head[4], msg.head[5], msg.head[6]);
