@@ -28,6 +28,24 @@ const FIST_CLOSING_SPEED = 1.45;
 const FIST_LOCAL_HAND_SPEED = 1.25;
 const FIST_BUMP_COOLDOWN = 1.25;
 
+/**
+ * A fist bump is mirrored to the rival (see NetworkSystem) so both sides show
+ * the GG even when only one client caught the contact. When BOTH clients do
+ * catch it, each also receives the other's mirror — so a client that showed a
+ * bump within this window suppresses the incoming echo instead of double-popping.
+ */
+const FIST_BUMP_ECHO_MS = 1000;
+let lastFistBumpAt = -1e9;
+/** Stamp that we just showed a fist-bump GG locally (detected or echoed). */
+export function markFistBumpShown(): void {
+  lastFistBumpAt = performance.now();
+}
+/** True if we showed a fist-bump GG very recently — used to drop the mirrored
+ *  echo of a bump we already caught ourselves. */
+export function fistBumpEchoSuppressed(): boolean {
+  return performance.now() - lastFistBumpAt < FIST_BUMP_ECHO_MS;
+}
+
 const _left = new Vector3();
 const _right = new Vector3();
 const _mid = new Vector3();
@@ -131,6 +149,11 @@ export class PlayerGestureSystem extends createSystem({}) {
     if (!best) return;
 
     this.emitGg(best.cue, best.local === 0 ? 'left' : 'right');
+    // Mirror it to the rival so they see the GG too — detection is one-sided
+    // too often to trust each client to catch the same contact. The stamp lets
+    // us drop their echo if they ALSO caught it (see NetworkSystem's 'gg').
+    markFistBumpShown();
+    net.send({ k: 'gg', bump: true });
     this.fistBumpCooldown = FIST_BUMP_COOLDOWN;
   }
 
