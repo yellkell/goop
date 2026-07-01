@@ -76,6 +76,7 @@ import { mesh } from '../net/mesh.js';
 import { UI } from '../ui/industrial.js';
 import { net } from '../net/client.js';
 import { startQueueWatch, stopQueueWatch } from '../net/queueWatch.js';
+import { startRankedWatch, stopRankedWatch } from '../net/rankedWatch.js';
 import { startPubWatch, stopPubWatch } from '../net/pubWatch.js';
 import { PUB_REGIONS } from '../pub/config.js';
 import {
@@ -360,7 +361,8 @@ export class MenuSystem extends createSystem({}) {
     if (
       (action === 'start-training' ||
         action === 'quick-match' ||
-        action === 'ranked-match' ||
+        action === 'ranked-host' ||
+        action.startsWith('ranked-join-') ||
         action === 'arcade-2v2' ||
         action === 'arcade-ffa') &&
       !hasCustomName()
@@ -410,11 +412,34 @@ export class MenuSystem extends createSystem({}) {
         setVoiceEnabled(!voiceEnabled());
         break;
       case 'ranked-match':
-        if (app.onlyBots) break; // disabled — no online queue in only-bots mode
-        // Wait in the lobby for a real human — no bot fallback.
+        if (app.onlyBots) break; // disabled — no online play in only-bots mode
+        // RANKED now opens the server browser: host your own room or join a
+        // listed one. applyState() starts the room-list watch.
         app.arcade = '1v1';
+        app.duelView = 'browser';
+        app.fromRanked = false;
+        break;
+      case 'ranked-host':
+        if (app.onlyBots) break;
+        // Open a public room named after you and wait for a challenger to pick
+        // it out of the list.
+        app.arcade = '1v1';
+        app.duelView = 'rankedwait';
+        app.rankedHost = true;
+        app.fromRanked = true;
         app.state = 'queueing';
-        net.queue();
+        net.hostRanked(myStats().name);
+        break;
+      case 'ranked-back':
+        net.cancel();
+        app.duelView = 'root';
+        app.fromRanked = false;
+        break;
+      case 'ranked-cancel':
+        // Bail out of a host/join and drop back onto the server list.
+        net.cancel();
+        app.state = 'menu';
+        app.duelView = 'browser';
         break;
       case 'quick-match':
         // Drop straight onto a bot. Normally we keep hunting for a human in the
@@ -593,6 +618,14 @@ export class MenuSystem extends createSystem({}) {
             app.infoView = 'root';
             this.gotoPub();
           }
+        } else if (action.startsWith('ranked-join-')) {
+          // Join a listed ranked room by its doc id.
+          app.arcade = '1v1';
+          app.duelView = 'rankedwait';
+          app.rankedHost = false;
+          app.fromRanked = true;
+          app.state = 'queueing';
+          net.joinRanked(action.slice('ranked-join-'.length));
         }
         break;
     }
@@ -939,6 +972,21 @@ export class MenuSystem extends createSystem({}) {
       app.pubCount = -1;
       app.pubRegionCounts = {};
       app.infoView = 'root';
+    }
+
+    // Returning to the lobby from a ranked bout drops you back on the server
+    // list (onMatched left duelView at 'root'), so you can host or join again.
+    if (inLobby && app.state === 'menu' && app.fromRanked && app.duelView === 'root') {
+      app.duelView = 'browser';
+    }
+    // The ranked room list is polled only while the browser is actually open.
+    if (inLobby && app.duelView === 'browser') {
+      startRankedWatch((rooms) => {
+        app.rankedRooms = rooms;
+      });
+    } else {
+      stopRankedWatch();
+      if (!inLobby) app.rankedRooms = [];
     }
 
     // The action panel only lives inside training runs and bouts; the
