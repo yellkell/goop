@@ -93,7 +93,7 @@ interface ActiveAttack {
   time: number;
   chargeTime: number;
   arm: 0 | 1;
-  /** WIDOWMAKER's law: beams re-aim at you until the late lock. */
+  /** VULTURE's law: beams re-aim at you until the late lock. */
   tracks: boolean;
   /** Per-beam lateral offsets, kept so tracking re-aims stay parallel. */
   beamOffsets: number[];
@@ -586,7 +586,7 @@ export class CampaignSystem extends createSystem({
     const a = this.attack!;
     a.time += delta;
 
-    // WIDOWMAKER's law: the beam strips FOLLOW you until the late lock —
+    // VULTURE's law: the beam strips FOLLOW you until the late lock —
     // dodging early just tells it where you were.
     if (a.tracks && a.time < a.chargeTime * CAMPAIGN.beamLockAt) {
       for (let i = 0; i < a.zones.length; i++) {

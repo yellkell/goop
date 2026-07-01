@@ -38,7 +38,7 @@ in-your-face boxing feel.
   ranged strikes whose kill zones charge up visibly on YOUR platform**
   (fist-slam discs, duck-under sweep blades, eye-beam strips, mortar
   barrages), and every fight has its own law — RUSTHOOK's crater detonates
-  *twice*, PISTONKAISER slams on a marching three-beat, WIDOWMAKER's beam
+  *twice*, PISTONKAISER slams on a marching three-beat, VULTURE's beam
   *tracks you* and locks late, JUGGERNAUT's shells leave **burning ground**,
   GOLIATH does all of it and **enrages at half health**. Their armour clanks
   your fire away; damage goes in through the **visor**, the pauldron **pods**

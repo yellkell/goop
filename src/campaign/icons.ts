@@ -5,7 +5,7 @@
  *
  *   0 RUSTHOOK      — a scrapyard crane hook
  *   1 PISTONKAISER  — a drop-forge piston hammer
- *   2 WIDOWMAKER    — an executioner's crosshair
+ *   2 VULTURE    — an executioner's crosshair
  *   3 JUGGERNAUT    — a riveted fortress shield
  *   4 GOLIATH       — the king's crown
  *
@@ -67,7 +67,7 @@ export function drawBossIcon(
       break;
     }
     case 2: {
-      // WIDOWMAKER: crosshair — ring, four ticks, kill dot.
+      // VULTURE: crosshair — ring, four ticks, kill dot.
       ctx.beginPath();
       ctx.arc(0, 0, 30, 0, Math.PI * 2);
       ctx.stroke();

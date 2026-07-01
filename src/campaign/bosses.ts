@@ -84,7 +84,7 @@ export interface BossDef {
  *  II  PISTONKAISER — the rhythm fight. Slams come as a marching three-beat
  *      drumline, each disc running its own countdown; you move on the beat
  *      or you get forged. Sweeps keep you honest between bars.
- *  III WIDOWMAKER — the precision fight. Its beam strip TRACKS you while it
+ *  III VULTURE — the precision fight. Its beam strip TRACKS you while it
  *      charges and only locks in late — an early dodge is a wasted dodge.
  *      The heaviest sweep user; the duel gets personal.
  *  IV  JUGGERNAUT — the ground war. Mortars leave BURNING floor patches and
@@ -142,7 +142,7 @@ export const BOSSES: BossDef[] = [
     enrageAt: 0,
   },
   {
-    name: 'WIDOWMAKER',
+    name: 'VULTURE',
     epithet: 'arena executioner',
     taunt: 'undefeated in the southern pits · counts in corpses',
     hint: 'the beam FOLLOWS you — dodge late, not early',
