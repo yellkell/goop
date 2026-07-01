@@ -69,8 +69,13 @@ export type PeerMessage =
   | { k: 'clash'; mine: 0 | 1; yours: 0 | 1 }
   /** I want a rematch (sent from the FIGHT OVER panel; both sides → restart). */
   | { k: 'rematch' }
-  /** I threw you a GG (the B-button salute). Pop it over my avatar's head. */
-  | { k: 'gg' }
+  /**
+   * I threw you a GG. `bump` marks a glove-touch fist bump (mirror it so we
+   * BOTH see the GG — detection is one-sided too often to rely on each client
+   * catching the same contact); without it, it's the B-button salute. Either
+   * way, pop it over my avatar's head.
+   */
+  | { k: 'gg'; bump?: boolean }
   /** Who I am, once per bout: leaderboard callsign + hidden ELO (so the
    *  winner can weight their score gain by rival quality) + my skin picks
    *  so you see me dressed the way I chose. */

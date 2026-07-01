@@ -31,6 +31,7 @@ import { customization } from '../menu/customization.js';
 import { setSpeakerPosition, updateListener } from '../net/voice.js';
 import type { PeerMessage, PoseTuple } from '../net/protocol.js';
 import { spawnDamagePopup, spawnFireImpact, spawnGestureCue, spawnPopup } from '../fx/effects.js';
+import { fistBumpEchoSuppressed, markFistBumpShown } from './PlayerGestureSystem.js';
 import * as sfx from '../audio/sfx.js';
 import { playVictory, startBattleMusic } from '../audio/battleMusic.js';
 import { InputComponent } from '@iwsdk/core';
@@ -235,7 +236,10 @@ export class NetworkSystem extends createSystem({
         break;
       }
       case 'gg': {
-        // The rival saluted us — pop their GG over their avatar's head.
+        // A mirrored fist bump we already caught ourselves — don't double-pop.
+        if (msg.bump && fistBumpEchoSuppressed()) break;
+        // The rival saluted/bumped us — pop their GG over their avatar's head.
+        if (msg.bump) markFistBumpShown();
         _p.copy(opponent.headPos);
         _p.y += 0.32;
         spawnGestureCue(this.world, opponent.headPos, 0.3);
