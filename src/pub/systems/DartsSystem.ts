@@ -31,7 +31,7 @@ const _bq = new Quaternion();
 const RESET_AIM_MAX = 1.3;
 const RESET_AIM_CONE_COS = Math.cos((22 * Math.PI) / 180);
 const RESET_GLOW_REST = 0.45;
-const RESET_GLOW_HOT = 1.9;
+const RESET_GLOW_HOT = 2.6; // white-hot pop when aimed at (paired with a near-white emissive)
 
 export class DartsSystem extends createSystem({}) {
   private popups: Popup[] = [];
@@ -104,7 +104,12 @@ export class DartsSystem extends createSystem({}) {
     const hot = aimed.left || aimed.right;
     if (hot !== this.resetHover) {
       this.resetHover = hot;
-      (btn.material as MeshStandardMaterial).emissiveIntensity = hot ? RESET_GLOW_HOT : RESET_GLOW_REST;
+      const mat = btn.material as MeshStandardMaterial;
+      // Shift the EMISSIVE toward white when aimed at — just bumping intensity on
+      // the red emissive only made it a brighter red, never the white pop the
+      // hover should read as. Hot = near-white + high intensity; rest = red.
+      mat.emissive.setHex(hot ? 0xfff0f0 : 0xff2a2a);
+      mat.emissiveIntensity = hot ? RESET_GLOW_HOT : RESET_GLOW_REST;
     }
 
     for (const hand of HANDS) {

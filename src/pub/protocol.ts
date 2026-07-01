@@ -144,6 +144,19 @@ export type PubEvent =
       dead: boolean;
     }
   | { e: 'SNAKE_OVER'; score: number }
+  /** DRONE HUNT cabinet: the player streams the screen so spectators see it —
+   *  drones [x,y,r,kind], the crosshair, score/lives/combo, dead flag. The
+   *  cabinet's claim + house-record reuse the SNAKE_* broker (snakePlayer /
+   *  SNAKE_OVER), so only this view state is new. */
+  | {
+      e: 'HUNT_STATE';
+      drones: [number, number, number, number][];
+      cross: [number, number] | null;
+      score: number;
+      lives: number;
+      combo: number;
+      dead: boolean;
+    }
   /* --- Coin trading (the bolt-dollar currency on your wrist) ---------------
    * Pure relayed events — the pub server forwards anything it doesn't
    * recognise verbatim (handleEvent's default case), so coins need NO server
