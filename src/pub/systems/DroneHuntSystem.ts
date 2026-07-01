@@ -15,7 +15,7 @@
 
 import { createSystem, InputComponent } from '@iwsdk/core';
 import { CanvasTexture, MeshBasicMaterial, Quaternion, Raycaster, SRGBColorSpace, Vector3 } from 'three';
-import { hitDealt, throwWhoosh, uiClick, wallThud } from '../../audio/sfx.js';
+import { huntEscape, huntHit, huntOver, huntShot, uiClick } from '../../audio/sfx.js';
 import { pubSendEvent, pubSendRaw } from '../net.js';
 import { bus, pub } from '../state.js';
 
@@ -238,7 +238,7 @@ export class DroneHuntSystem extends createSystem({}) {
         this.drones.splice(i, 1);
         this.combo = 0;
         this.lives -= 1;
-        wallThud();
+        huntEscape();
         if (this.lives <= 0) {
           this.gameOver();
           return;
@@ -309,7 +309,7 @@ export class DroneHuntSystem extends createSystem({}) {
       const gp = this.input.xr.gamepads[hand];
       const at = this.aim[hand];
       if (!at || !gp?.getButtonDown(InputComponent.Trigger)) continue;
-      throwWhoosh();
+      huntShot();
       this.muzzle = 0.06;
       // Kill the nearest drone whose body is under the shot.
       let best = -1;
@@ -329,7 +329,7 @@ export class DroneHuntSystem extends createSystem({}) {
         const mult = Math.min(4, 1 + Math.floor((this.combo - 1) / 4));
         this.score += d.points * mult;
         this.bursts.push({ x: d.x, y: d.y, t: 0, color: KINDS[d.kind].eye });
-        hitDealt();
+        huntHit();
       } else {
         this.combo = 0; // a miss breaks the streak
       }
@@ -337,7 +337,7 @@ export class DroneHuntSystem extends createSystem({}) {
   }
 
   private gameOver(): void {
-    wallThud();
+    huntOver();
     this.phase = 'dead';
     this.deadTimer = 0;
     this.cross = null;
@@ -468,9 +468,14 @@ export class DroneHuntSystem extends createSystem({}) {
       ctx.fill();
     }
 
+    // Clip drones + their explosions to the interior play field, so nothing
+    // ever draws over the amber border frame or up into the header — a drone at
+    // the edge slides under the frame instead of overlapping it.
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(3, HEADER, W - 6, H - 3 - HEADER);
+    ctx.clip();
     for (const d of this.drones) this.drawDrone(d);
-
-    // Explosions.
     for (const b of this.bursts) {
       const p = b.t / 0.4;
       ctx.strokeStyle = b.color;
@@ -481,6 +486,7 @@ export class DroneHuntSystem extends createSystem({}) {
       ctx.stroke();
       ctx.globalAlpha = 1;
     }
+    ctx.restore();
 
     if (this.cross && !dead) this.drawCrosshair(this.cross[0], this.cross[1]);
 
