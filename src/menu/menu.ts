@@ -308,8 +308,6 @@ function drawDuel(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null)
       return drawKeypad(ctx, hoverAction);
     case 'browser':
       return drawBrowser(ctx, hoverAction);
-    case 'rankedwait':
-      return drawRankedWait(ctx, hoverAction);
     default:
       return drawDuelRoot(ctx, hoverAction);
   }
@@ -325,8 +323,6 @@ function hitDuel(u: number, v: number): MenuAction | null {
       return hitKeypad(u, v);
     case 'browser':
       return hitBrowser(v);
-    case 'rankedwait':
-      return hitRankedWait(v);
     default:
       return hitDuelRoot(v);
   }
@@ -459,36 +455,55 @@ const BROWSER_ROW_H = 40;
 const BROWSER_ROW_STEP = 46;
 
 function drawBrowser(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
-  // GO — open your own server, named after you, listed for others to join.
-  buttonPlate(ctx, 64, 82, PW - 128, 60, 'GO — OPEN YOUR SERVER', UI.ember, hoverAction === 'ranked-host');
+  // Once you've pressed GO (or clicked a room) you're waiting on a match — the
+  // top button becomes CANCEL and the list rows go unclickable, but you stay on
+  // the list so you can see your own room sitting in it.
+  const waiting = app.state === 'queueing' && app.fromRanked;
 
-  ctx.font = '700 18px system-ui, sans-serif';
-  ctx.textAlign = 'left';
-  ctx.fillStyle = UI.textDim;
-  ctx.fillText('ACTIVE SERVERS', 66, 166);
-  ctx.textAlign = 'center';
+  buttonPlate(
+    ctx, 64, 82, PW - 128, 60,
+    waiting ? 'CANCEL' : 'GO',
+    waiting ? UI.amber : UI.ember,
+    hoverAction === (waiting ? 'ranked-cancel' : 'ranked-host'),
+  );
+
+  if (waiting) {
+    ctx.font = '600 20px system-ui, sans-serif';
+    ctx.fillStyle = 'rgba(159,226,255,0.9)';
+    ctx.fillText(app.rankedHost ? 'waiting for an opponent…' : 'joining…', PW / 2, 164);
+  } else {
+    ctx.font = '700 18px system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = UI.textDim;
+    ctx.fillText('ACTIVE SERVERS', 66, 166);
+    ctx.textAlign = 'center';
+  }
 
   const rooms = app.rankedRooms;
   if (rooms.length === 0) {
-    ctx.font = '600 19px system-ui, sans-serif';
-    ctx.fillStyle = 'rgba(159,226,255,0.7)';
-    ctx.fillText('no open servers yet — press GO to host one', PW / 2, 244);
+    if (!waiting) {
+      ctx.font = '600 19px system-ui, sans-serif';
+      ctx.fillStyle = 'rgba(159,226,255,0.7)';
+      ctx.fillText('no open servers yet — press GO to host one', PW / 2, 244);
+    }
   } else {
     const shown = Math.min(rooms.length, BROWSER_ROWS);
     for (let i = 0; i < shown; i++) {
       const room = rooms[i];
+      const mine = room.id === app.rankedRoomId; // our own room — not clickable
       const y = BROWSER_ROW_Y0 + i * BROWSER_ROW_STEP;
-      const hot = hoverAction === `ranked-join-${room.id}`;
+      const hot = !waiting && hoverAction === `ranked-join-${room.id}`;
       plate(ctx, 64, y, PW - 128, BROWSER_ROW_H, {
         cut: 10,
-        fill: hot ? 'rgba(255,176,0,0.16)' : 'rgba(150,150,170,0.10)',
-        stroke: hot ? UI.amber : UI.steelDim,
+        fill: mine ? 'rgba(79,183,255,0.16)' : hot ? 'rgba(255,176,0,0.16)' : 'rgba(150,150,170,0.10)',
+        stroke: mine ? UI.cool : hot ? UI.amber : UI.steelDim,
         rivets: false,
       });
       ctx.font = '800 21px system-ui, sans-serif';
       ctx.textAlign = 'left';
-      ctx.fillStyle = hot ? UI.amber : UI.text;
-      ctx.fillText(room.host.toUpperCase().slice(0, 14), 82, y + BROWSER_ROW_H / 2 + 1);
+      ctx.fillStyle = mine ? UI.coolBright : hot ? UI.amber : UI.text;
+      const name = room.host.toUpperCase().slice(0, 14) + (mine ? ' · YOU' : '');
+      ctx.fillText(name, 82, y + BROWSER_ROW_H / 2 + 1);
 
       // "1/2" occupancy pill — a listed room always has its host waiting in it.
       const label = '1/2';
@@ -509,12 +524,17 @@ function drawBrowser(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | nu
     }
   }
 
-  buttonPlate(ctx, 150, 326, PW - 300, 48, 'BACK', UI.steel, hoverAction === 'ranked-back');
+  // BACK to the mode menu — only when you haven't committed to a room yet.
+  if (!waiting) {
+    buttonPlate(ctx, 150, 326, PW - 300, 48, 'BACK', UI.steel, hoverAction === 'ranked-back');
+  }
 }
 
 function hitBrowser(v: number): MenuAction | null {
+  const waiting = app.state === 'queueing' && app.fromRanked;
   const y = (1 - v) * DUEL_H;
-  if (y >= 78 && y <= 146) return 'ranked-host';
+  if (y >= 78 && y <= 146) return waiting ? 'ranked-cancel' : 'ranked-host';
+  if (waiting) return null; // rows + BACK are inert while you wait in a room
   const rooms = app.rankedRooms;
   const shown = Math.min(rooms.length, BROWSER_ROWS);
   for (let i = 0; i < shown; i++) {
@@ -523,26 +543,6 @@ function hitBrowser(v: number): MenuAction | null {
   }
   if (y >= 322 && y <= 380) return 'ranked-back';
   return null;
-}
-
-function drawRankedWait(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
-  ctx.font = '700 26px system-ui, sans-serif';
-  ctx.fillStyle = UI.textDim;
-  ctx.fillText(app.rankedHost ? 'YOUR SERVER IS OPEN' : 'JOINING SERVER', PW / 2, 152);
-  if (app.rankedHost) {
-    ctx.font = stencilFont(30);
-    ctx.fillStyle = UI.coolBright;
-    ctx.fillText('WAITING FOR A CHALLENGER', PW / 2, 210);
-  }
-  ctx.font = '600 19px system-ui, sans-serif';
-  ctx.fillStyle = 'rgba(159,226,255,0.85)';
-  ctx.fillText(app.netStatus, PW / 2, app.rankedHost ? 262 : 216);
-  buttonPlate(ctx, 110, 300, PW - 220, 66, 'CANCEL', UI.amber, hoverAction === 'ranked-cancel');
-}
-
-function hitRankedWait(v: number): MenuAction | null {
-  const y = (1 - v) * DUEL_H;
-  return y >= 294 && y <= 372 ? 'ranked-cancel' : null;
 }
 
 // Keypad geometry, shared by draw + hit-test.

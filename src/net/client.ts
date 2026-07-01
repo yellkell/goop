@@ -135,7 +135,7 @@ class NetClient {
         const { WebRtcTransport } = await import('./webrtcTransport.js');
         const t = new WebRtcTransport(events);
         this.transport = t;
-        await t.hostRanked(name);
+        app.rankedRoomId = await t.hostRanked(name); // our row in the browser
       } catch (err) {
         app.netStatus = err instanceof Error ? err.message : 'could not open server';
         this.disconnect();
@@ -178,6 +178,7 @@ class NetClient {
     this.matched = false;
     this.inbox.length = 0;
     app.privateCode = '';
+    app.rankedRoomId = '';
     detachRemoteVoice();
     this.transport?.close();
     this.transport = null;
@@ -198,6 +199,7 @@ class NetClient {
         app.mode = 'net';
         app.state = 'playing';
         app.duelView = 'root';
+        app.rankedRoomId = '';
         app.codeEntry = '';
         app.netStatus = `in a bout (${side === 0 ? 'host' : 'guest'})`;
       },
@@ -219,8 +221,8 @@ class NetClient {
         const inBotBout = app.state === 'playing' && app.mode === 'bot';
         if (app.state !== 'menu' && !inBotBout) app.state = 'menu';
         if (app.duelView === 'hosting') app.duelView = 'root';
-        // A dropped ranked host/join lands back on the server list, not the menu.
-        if (app.duelView === 'rankedwait') app.duelView = 'browser';
+        // Our ranked room (if any) is gone with the connection.
+        app.rankedRoomId = '';
         // Keep hunting the WHOLE bot bout: a background search that dropped (a
         // dead lobby, a connect timeout…) restarts so we never silently stop
         // looking — unless ONLY PLAY BOTS is on.

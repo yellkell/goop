@@ -421,10 +421,10 @@ export class MenuSystem extends createSystem({}) {
         break;
       case 'ranked-host':
         if (app.onlyBots) break;
-        // Open a public room named after you and wait for a challenger to pick
-        // it out of the list.
+        // Open a public room named after you and wait — you STAY on the server
+        // list, with your own room shown in it (unclickable).
         app.arcade = '1v1';
-        app.duelView = 'rankedwait';
+        app.duelView = 'browser';
         app.rankedHost = true;
         app.fromRanked = true;
         app.state = 'queueing';
@@ -619,9 +619,10 @@ export class MenuSystem extends createSystem({}) {
             this.gotoPub();
           }
         } else if (action.startsWith('ranked-join-')) {
-          // Join a listed ranked room by its doc id.
+          // Join a listed ranked room by its doc id (stay on the list, showing
+          // a brief "joining…" while we connect).
           app.arcade = '1v1';
-          app.duelView = 'rankedwait';
+          app.duelView = 'browser';
           app.rankedHost = false;
           app.fromRanked = true;
           app.state = 'queueing';

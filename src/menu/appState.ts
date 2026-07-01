@@ -129,13 +129,16 @@ export const app: {
   ballArc: [boolean, boolean];
   /**
    * Which face the 1V1 panel shows: the mode list, the private-match flow, or
-   * the RANKED server browser ('browser') / its host-or-join waiting screen
-   * ('rankedwait').
+   * the RANKED server browser ('browser'). Hosting/joining stays on 'browser' —
+   * your own room shows in the list (unclickable) while you wait.
    */
-  duelView: 'root' | 'private' | 'hosting' | 'keypad' | 'browser' | 'rankedwait';
+  duelView: 'root' | 'private' | 'hosting' | 'keypad' | 'browser';
   /** Open ranked rooms for the server browser (live from rankedWatch). */
   rankedRooms: { id: string; host: string }[];
-  /** In the ranked wait screen: are we the host (true) or a joiner (false)? */
+  /** While hosting a ranked room, its doc id — so the browser marks our own row
+   *  and leaves it unclickable. Empty when we're not hosting. */
+  rankedRoomId: string;
+  /** While waiting in a ranked room: are we the host (true) or a joiner (false)? */
   rankedHost: boolean;
   /** We entered the current bout from the ranked browser — return there after. */
   fromRanked: boolean;
@@ -174,6 +177,7 @@ export const app: {
   ballArc: loadBallArc(),
   duelView: 'root',
   rankedRooms: [],
+  rankedRoomId: '',
   rankedHost: false,
   fromRanked: false,
   privateCode: '',
