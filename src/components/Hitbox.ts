@@ -21,6 +21,13 @@ export const Hitbox = createComponent(
     kind: { type: Types.Int32, default: HitboxKind.Body },
     /** Entity carrying the Health this hitbox belongs to. */
     owner: { type: Types.Entity, default: null },
+    /**
+     * Damage multiplier — the ARCADE titans' weak-point law. 1 = a normal
+     * body sphere (every human/bot hitbox); 0 = armour plate (the ball clanks
+     * off, no damage); >1 = an exposed weak point (the vented core takes
+     * double). When overlapping spheres catch one ball, the best wins.
+     */
+    damageScale: { type: Types.Float32, default: 1 },
   },
   'Spherical hit volume for collision.',
 );

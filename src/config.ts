@@ -49,15 +49,20 @@ export const PROGRESSION = {
   quickMatch: 25,
   // Arcade 2v2 / FFA: a flat 25 for taking part, win or lose.
   arcade: 25,
+  // An ARCADE campaign titan bout: the same flat 25, win or lose — but the
+  // FIRST time each titan is felled, XP and coins pay DOUBLE (see
+  // net/leaderboard.ts reportCampaign).
+  campaign: 25,
 };
 
 /**
  * The bolt-dollar currency — a riveted "$" earned at the SAME moments as XP
  * (every match, bot bout, arcade brawl and training run; see net/leaderboard).
  * A flat amount per completed game, win or loss, so the shop prices read as
- * round "games of play": a basic platform recolour costs 10 games, the fancier
- * one 100. The wallet itself lives in src/menu/wallet.ts (a localStorage number
- * shared by the arena and the pub, since both pages are same-origin).
+ * round "games of play": a platform recolour or the GOLD RUSH premium pad
+ * costs 10 games. The wallet itself lives in src/menu/wallet.ts (a
+ * localStorage number shared by the arena and the pub, since both pages are
+ * same-origin).
  */
 export const CURRENCY = {
   /** Coins banked per completed game (any mode, win or loss). */
@@ -235,6 +240,56 @@ export const BOT = {
   headTurnSpeed: 8, // how fast the head eases toward facing you
 };
 
+/**
+ * ARCADE CAMPAIGN — the titan gauntlet. Five bosses, each bigger than the
+ * last; they never throw fireballs. Instead they wind up melee and ranged
+ * strikes whose kill zones charge up visibly ON YOUR PLATFORM — read the
+ * floor, move, and punish the weak points that open up after their attacks.
+ * Dark-souls pacing on a two-metre stage. Per-boss numbers (and each titan's
+ * signature mechanic) live in campaign/bosses.ts.
+ */
+export const CAMPAIGN = {
+  stages: 5,
+
+  // Intro staging: klaxon + strobes, the titan rises, the title card, FIGHT.
+  klaxonTime: 1.2, // warning strobes before anything moves
+  riseTime: 2.6, // seconds the titan takes to surface
+  titleTime: 2.4, // name card + roar hold
+  fightCardTime: 0.9, // the FIGHT flash before the bell
+
+  attackDamage: 20, // every landed titan strike is 20 — same law as fireballs
+  victoryDelay: 8, // seconds of collapse + payout card before the line-up
+  defeatDelay: 5, // seconds of SCRAPPED card before the line-up
+
+  // Weak-point law (Hitbox.damageScale): armour clanks, the visor always
+  // counts, the exposed core takes double.
+  headScale: 1.0,
+  coreScale: 2.0,
+  podScale: 1.5,
+
+  // Strike-zone geometry defaults (per-boss defs tune sizes/cadence).
+  slamRadius: 0.55,
+  beamHalfWidth: 0.22,
+  sweepThickness: 0.19, // half-height of the horizontal blade slice
+  mortarRadius: 0.42,
+
+  // Signature-mechanic tuning (which titans use which lives in bosses.ts).
+  rehitDelay: 0.85, // seconds between a rehit slam's two detonations
+  marchStep: 0.6, // metres between marching slam discs
+  marchDelay: 0.55, // seconds between marching detonations — the drumbeat
+  beamLockAt: 0.72, // tracking beams freeze at this charge fraction
+  patchTime: 3.5, // seconds a burning floor patch stays hot
+  patchRadius: 0.34,
+  enrageCooldownMult: 0.65, // enraged titans attack this much sooner…
+  enrageChargeMult: 0.85, // …and charge that much faster
+
+  // THE GAUNTLET RUN — all five back to back, unlocked once all are felled.
+  // The clock only counts fight time, so intros/collapses cost you nothing.
+  runIntro: { klaxon: 0.5, rise: 1.4, title: 1.3, fightCard: 0.6 },
+  runVictoryDelay: 3.2, // collapse pause between bosses mid-run
+  leaderboardSize: 5, // times kept per mode (gauntlet / hardcore)
+};
+
 /** Match format: best-of rounds, Blaston-style pacing. */
 export const MATCH = {
   startDelay: 7, // quick-match pre-fight hold before the first live round
@@ -276,6 +331,15 @@ export const TRAINING = {
   discPoints: 100,
   cutoutPoints: 150,
   streakBonus: 25, // extra points per current streak step
+  // The OCTA DRONE: a small strafing gold octagon plate (pub octa-hunt style)
+  // that only joins the mix in the closing stretch — lead the shot, bank big.
+  bonusWindow: 30, // drones appear when this many seconds remain
+  droneChance: 0.35, // spawn roll share once the window opens
+  dronePoints: 300,
+  droneRadius: 0.13, // small — a genuine skill shot
+  droneHold: 2.2, // up for less time than the static targets
+  droneDriftAmp: 0.55, // strafe half-range (m)
+  droneDriftRate: 2.4, // strafe angular rate (rad/s)
   // Shoot-back: cutouts hurl a blue ball at you while they're up.
   shootChance: 0.55, // chance a cutout takes its shot
   shootDelay: 0.7, // aim time before it fires

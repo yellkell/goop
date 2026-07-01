@@ -16,7 +16,7 @@
  */
 
 import { FIREBASE_ENABLED, firebaseConfig } from './firebaseConfig.js';
-import { xpForArcade, xpForBot, xpForMatch, xpForTraining } from '../menu/progression.js';
+import { xpForArcade, xpForBot, xpForCampaign, xpForMatch, xpForTraining } from '../menu/progression.js';
 import { addCoins } from '../menu/wallet.js';
 import { CURRENCY, type ArcadeMode } from '../config.js';
 
@@ -389,6 +389,20 @@ export function reportArcade(mode: ArcadeMode, win: boolean): void {
     fields.ffa = profile.ffa;
   }
   writeMine(fields);
+  void refreshLeaderboard(true);
+}
+
+/**
+ * A finished ARCADE campaign titan bout. Pays the SAME flat rate as a quick
+ * match vs the bot (XP + coins, win or lose) — except the FIRST time each
+ * titan is felled, when both pay double. Campaign bouts are offline solo
+ * fights, so nothing ticks the online score boards.
+ */
+export function reportCampaign(win: boolean, firstClear: boolean): void {
+  const mult = win && firstClear ? 2 : 1;
+  profile.xp += xpForCampaign() * mult;
+  addCoins(CURRENCY.perGame * mult);
+  writeMine({ xp: profile.xp });
   void refreshLeaderboard(true);
 }
 

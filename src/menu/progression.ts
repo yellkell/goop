@@ -49,3 +49,9 @@ export function xpForBot(): number {
 export function xpForArcade(): number {
   return PROGRESSION.arcade;
 }
+
+/** Flat XP for an ARCADE campaign titan bout — win or lose (the first fell of
+ *  each titan pays double; reportCampaign applies the multiplier). */
+export function xpForCampaign(): number {
+  return PROGRESSION.campaign;
+}

@@ -230,16 +230,106 @@ export function hitDealt(): void {
 }
 
 /** Aim Training target impacts: disc = bright gong, cutout = hollow armour. */
-export function trainingTargetHit(kind: 0 | 1): void {
+export function trainingTargetHit(kind: 0 | 1 | 2): void {
   if (kind === 0) {
     clank(920, 0.18, 0.42);
     clank(1380, 0.08, 0.26, 0.015);
     tone({ freq: 740, to: 980, type: 'triangle', dur: 0.11, gain: 0.12 });
-  } else {
+  } else if (kind === 1) {
     clank(360, 0.18, 0.28);
     clank(520, 0.08, 0.18, 0.025);
     tone({ freq: 150, to: 72, type: 'triangle', dur: 0.16, gain: 0.18 });
+  } else {
+    // The octa drone jackpot: a shattering clank under a rising bell run.
+    clank(1100, 0.2, 0.4);
+    clank(1650, 0.1, 0.3, 0.02);
+    [880, 1109, 1319, 1760].forEach((f, i) =>
+      tone({ freq: f, type: 'triangle', dur: 0.14, gain: 0.14, delay: 0.04 + i * 0.07 }),
+    );
+    whooshNoise(0.3, 0.1, 900, 2600);
   }
+}
+
+// --- ARCADE titan sounds (the campaign bosses) ------------------------------
+
+/** A ball glancing off titan armour — bright, dead, no give. */
+export function armorClank(): void {
+  clank(1650, 0.2, 0.12);
+  clank(2300, 0.07, 0.07, 0.01);
+  whooshNoise(0.05, 0.08, 3200, 1400);
+}
+
+/** A ball finding the exposed core — deep bell + electric fizz. */
+export function coreHit(): void {
+  clank(420, 0.3, 0.5);
+  clank(840, 0.12, 0.3, 0.02);
+  tone({ freq: 1600, to: 320, type: 'sawtooth', dur: 0.22, gain: 0.09 });
+  tone({ freq: 190, to: 60, type: 'sine', dur: 0.26, gain: 0.28 });
+}
+
+/** Pit klaxon — the two-tone warning horn before a titan surfaces. */
+export function klaxon(): void {
+  for (const d of [0, 0.55]) {
+    tone({ freq: 392, type: 'square', dur: 0.24, gain: 0.1, delay: d });
+    tone({ freq: 311, type: 'square', dur: 0.26, gain: 0.1, delay: d + 0.24 });
+  }
+}
+
+/** The titan surfacing — hydraulics, grinding plate, a rising rumble. */
+export function titanRise(): void {
+  servo(60, 220, 2.2, 0.1);
+  whooshNoise(2.4, 0.14, 60, 240);
+  clank(120, 0.12, 0.6, 0.4);
+  clank(95, 0.14, 0.8, 1.3);
+}
+
+/** The titan's voice — a shuddering sub-bass roar through blown horns. */
+export function bossRoar(depth = 1): void {
+  const base = 58 / depth;
+  tone({ freq: base * 2.4, to: base, type: 'sawtooth', dur: 1.1, gain: 0.22 });
+  tone({ freq: base * 3.1, to: base * 1.4, type: 'square', dur: 0.9, gain: 0.08, delay: 0.05 });
+  whooshNoise(1.0, 0.16, 90 * depth, 300);
+  clank(70, 0.1, 0.9, 0.1);
+}
+
+/** An attack charging — a rising whine that ends exactly at the strike. */
+export function chargeWhine(dur: number): void {
+  servo(140, 980, dur, 0.09);
+  whooshNoise(dur, 0.05, 200, 1400);
+}
+
+/** A titan fist crashing onto the platform. */
+export function slamImpact(): void {
+  tone({ freq: 80, to: 26, type: 'sine', dur: 0.42, gain: 0.4 });
+  clank(140, 0.24, 0.5, 0.01);
+  whooshNoise(0.18, 0.2, 300, 80);
+}
+
+/** The horizontal sweep scything across the platform. */
+export function sweepWhoosh(): void {
+  whooshNoise(0.32, 0.3, 500, 2200);
+  clank(340, 0.08, 0.16, 0.06);
+}
+
+/** The eye beam firing down its marked strip. */
+export function beamBlast(): void {
+  tone({ freq: 1900, to: 240, type: 'sawtooth', dur: 0.34, gain: 0.14 });
+  whooshNoise(0.34, 0.22, 2400, 500);
+  tone({ freq: 120, to: 55, type: 'sine', dur: 0.3, gain: 0.22, delay: 0.02 });
+}
+
+/** One mortar shell bursting on the platform. */
+export function mortarThump(): void {
+  tone({ freq: 130, to: 42, type: 'sine', dur: 0.24, gain: 0.26 });
+  whooshNoise(0.1, 0.12, 700, 200);
+  clank(240, 0.08, 0.2, 0.01);
+}
+
+/** The titan's core venting open — an exposed opportunity. */
+export function coreExposed(): void {
+  servo(900, 260, 0.4, 0.08);
+  tone({ freq: 620, to: 940, type: 'triangle', dur: 0.18, gain: 0.1, delay: 0.05 });
+  whooshNoise(0.4, 0.08, 400, 1100);
 }
 
 /** A single solid metallic CLINK — two iron gauntlets striking, not a papery

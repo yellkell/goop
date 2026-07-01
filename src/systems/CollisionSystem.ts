@@ -174,9 +174,13 @@ export class CollisionSystem extends createSystem({
 
   /**
    * Local-authority hit (bot bouts, every mode): this ball connects with the
-   * first body on a different team. If that body is YOU, it's a hit taken
-   * (vignette + buzz); anyone else, it's a hit dealt (popup), and it counts
-   * toward your stats only when the ball is yours.
+   * BEST body it overlaps on a different team — "best" by `damageScale`, the
+   * ARCADE titans' weak-point law (their exposed core sits proud of an armour
+   * sphere; a punch that finds it counts as a core hit, a plain armour touch
+   * clanks off for nothing). Human/bot hitboxes are all scale 1, so the duel
+   * and the brawls behave exactly as before. If that body is YOU, it's a hit
+   * taken (vignette + buzz); anyone else, it's a hit dealt (popup), and it
+   * counts toward your stats only when the ball is yours.
    */
   private resolveLocalHit(
     ball: Entity,
@@ -187,6 +191,8 @@ export class CollisionSystem extends createSystem({
     damage: number,
     returning: boolean,
   ): void {
+    let best: Entity | null = null;
+    let bestScale = -1;
     for (const hitbox of hitboxes) {
       if ((hitbox.getValue(Hitbox, 'team') ?? 0) === ownerTeam) continue; // same team — no friendly fire
       const hbObj = hitbox.object3D;
@@ -194,10 +200,29 @@ export class CollisionSystem extends createSystem({
       hbObj.getWorldPosition(_otherPos);
       const reach = radius + (hitbox.getValue(Hitbox, 'radius') ?? 0.2);
       if (_ballPos.distanceToSquared(_otherPos) > reach * reach) continue;
-
-      const actualDamage = this.damageFor(hitbox, damage);
       const victim = (hitbox.getValue(Hitbox, 'owner') as Entity | null) ?? hitbox;
       if ((victim.getValue(Health, 'current') ?? 1) <= 0) continue; // already down
+      const scale = hitbox.getValue(Hitbox, 'damageScale') ?? 1;
+      if (scale > bestScale) {
+        bestScale = scale;
+        best = hitbox;
+      }
+    }
+    if (!best) return;
+
+    if (bestScale <= 0) {
+      // Titan armour: the ball is spent against the plate — sparks, no damage.
+      emberBurst(_ballPos, 10, true);
+      sfx.armorClank();
+      if (returning) ball.setValue(Fireball, 'returnHit', 1);
+      else this.spendBall(ball);
+      return;
+    }
+
+    {
+      const hitbox = best;
+      const actualDamage = Math.round(this.damageFor(hitbox, damage) * bestScale);
+      const victim = (hitbox.getValue(Hitbox, 'owner') as Entity | null) ?? hitbox;
       this.applyDamage(victim, actualDamage);
 
       const victimIsMe = (victim.getValue(Combatant, 'slot') ?? -1) === 0;
@@ -216,7 +241,8 @@ export class CollisionSystem extends createSystem({
       } else {
         spawnFireImpact(this.world, _ballPos, 0);
         spawnDamagePopup(this.world, _ballPos, actualDamage);
-        sfx.hitDealt();
+        if (bestScale > 1) sfx.coreHit(); // a titan weak point, rung loud
+        else sfx.hitDealt();
         if (owner === 0) app.stats.hitsLanded += 1;
       }
 
@@ -242,7 +268,7 @@ export class CollisionSystem extends createSystem({
       target.setValue(TrainingTarget, 'state', TargetState.Falling);
       target.setValue(TrainingTarget, 'age', 0);
       spawnFireImpact(this.world, _ballPos, 0);
-      sfx.trainingTargetHit((target.getValue(TrainingTarget, 'kind') ?? 0) as 0 | 1);
+      sfx.trainingTargetHit((target.getValue(TrainingTarget, 'kind') ?? 0) as 0 | 1 | 2);
       app.stats.hitsLanded += 1;
       if (returning) ball.setValue(Fireball, 'returnHit', 1);
       else this.spendBall(ball);

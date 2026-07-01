@@ -36,8 +36,8 @@ export interface PlatformSkin {
   neon: number;
   /**
    * Shop price in coins (the bolt-dollar currency). Omitted = free / owned by
-   * default (the three launch skins). 100 = a basic recolour (≈10 games of
-   * play), 1000 = the fancier premium pad (≈100 games).
+   * default (the three launch skins). 100 = a recolour or the premium GOLD
+   * RUSH pad (≈10 games of play each).
    */
   price?: number;
   /**
@@ -46,6 +46,12 @@ export interface PlatformSkin {
    * gunmetal steel (DEFAULT_SLAB_TINT).
    */
   slab?: number;
+  /**
+   * Earned, never sold: how this skin is won (shown on its shop tile in place
+   * of a price; tapping it there does nothing until it's yours). The CHAMPION
+   * pad carries 'FELL GOLIATH'.
+   */
+  earnedBy?: string;
 }
 
 /** The makePlatform() slab base tint — restored when a non-premium skin is worn. */
@@ -80,11 +86,15 @@ export const PLATFORM_SKINS: PlatformSkin[] = [
   { id: 'toxic', name: 'TOXIC', neon: PALETTE.venom, price: 100 },
   { id: 'plasma', name: 'PLASMA', neon: PALETTE.violet, price: 100 },
   // …the fancier premium pad — gold piping AND a gold-tinted slab.
-  { id: 'goldrush', name: 'GOLD RUSH', neon: 0xffc23a, slab: 0xb8902c, price: 1000 },
+  { id: 'goldrush', name: 'GOLD RUSH', neon: 0xffc23a, slab: 0xb8902c, price: 100 },
   // …and the top-shelf flex: a jet-black deck with a white XD grin painted on
   // it (X eyes, a capital-D mouth). The face mesh is built into every platform,
   // tagged with this id and shown only when it's worn.
   { id: 'xdface', name: 'XD', neon: 0xf4f6fb, slab: 0x080808, price: 5000 },
+  // The CHAMPION pad — never sold. Awarded the first time GOLIATH, king of
+  // the ARCADE campaign's titan gauntlet, is felled: white-hot piping over a
+  // championship-crimson deck.
+  { id: 'champion', name: 'CHAMPION', neon: 0xfff3cf, slab: 0x8c2620, earnedBy: 'FELL GOLIATH' },
 ];
 
 /** How the OPPONENT looks when they haven't picked (bot bouts): team blue. */

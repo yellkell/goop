@@ -24,6 +24,7 @@ import { NetworkSystem } from './systems/NetworkSystem.js';
 import { MeshSystem } from './systems/MeshSystem.js';
 import { TrainingSystem } from './systems/TrainingSystem.js';
 import { TutorialSystem } from './systems/TutorialSystem.js';
+import { CampaignSystem } from './systems/CampaignSystem.js';
 import { FireballSystem } from './systems/FireballSystem.js';
 import { CollisionSystem } from './systems/CollisionSystem.js';
 import { BoundarySystem } from './systems/BoundarySystem.js';
@@ -89,6 +90,9 @@ World.create(container, {
   world.registerSystem(OpponentSystem);
   // Aim Training: targets, scoring, return fire.
   world.registerSystem(TrainingSystem);
+  // ARCADE campaign: the five-titan gauntlet (its own boss rig, telegraphed
+  // attacks and HUD — GameStateSystem stands down for these bouts).
+  world.registerSystem(CampaignSystem);
   // The guided basics tutorial — rides a bot bout, paces it with pop-ups. Runs
   // before FireballSystem so its command-bus tweaks land before the balls sim.
   world.registerSystem(TutorialSystem);

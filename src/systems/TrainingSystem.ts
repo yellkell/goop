@@ -9,6 +9,11 @@
  * Flip SHOOT BACK on and the cutouts take pot-shots at you with blue fire so
  * you train dodging between throws. Your health regens in training; the run
  * ends at the bell (or early if you go down).
+ *
+ * THE CLOSING STRETCH: once fewer than TRAINING.bonusWindow seconds remain,
+ * gold OCTA DRONES join the spawn mix — small strafing octagon plates (the
+ * pub's octa-hunt targets, ported to the range) that demand a led shot and
+ * pay a jackpot.
  */
 
 import { createSystem, Vector3, type Entity } from '@iwsdk/core';
@@ -93,8 +98,42 @@ function cutoutTexture(): CanvasTexture {
   return tex;
 }
 
+/**
+ * Canvas octa-target face — pub OCTA HUNT style: concentric gold-and-black
+ * octagon rings around a gold centre.
+ */
+function octaTexture(): CanvasTexture {
+  const S = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = S;
+  const ctx = canvas.getContext('2d')!;
+  const octagon = (r: number): void => {
+    ctx.beginPath();
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
+      const x = S / 2 + Math.cos(a) * r;
+      const y = S / 2 + Math.sin(a) * r;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+  };
+  const rings: Array<[number, string]> = [
+    [0.5, '#ffd700'], [0.38, '#15161a'], [0.27, '#ffd700'], [0.16, '#15161a'], [0.08, '#ffd700'],
+  ];
+  for (const [r, c] of rings) {
+    octagon(S * r);
+    ctx.fillStyle = c;
+    ctx.fill();
+  }
+  const tex = new CanvasTexture(canvas);
+  tex.minFilter = LinearFilter;
+  return tex;
+}
+
 let discTex: CanvasTexture | undefined;
 let cutoutTex: CanvasTexture | undefined;
+let octaTex: CanvasTexture | undefined;
 
 export class TrainingSystem extends createSystem({
   targets: { required: [TrainingTarget] },
@@ -200,11 +239,30 @@ export class TrainingSystem extends createSystem({
     }
     if (live >= TRAINING.maxLive) return;
 
-    const kind = Math.random() < 0.5 ? TargetKind.Disc : TargetKind.Cutout;
-    const x = (Math.random() * 2 - 1) * 1.3;
+    // The closing stretch mixes gold octa drones in with the regulars.
+    const droneWindow = training.timeLeft <= TRAINING.bonusWindow;
+    const kind =
+      droneWindow && Math.random() < TRAINING.droneChance
+        ? TargetKind.Drone
+        : Math.random() < 0.5
+          ? TargetKind.Disc
+          : TargetKind.Cutout;
+
+    const drone = kind === TargetKind.Drone;
+    // Keep a drone's whole strafe lane on the range.
+    const x = (Math.random() * 2 - 1) * (drone ? 1.3 - TRAINING.droneDriftAmp : 1.3);
     const z = -ARENA_GAP + (Math.random() * 1.6 - 0.5);
-    const upY = kind === TargetKind.Disc ? 1.0 + Math.random() * 0.9 : 1.25;
-    const radius = kind === TargetKind.Disc ? TRAINING.discRadius : TRAINING.cutoutRadius;
+    const upY =
+      kind === TargetKind.Disc ? 1.0 + Math.random() * 0.9 :
+      kind === TargetKind.Cutout ? 1.25 :
+      1.35 + Math.random() * 0.5; // drones fly high
+    const radius =
+      kind === TargetKind.Disc ? TRAINING.discRadius :
+      kind === TargetKind.Cutout ? TRAINING.cutoutRadius :
+      TRAINING.droneRadius;
+    const holdTime = drone
+      ? TRAINING.droneHold * (0.9 + Math.random() * 0.3)
+      : TRAINING.holdTime * (0.85 + Math.random() * 0.5);
 
     const e = this.buildTargetEntity(kind);
     const obj = e.object3D!;
@@ -214,13 +272,16 @@ export class TrainingSystem extends createSystem({
       kind,
       state: TargetState.Rising,
       age: 0,
-      holdTime: TRAINING.holdTime * (0.85 + Math.random() * 0.5),
+      holdTime,
       radius,
       upY,
       shootTimer:
         kind === TargetKind.Cutout && app.shootBack && Math.random() < TRAINING.shootChance
           ? TRAINING.shootDelay
           : -1,
+      baseX: x,
+      driftAmp: drone ? TRAINING.droneDriftAmp * (0.8 + Math.random() * 0.4) : 0,
+      driftRate: drone ? TRAINING.droneDriftRate * (0.85 + Math.random() * 0.4) : 0,
     });
   }
 
@@ -245,6 +306,16 @@ export class TrainingSystem extends createSystem({
         }
         case TargetState.Holding: {
           obj.position.y = upY + Math.sin(age * 3) * 0.02;
+          // Octa drones strafe their lane — lead the shot. The plate (the
+          // group's first child) twirls around its own axis so the octagon
+          // visibly spins without swinging its face off the player.
+          const amp = t.getValue(TrainingTarget, 'driftAmp') ?? 0;
+          if (amp > 0) {
+            const base = t.getValue(TrainingTarget, 'baseX') ?? 0;
+            const rate = t.getValue(TrainingTarget, 'driftRate') ?? 0;
+            obj.position.x = base + Math.sin(age * rate) * amp;
+            obj.children[0].rotation.y += delta * 3;
+          }
           this.maybeShoot(t, delta);
           if (age >= (t.getValue(TrainingTarget, 'holdTime') ?? 2.6)) {
             t.setValue(TrainingTarget, 'state', TargetState.Leaving);
@@ -305,11 +376,15 @@ export class TrainingSystem extends createSystem({
     training.hits += 1;
     training.streak += 1;
     training.bestStreak = Math.max(training.bestStreak, training.streak);
-    const base = kind === TargetKind.Disc ? TRAINING.discPoints : TRAINING.cutoutPoints;
+    const base =
+      kind === TargetKind.Disc ? TRAINING.discPoints :
+      kind === TargetKind.Cutout ? TRAINING.cutoutPoints :
+      TRAINING.dronePoints;
     training.score += base + TRAINING.streakBonus * (training.streak - 1);
     if (t.object3D) {
       t.object3D.getWorldPosition(_pos);
-      emberBurst(_pos, 10, false);
+      // A downed octa drone rains gold.
+      emberBurst(_pos, kind === TargetKind.Drone ? 26 : 10, false);
     }
   }
 
@@ -325,6 +400,31 @@ export class TrainingSystem extends createSystem({
 
   private buildTargetEntity(kind: number): Entity {
     const group = new Group();
+
+    if (kind === TargetKind.Drone) {
+      // The gold OCTA drone — the pub's octa-hunt target on the range: a flat
+      // eight-sided plate (concentric gold/black octagon rings on both faces,
+      // glowing gold rim) that hangs in the air with no stick and spins
+      // in-plane while it strafes. TrainingSystem drives the motion.
+      octaTex ??= octaTexture();
+      const plate = new Mesh(
+        new CylinderGeometry(TRAINING.droneRadius * 1.2, TRAINING.droneRadius * 1.2, 0.03, 8),
+        [
+          new MeshStandardMaterial({
+            color: PALETTE.iron,
+            emissive: 0xffd700,
+            emissiveIntensity: 0.9,
+            metalness: 0.7,
+            roughness: 0.35,
+          }),
+          new MeshBasicMaterial({ map: octaTex }),
+          new MeshBasicMaterial({ map: octaTex }),
+        ],
+      );
+      plate.rotation.x = Math.PI / 2; // cap faces the player
+      group.add(plate);
+      return this.world.createTransformEntity(group);
+    }
 
     if (kind === TargetKind.Disc) {
       discTex ??= discTexture();

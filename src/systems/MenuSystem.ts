@@ -180,6 +180,7 @@ export class MenuSystem extends createSystem({}) {
     const shopOpen = customization.open && customization.shopOpen;
     const modalCustom = customization.open && !shopOpen;
     const modalNews = app.gazetteOpen;
+    const modalCampaign = app.campaignOpen;
     for (const p of this.menu.panels) {
       switch (p.id) {
         case 'board':
@@ -194,10 +195,13 @@ export class MenuSystem extends createSystem({}) {
         case 'news':
           p.mesh.visible = modalNews;
           break;
+        case 'campaign':
+          p.mesh.visible = modalCampaign;
+          break;
         default:
           // The arc (train/duel/info), the paper button AND the coin readout:
           // the lobby's face, gone while any modal is open.
-          p.mesh.visible = !customization.open && !modalNews;
+          p.mesh.visible = !customization.open && !modalNews && !modalCampaign;
           break;
       }
     }
@@ -384,6 +388,22 @@ export class MenuSystem extends createSystem({}) {
       case 'start-training':
         app.arcade = '1v1';
         app.state = 'training';
+        break;
+      case 'open-campaign':
+        app.campaignOpen = true;
+        break;
+      case 'campaign-close':
+        app.campaignOpen = false;
+        break;
+      case 'campaign-speedrun':
+      case 'campaign-hardcore':
+        // The timed runs: all five titans back to back from stage I. The
+        // line-up's hitTest already gates sealed runs, so just launch.
+        app.mode = 'campaign';
+        app.campaignMode = action === 'campaign-hardcore' ? 'hardcore' : 'gauntlet';
+        app.campaignStage = 0;
+        app.arcade = '1v1';
+        app.state = 'playing';
         break;
       case 'arcade-2v2':
         // Arcade brawl: drop onto bots now, hunt humans on the mesh in the
@@ -589,6 +609,16 @@ export class MenuSystem extends createSystem({}) {
         saveAccentLight();
         break;
       default:
+        // campaign-N: a single titan bout at stage N (sealed cards never
+        // hit-test, so any N that lands here is unlocked).
+        if (action.startsWith('campaign-')) {
+          app.mode = 'campaign';
+          app.campaignMode = 'single';
+          app.campaignStage = Number(action.slice('campaign-'.length)) || 0;
+          app.arcade = '1v1';
+          app.state = 'playing';
+          break;
+        }
         // shop-av-N: equip an avatar. shop-pf-N: equip a platform if owned,
         // else try to buy it.
         if (action.startsWith('shop-av-')) {
@@ -598,7 +628,11 @@ export class MenuSystem extends createSystem({}) {
         }
         if (action.startsWith('shop-pf-')) {
           const skin = PLATFORM_SKINS[Number(action.slice(8))];
-          if (skin) this.buyOrEquipPlatform(skin.id, skin.price ?? 0);
+          // Earned-only skins (the CHAMPION pad) can't be bought — the tile
+          // is a teaser until the campaign awards it.
+          if (skin && (!skin.earnedBy || platformOwned(skin.id))) {
+            this.buyOrEquipPlatform(skin.id, skin.price ?? 0);
+          }
           break;
         }
         // kp-0 … kp-9: append a digit (max five) on the join keypad.
@@ -783,6 +817,15 @@ export class MenuSystem extends createSystem({}) {
         status: '',
       };
     }
+    // A live titan bout can be conceded — souls fights run long, and the
+    // campaign has no round clock to save you.
+    if (app.state === 'playing' && app.mode === 'campaign' && match.phase !== 'matchOver') {
+      return {
+        title: 'TITAN BOUT',
+        buttons: [{ id: 'forfeit', label: 'CONCEDE', accent: UI.danger }],
+        status: '',
+      };
+    }
     if (app.state === 'playing' && match.phase === 'matchOver') {
       const buttons: ActionButton[] = [];
       if (app.mode === 'net') {
@@ -858,6 +901,8 @@ export class MenuSystem extends createSystem({}) {
         this.panel.mesh.visible = false;
         // Ends a live net bout OR stops the bot-bout background search.
         if (app.state === 'playing') net.cancel();
+        // A conceded/finished titan bout returns to the line-up, not the arc.
+        if (app.mode === 'campaign') app.campaignOpen = true;
         app.state = 'menu'; // training tears down unsaved; bouts end here
         this.applyState();
         break;

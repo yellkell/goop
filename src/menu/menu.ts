@@ -26,6 +26,14 @@ import { canAfford, coins } from './wallet.js';
 import { tierForXp } from './progression.js';
 import { AVATAR_SKINS, PLATFORM_SKINS, type AvatarSkin, type PlatformSkin } from '../avatar/skins.js';
 import { drawAvatarIcon, drawPlatformIcon } from './skinIcons.js';
+import { BOSSES } from '../campaign/bosses.js';
+import { drawBossIcon } from '../campaign/icons.js';
+import {
+  campaignProgress,
+  fmtRunTime,
+  gauntletUnlocked,
+  stageUnlocked,
+} from '../campaign/campaignState.js';
 import { ATTACH, GAME_TITLE, hueToColor } from '../config.js';
 import {
   LEADERBOARD_VISIBLE_ROWS,
@@ -59,13 +67,21 @@ export type PanelId =
   /** The music mute disc, left of the paper button. */
   | 'mute'
   /** The Gasket Gazette front page itself (opens modal over the lobby). */
-  | 'news';
+  | 'news'
+  /** The ARCADE campaign line-up — the titan gauntlet (modal over the lobby). */
+  | 'campaign';
 
 export type MenuAction =
   | 'start-tutorial'
   | 'start-training'
   | 'arcade-2v2'
   | 'arcade-ffa'
+  /** Open / close the campaign line-up; start a stage / a timed run. */
+  | 'open-campaign'
+  | 'campaign-close'
+  | 'campaign-speedrun'
+  | 'campaign-hardcore'
+  | `campaign-${number}`
   | 'toggle-shootback'
   | 'toggle-onlybots'
   | 'toggle-voice'
@@ -134,9 +150,10 @@ export type MenuAction =
 
 const PW = 512;
 const PH = 400;
-// The ARCADE panel is taller than the others to fit its three breaker toggles
-// (shoot-back, only-play-bots, voice-chat) with breathing room at the bottom.
-const TRAIN_H = PH + 92;
+// The ARCADE panel is taller than the others to fit the CAMPAIGN row plus its
+// three breaker toggles (shoot-back, only-play-bots, voice-chat) with
+// breathing room at the bottom.
+const TRAIN_H = PH + 152;
 // The 1V1 panel grows a little downward so the "searching for an opponent…"
 // line sits inside the frame instead of hanging off the bottom edge.
 const DUEL_H = PH + 48;
@@ -250,16 +267,18 @@ function makePanel(
   return { id, mesh, redraw, hitTest, drag, click };
 }
 
-/** Centre — ARCADE: aim training plus the 2v2 and FFA brawls, and the
- *  shoot-back toggle (which only flavours aim training). */
+/** Centre — ARCADE: the titan CAMPAIGN, aim training plus the 2v2 and FFA
+ *  brawls, and the shoot-back toggle (which only flavours aim training). */
 function drawTrain(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
   panelBg(ctx, false, UI.emberBright, 'ARCADE', PW, TRAIN_H);
 
   // TUTORIAL sits at the top — the very first thing a new boxer should tap.
   buttonPlate(ctx, 70, 80, PW - 140, 54, 'TUTORIAL', UI.emberBright, hoverAction === 'start-tutorial');
-  buttonPlate(ctx, 70, 140, PW - 140, 54, '2V2', UI.cool, hoverAction === 'arcade-2v2');
-  buttonPlate(ctx, 70, 200, PW - 140, 54, 'FFA', UI.amber, hoverAction === 'arcade-ffa');
-  buttonPlate(ctx, 70, 260, PW - 140, 54, 'AIM TRAINING', UI.ember, hoverAction === 'start-training');
+  // The single-player CAMPAIGN — the titan gauntlet — right below it.
+  buttonPlate(ctx, 70, 140, PW - 140, 54, 'CAMPAIGN', UI.danger, hoverAction === 'open-campaign');
+  buttonPlate(ctx, 70, 200, PW - 140, 54, '2V2', UI.cool, hoverAction === 'arcade-2v2');
+  buttonPlate(ctx, 70, 260, PW - 140, 54, 'FFA', UI.amber, hoverAction === 'arcade-ffa');
+  buttonPlate(ctx, 70, 320, PW - 140, 54, 'AIM TRAINING', UI.ember, hoverAction === 'start-training');
 
   // Two industrial breaker switches: targets-shoot-back, then only-play-bots.
   const breaker = (text: string, on: boolean, hot: boolean, py: number, onFill: string, onStroke: string): void => {
@@ -278,21 +297,22 @@ function drawTrain(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null
     const kw = pw / 2 - 10;
     ctx.fillRect(on ? px + pw - kw - 6 : px + 6, py + 6, kw, ph - 12);
   };
-  breaker('targets shoot back', app.shootBack, hoverAction === 'toggle-shootback', 320, 'rgba(79,183,255,0.25)', UI.cool);
-  breaker('only play bots', app.onlyBots, hoverAction === 'toggle-onlybots', 362, 'rgba(255,176,0,0.25)', UI.amber);
-  breaker('voice chat', voiceEnabled(), hoverAction === 'toggle-voice', 404, 'rgba(57,217,138,0.28)', '#39d98a');
+  breaker('targets shoot back', app.shootBack, hoverAction === 'toggle-shootback', 380, 'rgba(79,183,255,0.25)', UI.cool);
+  breaker('only play bots', app.onlyBots, hoverAction === 'toggle-onlybots', 422, 'rgba(255,176,0,0.25)', UI.amber);
+  breaker('voice chat', voiceEnabled(), hoverAction === 'toggle-voice', 464, 'rgba(57,217,138,0.28)', '#39d98a');
 }
 
 function hitTrain(_u: number, v: number): MenuAction | null {
   // v: 0 bottom → 1 top (canvas y = (1-v)*TRAIN_H — this panel is taller).
   const y = (1 - v) * TRAIN_H;
   if (y >= 80 && y <= 134) return 'start-tutorial';
-  if (y >= 140 && y <= 194) return 'arcade-2v2';
-  if (y >= 200 && y <= 254) return 'arcade-ffa';
-  if (y >= 260 && y <= 314) return 'start-training';
-  if (y >= 318 && y <= 358) return 'toggle-shootback';
-  if (y >= 360 && y <= 400) return 'toggle-onlybots';
-  if (y >= 402 && y <= 442) return 'toggle-voice';
+  if (y >= 140 && y <= 194) return 'open-campaign';
+  if (y >= 200 && y <= 254) return 'arcade-2v2';
+  if (y >= 260 && y <= 314) return 'arcade-ffa';
+  if (y >= 320 && y <= 374) return 'start-training';
+  if (y >= 378 && y <= 418) return 'toggle-shootback';
+  if (y >= 420 && y <= 460) return 'toggle-onlybots';
+  if (y >= 462 && y <= 502) return 'toggle-voice';
   return null;
 }
 
@@ -1691,6 +1711,186 @@ function drawCoinHud(ctx: CanvasRenderingContext2D): void {
 // The shop sells both cosmetics: AVATARS (the paid unlocks, plus a COMING SOON
 // tile) on top, PLATFORMS (the paid pads) below. Two tidy grids of chips with
 // the CLOSE button clear beneath them.
+// ───────────────────── THE TITAN GAUNTLET (campaign) ────────────────────────
+// The ARCADE panel's CAMPAIGN plate opens this modal line-up: the five titans
+// left to right (you fight them in order), each card wearing its bespoke icon
+// (hook, piston, crosshair, shield, crown) with FELLED / FIGHT / sealed
+// states and path chevrons. Below: the timed GAUNTLET RUN and HARDCORE
+// plates with their local best-clock boards. Bouts return here, win or lose.
+
+const CAMP_W = 1024;
+const CAMP_H = 620;
+const CARD_W = 168;
+const CARD_H = 250;
+const CARD_GAP = 16;
+const CARD_Y = 96;
+const CARDS_X = (CAMP_W - (CARD_W * 5 + CARD_GAP * 4)) / 2;
+const RUN_BTN = { x: 48, y: 386, w: 320, h: 54 } as const;
+const HARD_BTN = { x: 48, y: 452, w: 320, h: 54 } as const;
+const CAMP_CLOSE = { x: CAMP_W - 48 - 170, y: 536, w: 170, h: 54 } as const;
+const ROMAN = ['I', 'II', 'III', 'IV', 'V'];
+
+/** A simple stencil padlock for sealed stages. */
+function padlock(ctx: CanvasRenderingContext2D, cx: number, cy: number, s = 1): void {
+  ctx.strokeStyle = UI.steelDim;
+  ctx.lineWidth = 5 * s;
+  ctx.beginPath();
+  ctx.arc(cx, cy - 8 * s, 11 * s, Math.PI, 0);
+  ctx.stroke();
+  ctx.fillStyle = UI.steelDim;
+  ctx.fillRect(cx - 15 * s, cy - 8 * s, 30 * s, 24 * s);
+}
+
+/** One run row: the start plate + its best-clock board beside it. */
+function drawRunRow(
+  ctx: CanvasRenderingContext2D,
+  btn: { x: number; y: number; w: number; h: number },
+  label: string,
+  sealedLabel: string,
+  open: boolean,
+  accent: string,
+  times: number[],
+  lockHint: string,
+  hot: boolean,
+): void {
+  buttonPlate(ctx, btn.x, btn.y, btn.w, btn.h, open ? label : sealedLabel, open ? accent : UI.steelDim, hot && open);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.font = '700 24px system-ui, sans-serif';
+  const tx = btn.x + btn.w + 28;
+  const ty = btn.y + btn.h / 2 + 1;
+  if (!open) {
+    ctx.fillStyle = UI.steelDim;
+    ctx.fillText(lockHint, tx, ty);
+  } else if (times.length === 0) {
+    ctx.fillStyle = UI.textDim;
+    ctx.fillText('no clocks on the board yet', tx, ty);
+  } else {
+    ctx.fillStyle = accent;
+    ctx.fillText(`★ ${fmtRunTime(times[0])}`, tx, ty);
+    ctx.fillStyle = UI.textDim;
+    ctx.fillText(times.slice(1, 4).map(fmtRunTime).join('  ·  '), tx + 140, ty);
+  }
+}
+
+function drawCampaign(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
+  ctx.clearRect(0, 0, CAMP_W, CAMP_H);
+  plate(ctx, 8, 8, CAMP_W - 16, CAMP_H - 16, {
+    cut: 30,
+    fill: UI.ink,
+    stroke: hoverAction ? UI.danger : UI.steel,
+  });
+  hazardStrip(ctx, 40, 34, 60, 18, UI.amber);
+  ctx.textAlign = 'left';
+  ctx.font = stencilFont(42);
+  ctx.fillStyle = UI.danger;
+  ctx.fillText('THE TITAN GAUNTLET', 118, 46);
+  ctx.textAlign = 'right';
+  ctx.font = '700 24px system-ui, sans-serif';
+  ctx.fillStyle = UI.textDim;
+  ctx.fillText('fight them in order · left to right', CAMP_W - 48, 46);
+  ctx.strokeStyle = UI.steelDim;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(40, 74);
+  ctx.lineTo(CAMP_W - 40, 74);
+  ctx.stroke();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  const cleared = campaignProgress.cleared;
+  for (let i = 0; i < 5; i++) {
+    const x = CARDS_X + i * (CARD_W + CARD_GAP);
+    const cx = x + CARD_W / 2;
+    const done = cleared[i] === true;
+    const open = stageUnlocked(i);
+    const boss = BOSSES[i];
+    const accent = hexCss(boss.accent);
+
+    plate(ctx, x, CARD_Y, CARD_W, CARD_H, {
+      cut: 14,
+      fill: done ? 'rgba(255,122,24,0.14)' : open ? 'rgba(255,176,0,0.08)' : 'rgba(150,150,170,0.05)',
+      stroke: done ? UI.ember : open ? accent : UI.steelDim,
+      rivets: false,
+    });
+
+    ctx.font = stencilFont(24);
+    ctx.fillStyle = open ? UI.textDim : UI.steelDim;
+    ctx.fillText(ROMAN[i], cx, CARD_Y + 26);
+
+    drawBossIcon(ctx, i, cx, CARD_Y + 104, 46, done ? UI.emberBright : open ? accent : UI.steelDim);
+    if (!open) padlock(ctx, cx, CARD_Y + 104);
+
+    ctx.font = stencilFont(19);
+    ctx.fillStyle = open ? UI.text : UI.steelDim;
+    ctx.fillText(open ? boss.name : 'SEALED', cx, CARD_Y + 184);
+
+    ctx.font = '700 20px system-ui, sans-serif';
+    if (done) {
+      ctx.fillStyle = UI.emberBright;
+      ctx.fillText('FELLED ✓', cx, CARD_Y + 222);
+    } else if (open) {
+      const hot = hoverAction === (`campaign-${i}` as MenuAction);
+      ctx.fillStyle = hot ? accent : UI.amber;
+      ctx.fillText('FIGHT', cx, CARD_Y + 222);
+    } else {
+      ctx.fillStyle = UI.steelDim;
+      ctx.fillText('fell the last', cx, CARD_Y + 222);
+    }
+
+    // Path chevron toward the next card.
+    if (i < 4) {
+      ctx.fillStyle = cleared[i] ? UI.ember : UI.steelDim;
+      const ax = x + CARD_W + CARD_GAP / 2;
+      const ay = CARD_Y + 104;
+      ctx.beginPath();
+      ctx.moveTo(ax - 6, ay - 10);
+      ctx.lineTo(ax + 6, ay);
+      ctx.lineTo(ax - 6, ay + 10);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
+  // The timed runs — unlocked by clearing the gauntlet, then by finishing it.
+  drawRunRow(
+    ctx, RUN_BTN, 'RUN THE GAUNTLET', 'GAUNTLET SEALED', gauntletUnlocked(), UI.emberBright,
+    campaignProgress.runTimesGauntlet, 'fell all five titans to unlock',
+    hoverAction === 'campaign-speedrun',
+  );
+  drawRunRow(
+    ctx, HARD_BTN, 'HARDCORE', 'HARDCORE SEALED', campaignProgress.hardcoreUnlocked, UI.danger,
+    campaignProgress.runTimesHardcore, 'complete a gauntlet run to unlock',
+    hoverAction === 'campaign-hardcore',
+  );
+
+  ctx.textAlign = 'left';
+  ctx.font = '600 22px system-ui, sans-serif';
+  ctx.fillStyle = UI.textDim;
+  ctx.fillText('first fell pays double coins & xp · runs are timed on fight time only', 48, CAMP_CLOSE.y + CAMP_CLOSE.h / 2 + 1);
+  ctx.textAlign = 'center';
+  buttonPlate(ctx, CAMP_CLOSE.x, CAMP_CLOSE.y, CAMP_CLOSE.w, CAMP_CLOSE.h, 'CLOSE', UI.amber, hoverAction === 'campaign-close');
+}
+
+function hitCampaign(u: number, v: number): MenuAction | null {
+  const x = u * CAMP_W;
+  const y = (1 - v) * CAMP_H;
+  const inBtn = (b: { x: number; y: number; w: number; h: number }): boolean =>
+    x >= b.x && x <= b.x + b.w && y >= b.y - 5 && y <= b.y + b.h + 5;
+  if (inBtn(CAMP_CLOSE)) return 'campaign-close';
+  if (inBtn(RUN_BTN) && gauntletUnlocked()) return 'campaign-speedrun';
+  if (inBtn(HARD_BTN) && campaignProgress.hardcoreUnlocked) return 'campaign-hardcore';
+  if (y >= CARD_Y - 6 && y <= CARD_Y + CARD_H + 6) {
+    for (let i = 0; i < 5; i++) {
+      const sx = CARDS_X + i * (CARD_W + CARD_GAP);
+      if (x >= sx && x <= sx + CARD_W) {
+        return stageUnlocked(i) ? (`campaign-${i}` as MenuAction) : null;
+      }
+    }
+  }
+  return null;
+}
+
 // ─────────────────────────── SHOP & LOCKER ──────────────────────────────────
 // Two faces of one tabbed cosmetics plate. SHOP lists only the items you DON'T
 // own yet, with prices (buying auto-equips AND stocks your locker); LOCKER lists
@@ -1833,6 +2033,10 @@ function drawTile(ctx: CanvasRenderingContext2D, it: DisplayItem, hoverAction: M
   } else if (owned) {
     ctx.fillStyle = 'rgba(232,236,242,0.5)';
     ctx.fillText('EQUIP', icx, fy);
+  } else if ((it.skin as PlatformSkin).earnedBy) {
+    // Earned, never sold — the tile says how to win it (the CHAMPION pad).
+    ctx.fillStyle = UI.steelDim;
+    ctx.fillText((it.skin as PlatformSkin).earnedBy as string, icx, fy);
   } else {
     const price = (it.skin as { price?: number }).price ?? 0;
     const str = String(price);
@@ -2102,6 +2306,11 @@ export function createMenu(scene: Scene): Menu {
     ch: GZ,
   });
   const news = makePanel('news', 0.86, 0.86 * (NH / NW), drawNews, hitNews, { cw: NW, ch: NH });
+  // The ARCADE campaign line-up (the titan gauntlet) — modal over the lobby.
+  const campaign = makePanel('campaign', 1.5, 1.5 * (CAMP_H / CAMP_W), drawCampaign, hitCampaign, {
+    cw: CAMP_W,
+    ch: CAMP_H,
+  });
   // The coin readout beside the paper button, and the platform shop it links to.
   const coinHud = makePanel('coins', 0.24, 0.24 * (COIN_HUD_H / COIN_HUD_W), (ctx) => drawCoinHud(ctx), () => null, {
     cw: COIN_HUD_W,
@@ -2156,8 +2365,11 @@ export function createMenu(scene: Scene): Menu {
   // The front page opens dead centre, facing you — modal over the lobby arc.
   news.mesh.position.set(0, 1.5, -1.16);
   news.mesh.visible = false;
+  // The titan line-up opens dead centre too — same modal slot as the paper.
+  campaign.mesh.position.set(0, 1.5, -1.2);
+  campaign.mesh.visible = false;
 
-  const panels = [train, duel, info, board, custom, balls, gazetteBtn, muteBtn, coinHud, shop, news];
+  const panels = [train, duel, info, board, custom, balls, gazetteBtn, muteBtn, coinHud, shop, news, campaign];
   for (const p of panels) {
     p.redraw(null);
     group.add(p.mesh);

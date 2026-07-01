@@ -13,7 +13,9 @@
  */
 
 export type AppState = 'menu' | 'queueing' | 'playing' | 'training';
-export type AppMode = 'bot' | 'net';
+/** 'campaign' = an ARCADE titan bout: CampaignSystem drives the opponent (no
+ *  pose bus, no bot, no net) and GameStateSystem stands down. */
+export type AppMode = 'bot' | 'net' | 'campaign';
 export type { ArcadeMode } from '../config.js';
 import type { ArcadeMode } from '../config.js';
 /** The arena backdrop: bare AR passthrough, or the papercraft desert. */
@@ -117,6 +119,17 @@ export const app: {
   infoView: 'root' | 'pubpick';
   /** The Gasket Gazette is open over the lobby (modal, like customisation). */
   gazetteOpen: boolean;
+  /** The ARCADE campaign line-up (the titan sub-menu) is open over the lobby
+   *  (modal, like customisation). Campaign bouts return here, win or lose. */
+  campaignOpen: boolean;
+  /** Which titan is being fought while mode === 'campaign' (0-based stage). */
+  campaignStage: number;
+  /**
+   * How the campaign is being played: one titan ('single'), the timed
+   * back-to-back GAUNTLET RUN (health refills between titans), or HARDCORE
+   * (same run, no healing).
+   */
+  campaignMode: 'single' | 'gauntlet' | 'hardcore';
   /** Which backdrop the arena renders — held across every mode. */
   environment: AppEnvironment;
   /** Player's chosen avatar-accent hue (0..1 around the colour wheel). */
@@ -164,6 +177,9 @@ export const app: {
   pubRegionCounts: {},
   infoView: 'root',
   gazetteOpen: false,
+  campaignOpen: false,
+  campaignStage: 0,
+  campaignMode: 'single',
   environment: ((): AppEnvironment => {
     const e = localStorage.getItem('ff-env');
     // First-ever launch (nothing stored) opens in the desert arena; after that

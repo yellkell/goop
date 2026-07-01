@@ -10,6 +10,9 @@ import { createComponent, Types } from '@iwsdk/core';
 export const TargetKind = {
   Disc: 0,
   Cutout: 1,
+  /** The last-30-seconds bonus target: a small strafing gold OCTA plate
+   *  (pub octa-hunt style) worth a jackpot. */
+  Drone: 2,
 } as const;
 
 export const TargetState = {
@@ -34,6 +37,12 @@ export const TrainingTarget = createComponent(
     upY: { type: Types.Float32, default: 1.3 },
     /** Cutout shoot-back: <0 = won't shoot, else countdown while holding. */
     shootTimer: { type: Types.Float32, default: -1 },
+    /** Drone strafing: the anchor X it oscillates around… */
+    baseX: { type: Types.Float32, default: 0 },
+    /** …the strafe half-range in metres (0 = a static target)… */
+    driftAmp: { type: Types.Float32, default: 0 },
+    /** …and the strafe rate in rad/s. */
+    driftRate: { type: Types.Float32, default: 0 },
   },
   'A pop-up Aim Training target.',
 );

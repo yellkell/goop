@@ -86,7 +86,9 @@ export class GameStateSystem extends createSystem({
       return;
     }
 
-    if (app.state !== 'playing') {
+    if (app.state !== 'playing' || app.mode === 'campaign') {
+      // ARCADE campaign titan bouts are owned end-to-end by CampaignSystem
+      // (single long round, its own HUD and music) — stand down entirely.
       this.scoreboard?.setVisible(false);
       if (this.wasPlaying) stopBattleTrack(); // bout ended/left — stop the loop (sting hands off)
       this.wasPlaying = false;

@@ -22,6 +22,7 @@ import { Combatant } from '../components/Combatant.js';
 import { Health } from '../components/Health.js';
 import { createFireVisual, emberBurst, spawnEmber, stampTrail, type FireVisual } from '../fx/fire.js';
 import { ballCommands, opponents, MAX_OPPONENTS } from '../combat/opponentBus.js';
+import { campaign } from '../campaign/campaignState.js';
 import { fighterTeam } from '../combat/fighters.js';
 import { match } from '../combat/matchState.js';
 import { app, training } from '../menu/appState.js';
@@ -488,11 +489,18 @@ export class FireballSystem extends createSystem({
   }
 
   /** Aim point for YOUR throw's assist. The classic duel uses the fixed point
-   *  across the gap (preserves 1v1 feel); arcade brawls pick the live enemy
-   *  whose direction best matches your throw `dir`, so the assist reinforces
-   *  where you aimed rather than dragging the ball at the closest platform. A
-   *  throw with no enemy ahead gets no pull (out = straight ahead). */
+   *  across the gap (preserves 1v1 feel); a campaign titan bout tracks the
+   *  titan's live sweet spot (CampaignSystem keeps it on the head, or on the
+   *  core while it's vented open — both far above a human chest); arcade
+   *  brawls pick the live enemy whose direction best matches your throw
+   *  `dir`, so the assist reinforces where you aimed rather than dragging the
+   *  ball at the closest platform. A throw with no enemy ahead gets no pull
+   *  (out = straight ahead). */
   private aimTarget(from: Vector3, dir: Vector3, out: Vector3): void {
+    if (app.mode === 'campaign') {
+      out.copy(campaign.aimPoint);
+      return;
+    }
     if (app.arcade === '1v1') {
       out.set(0, 1.25, -ARENA_GAP);
       return;
