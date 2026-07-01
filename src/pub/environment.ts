@@ -1299,7 +1299,7 @@ function buildArcadeCabinet(): { cabinet: Group; screen: Mesh; stick: Group } {
   marquee.position.set(0, 1.86, 0.26); // proud of the body face (0.30) so the
   cabinet.add(marquee);                //  marquee/body fronts don't z-fight
   const marqueeText = new Panel(0.6, 0.2);
-  marqueeText.setLines([{ text: 'OCTO HUNT', size: 56, colour: '#ff8c1a', bold: true }]);
+  marqueeText.setLines([{ text: 'OCTA HUNT', size: 56, colour: '#ff8c1a', bold: true }]);
   // Sit the text clearly PROUD of the marquee face (front now at z 0.35).
   marqueeText.mesh.position.set(0, 1.86, 0.36);
   cabinet.add(marqueeText.mesh);
@@ -1329,7 +1329,7 @@ function buildArcadeCabinet(): { cabinet: Group; screen: Mesh; stick: Group } {
   const bracket = new Mesh(new BoxGeometry(0.5, 0.1, 0.22), darkSteel());
   bracket.position.set(0, 0.92, 0.4);
   cabinet.add(bracket);
-  // Legacy joystick group. OCTO HUNT is a light-gun game (you aim the
+  // Legacy joystick group. OCTA HUNT is a light-gun game (you aim the
   // controller at the screen), so DroneHuntSystem hides this at runtime — it's
   // kept only so the cabinet still builds a plausible control deck.
   const stick = new Group();
