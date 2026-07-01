@@ -159,6 +159,35 @@ function servo(from: number, to: number, dur: number, gain = 0.07, delay = 0): v
   osc.stop(t0 + dur + 0.05);
 }
 
+// --- Drone Hunt (arcade cabinet) -----------------------------------------
+
+/** The light-gun shot: a fast downward zap "pew". */
+export function huntShot(): void {
+  tone({ freq: 1500, to: 280, type: 'square', dur: 0.11, gain: 0.12 });
+  tone({ freq: 2400, to: 700, type: 'sawtooth', dur: 0.07, gain: 0.05 });
+}
+
+/** A drone destroyed: a small explosion — debris burst + low pop + metal crunch. */
+export function huntHit(): void {
+  whooshNoise(0.17, 0.17, 1000, 180);
+  tone({ freq: 240, to: 60, type: 'square', dur: 0.14, gain: 0.13 });
+  tone({ freq: 900, to: 300, type: 'triangle', dur: 0.06, gain: 0.06 });
+}
+
+/** A drone got past you (a life lost): a low descending warning bwoop. */
+export function huntEscape(): void {
+  tone({ freq: 520, to: 120, type: 'sawtooth', dur: 0.3, gain: 0.13 });
+  tone({ freq: 260, to: 80, type: 'square', dur: 0.34, gain: 0.08, delay: 0.02 });
+}
+
+/** Game over: a short doomy descending arpeggio with a debris tail. */
+export function huntOver(): void {
+  tone({ freq: 440, type: 'square', dur: 0.16, gain: 0.12 });
+  tone({ freq: 330, type: 'square', dur: 0.16, gain: 0.12, delay: 0.16 });
+  tone({ freq: 208, type: 'square', dur: 0.34, gain: 0.13, delay: 0.32 });
+  whooshNoise(0.42, 0.06, 380, 70, 0.32);
+}
+
 // --- Game sounds ---------------------------------------------------------
 
 /** Trigger pulled at the fist — a latch clacks and the furnace lights. */
