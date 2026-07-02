@@ -30,27 +30,28 @@ in-your-face boxing feel.
   weakened opponent — it adds nothing to any combat system, so the regular
   game is untouched.
 - **CAMPAIGN** — the ARCADE panel's titan gauntlet, right under TUTORIAL:
-  five single-player boss machines fought left to right on the line-up, each
-  bigger than the last (~2.3 m up to ~6 m of plate), each wearing its own
-  hand-drawn card icon (hook, piston, crosshair, shield, crown) and its own
-  pit-lane intro — klaxon, strobes, the titan grinding up out of the floor,
-  name card, roar, bell. Titans never throw balls: they wind up **melee and
-  ranged strikes whose kill zones charge up visibly on YOUR platform**
-  (fist-slam discs, duck-under sweep blades, eye-beam strips, mortar
-  barrages), and every fight has its own law — RUSTHOOK's crater detonates
-  *twice*, PISTONKAISER slams on a marching three-beat, VULTURE's beam
-  *tracks you* and locks late, JUGGERNAUT's shells leave **burning ground**,
-  GOLIATH does all of it and **enrages at half health**. Their armour clanks
-  your fire away; damage goes in through the **visor**, the pauldron **pods**
-  while a barrage cooks, and — for double — the chest **core** that vents
-  open after every melee swing. Wins bank coins + XP at the flat per-game
-  rate; the **first fell of each titan pays double**, and the first fell of
-  GOLIATH awards the **CHAMPION platform** (a locker exclusive the shop only
-  teases). Fell all five and the line-up opens **THE GAUNTLET RUN** — all
-  five back to back, health refit between bouts, timed on fight time only,
-  best clocks kept on the line-up's boards — and finishing it unlocks
-  **HARDCORE**: the same run with no healing, on its own board. Win or lose,
-  campaign bouts land you back on the line-up.
+  five single-player boss machines fought left to right on the line-up
+  (~1.9 m up to ~3.9 m of plate), each a BESPOKE chassis — RUSTHOOK's
+  hunched rust-brown wreck with a crane-hook arm, PISTONKAISER's anvil head,
+  smokestacks and hammer-block fists, VULTURE's hooded one-eyed skull with
+  swept wing plates and talons, JUGGERNAUT's squat dome-headed fortress in
+  skirt armour, GOLIATH's near-black gold-crowned king — with its own
+  pit-lane intro (klaxon, strobes, the rise from the floor, name reveal,
+  bell). Titans never throw balls: they wind up **melee and ranged strikes
+  whose kill zones charge up visibly on YOUR platform** — a ghost hammer
+  descends onto each slam disc so you always know where it lands, sweeps
+  send a blade you watch travel, beams rake marked strips (VULTURE's track
+  you and lock late), barrages ripple and JUGGERNAUT's leave burning ground;
+  GOLIATH enrages at half health. Damage runs on the **head↔core cycle**:
+  one weak point blazes at a time (a floating prompt names it), every landed
+  hit flips it, everything else clanks. Wins bank coins + XP at the flat
+  per-game rate; the **first fell of each titan pays double**, and the first
+  fell of GOLIATH awards the **CHAMPION platform** (a locker exclusive the
+  shop only teases). Fell all five and the line-up opens **THE GAUNTLET
+  RUN** — all five back to back on a fight-time-only clock, best times on
+  the line-up's boards — and finishing it unlocks **HARDCORE** (no healing,
+  its own board). The in-fight HUD is floating text and bare bars — no
+  boards, no lectures.
 - **AIM TRAINING** — the heart of the game. Bullseye discs and humanoid
   cutouts pop up across the gap; land your fire while they're up. Streaks
   multiply your score and the cadence ramps. Flip **targets shoot back** on

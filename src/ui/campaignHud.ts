@@ -1,9 +1,15 @@
 /**
- * ARCADE HUD — the campaign bout's boards, in the same smoked-glass
- * industrial language as the duel scoreboards and hung in the same places
- * players already know: YOUR board left (ember), the TITAN's board right
- * (its signature accent), and a big centre card for the intro titles,
- * FIGHT flash, payout and defeat lines.
+ * ARCADE HUD — floating text and bare bars, no plates. The campaign speaks
+ * in as few words as possible:
+ *
+ *  - the titan's NAME (and the run clock) floating over the gap, with a
+ *    slim segmented health bar under it — dark-souls style;
+ *  - YOUR health as one small ember bar low in front of you;
+ *  - a big centre TITLE for the beats (WARNING · the name reveal · FIGHT ·
+ *    TITAN FELLED · SCRAPPED), one optional sub-line, nothing else.
+ *
+ * Everything is a transparent canvas texture — glowing stencil type floating
+ * over your passthrough room, not a billboard.
  */
 
 import {
@@ -16,87 +22,78 @@ import {
   type Scene,
 } from 'three';
 import { ARENA_GAP } from '../config.js';
-import { UI, hazardStrip, plate, segmentBar, stencilFont } from './industrial.js';
+import { UI, segmentBar, stencilFont } from './industrial.js';
 
-const W = 880;
-const H = 420;
-
-interface Board {
+interface TextPlane {
   mesh: Mesh;
   ctx: CanvasRenderingContext2D;
   tex: CanvasTexture;
+  w: number;
+  h: number;
+  /** What's currently drawn, so identical redraw calls cost nothing. */
+  key: string;
 }
 
 export interface CampaignHud {
   setVisible(v: boolean): void;
-  /** Redraw the two side boards. `accent` is the titan's CSS colour. */
-  updateBoards(opts: {
-    stageLabel: string;
-    bossName: string;
-    accent: string;
-    bossHp: number;
-    bossMax: number;
-    playerHp: number;
-    playerMax: number;
-    coreOpen: boolean;
-    hint: string;
-    /** The gauntlet-run clock (empty outside runs). */
-    timer: string;
-  }): void;
-  /** Big centre card: headline + up to three sub lines. Empty title clears. */
-  showCard(title: string, lines: string[], accent?: string): void;
+  /** The floating nameplate: titan name + optional run clock. */
+  setBoss(name: string, accent: string, clock: string): void;
+  /** The two bare bars (fractions 0..1). Boss bar wears the accent. */
+  setBars(bossFrac: number, playerFrac: number, accent: string): void;
+  /** Big centre beat: title + one optional sub-line. Empty title clears. */
+  title(text: string, sub: string, accent?: string): void;
 }
 
-function makeBoard(wMeters: number, hMeters: number): Board {
+/** Set the stencil font at `px`, shrinking until `text` fits `maxW`. */
+function fitStencil(ctx: CanvasRenderingContext2D, text: string, px: number, maxW: number): void {
+  let size = px;
+  ctx.font = stencilFont(size);
+  while (size > 24 && ctx.measureText(text).width > maxW) {
+    size -= 4;
+    ctx.font = stencilFont(size);
+  }
+}
+
+function makeText(scene: Scene, w: number, h: number, meters: number): TextPlane {
   const canvas = document.createElement('canvas');
-  canvas.width = W;
-  canvas.height = H;
+  canvas.width = w;
+  canvas.height = h;
   const ctx = canvas.getContext('2d')!;
+  ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   const tex = new CanvasTexture(canvas);
   tex.minFilter = LinearFilter;
   const mesh = new Mesh(
-    new PlaneGeometry(wMeters, hMeters),
+    new PlaneGeometry(meters, meters * (h / w)),
     new MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }),
   );
-  return { mesh, ctx, tex };
-}
-
-function header(ctx: CanvasRenderingContext2D, title: string, neon: string, right = ''): void {
-  ctx.clearRect(0, 0, W, H);
-  hazardStrip(ctx, 32, 38, 64, 22, UI.amber);
-  ctx.textAlign = 'left';
-  ctx.font = stencilFont(54);
-  ctx.fillStyle = neon;
-  ctx.fillText(title, 116, 54);
-  if (right) {
-    ctx.textAlign = 'right';
-    ctx.font = stencilFont(44);
-    ctx.fillStyle = UI.textDim;
-    ctx.fillText(right, W - 36, 54);
-  }
-  ctx.strokeStyle = neon;
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(32, 96);
-  ctx.lineTo(W - 32, 96);
-  ctx.stroke();
+  mesh.renderOrder = 50;
+  scene.add(mesh);
+  return { mesh, ctx, tex, w, h, key: '' };
 }
 
 export function createCampaignHud(scene: Scene): CampaignHud {
   const group = new Group();
   group.name = 'campaign-hud';
 
-  const left = makeBoard(1.5, 0.72); // YOU
-  left.mesh.position.set(-1.85, 1.95, -ARENA_GAP * 0.52);
-  left.mesh.rotation.y = 0.62;
-  const right = makeBoard(1.5, 0.72); // THE TITAN
-  right.mesh.position.set(1.85, 1.95, -ARENA_GAP * 0.52);
-  right.mesh.rotation.y = -0.62;
-  const centre = makeBoard(2.3, 1.1);
-  centre.mesh.position.set(0, 2.5, -ARENA_GAP * 0.55);
+  // Nameplate + boss bar float over the gap, under the titan's chin height.
+  const name = makeText(scene, 1024, 128, 1.7);
+  name.mesh.position.set(0, 2.42, -ARENA_GAP * 0.72);
+  const bossBar = makeText(scene, 768, 44, 1.35);
+  bossBar.mesh.position.set(0, 2.26, -ARENA_GAP * 0.72);
 
-  group.add(left.mesh, right.mesh, centre.mesh);
+  // Your bar: small, low, tilted up at you — a glance down, not a board.
+  const playerBar = makeText(scene, 512, 40, 0.62);
+  playerBar.mesh.position.set(0, 0.98, -1.1);
+  playerBar.mesh.rotation.x = -0.55;
+
+  // The centre beat text, big and unmissable, mid-gap at eye height.
+  const centre = makeText(scene, 1024, 300, 2.1);
+  centre.mesh.position.set(0, 1.9, -ARENA_GAP * 0.6);
+
+  // makeText parents to the scene; re-parent under the group so one
+  // visibility flag rules them all.
+  for (const t of [name, bossBar, playerBar, centre]) group.add(t.mesh);
   group.visible = false;
   scene.add(group);
 
@@ -105,67 +102,72 @@ export function createCampaignHud(scene: Scene): CampaignHud {
       group.visible = v;
     },
 
-    updateBoards({ stageLabel, bossName, accent, bossHp, bossMax, playerHp, playerMax, coreOpen, hint, timer }) {
-      // The titan's board: name, its accent, big red-line health.
-      {
-        const { ctx, tex } = right;
-        header(ctx, bossName, accent, stageLabel);
-        plate(ctx, 28, 124, W - 56, 110, { cut: 16, fill: UI.ink, rivets: false });
-        segmentBar(ctx, 52, 148, W - 104, 60, bossHp / bossMax, accent);
-        ctx.textAlign = 'left';
-        ctx.font = stencilFont(40);
-        if (coreOpen) {
-          ctx.fillStyle = UI.danger;
-          ctx.fillText('CORE EXPOSED — HIT IT', 52, 308);
-        } else {
-          ctx.fillStyle = UI.steelDim;
-          ctx.fillText('CORE SHUTTERED', 52, 308);
-        }
-        ctx.textAlign = 'right';
-        ctx.font = stencilFont(48);
-        ctx.fillStyle = UI.textDim;
-        ctx.fillText(String(Math.ceil(bossHp)), W - 40, 308);
-        tex.needsUpdate = true;
-      }
-      // Your board: health, the survival hint, and the run clock in runs.
-      {
-        const { ctx, tex } = left;
-        header(ctx, 'YOU', UI.emberBright, timer);
-        plate(ctx, 28, 124, W - 56, 110, { cut: 16, fill: UI.ink, rivets: false });
-        segmentBar(ctx, 52, 148, W - 104, 60, playerHp / playerMax, UI.emberBright);
-        ctx.textAlign = 'left';
+    setBoss(bossName, accent, clock) {
+      const key = `${bossName}|${accent}|${clock}`;
+      if (key === name.key) return;
+      name.key = key;
+      const { ctx, w, h } = name;
+      ctx.clearRect(0, 0, w, h);
+      fitStencil(ctx, bossName, 64, w - 60);
+      ctx.fillStyle = accent;
+      ctx.shadowColor = accent;
+      ctx.shadowBlur = 26;
+      ctx.fillText(bossName, w / 2, h / 2 - (clock ? 14 : 0));
+      ctx.shadowBlur = 0;
+      if (clock) {
         ctx.font = '700 34px system-ui, sans-serif';
-        ctx.fillStyle = UI.amberSoft;
-        ctx.fillText(hint, 52, 308);
-        ctx.textAlign = 'right';
-        ctx.font = stencilFont(48);
-        ctx.fillStyle = UI.textDim;
-        ctx.fillText(String(Math.ceil(playerHp)), W - 40, 308);
-        tex.needsUpdate = true;
+        ctx.fillStyle = UI.text;
+        ctx.fillText(clock, w / 2, h - 24);
+      }
+      name.tex.needsUpdate = true;
+    },
+
+    setBars(bossFrac, playerFrac, accent) {
+      // Quantise so tiny per-frame drips don't force canvas uploads.
+      const key = `${Math.round(bossFrac * 200)}|${accent}`;
+      if (key !== bossBar.key) {
+        bossBar.key = key;
+        const { ctx, w, h } = bossBar;
+        ctx.clearRect(0, 0, w, h);
+        segmentBar(ctx, 2, 6, w - 4, h - 12, bossFrac, accent);
+        bossBar.tex.needsUpdate = true;
+      }
+      const pkey = String(Math.round(playerFrac * 200));
+      if (pkey !== playerBar.key) {
+        playerBar.key = pkey;
+        const { ctx, w, h } = playerBar;
+        ctx.clearRect(0, 0, w, h);
+        segmentBar(ctx, 2, 6, w - 4, h - 12, playerFrac, UI.emberBright);
+        playerBar.tex.needsUpdate = true;
       }
     },
 
-    showCard(title, lines, accent = UI.emberBright) {
-      const { ctx, tex } = centre;
-      ctx.clearRect(0, 0, W, H);
-      if (title) {
-        plate(ctx, 40, 60, W - 80, 300, { cut: 30, fill: UI.inkDeep, stroke: UI.amberSoft });
-        hazardStrip(ctx, 58, 74, 70, 18, UI.amber);
-        hazardStrip(ctx, W - 128, 74, 70, 18, UI.amber);
-        ctx.textAlign = 'center';
-        ctx.font = stencilFont(84);
-        const grad = ctx.createLinearGradient(0, 90, 0, 220);
+    title(text, sub, accent = UI.emberBright) {
+      const key = `${text}|${sub}|${accent}`;
+      if (key === centre.key) return;
+      centre.key = key;
+      const { ctx, w, h } = centre;
+      ctx.clearRect(0, 0, w, h);
+      if (text) {
+        fitStencil(ctx, text, 120, w - 80);
+        const grad = ctx.createLinearGradient(0, h / 2 - 70, 0, h / 2 + 70);
         grad.addColorStop(0, '#fff3cf');
         grad.addColorStop(1, accent);
         ctx.fillStyle = grad;
-        ctx.fillText(title, W / 2, 158);
-        ctx.font = '700 36px system-ui, sans-serif';
-        lines.slice(0, 3).forEach((line, i) => {
-          ctx.fillStyle = i === 0 ? UI.text : UI.textDim;
-          ctx.fillText(line, W / 2, 232 + i * 50);
-        });
+        ctx.shadowColor = accent;
+        ctx.shadowBlur = 34;
+        ctx.fillText(text, w / 2, h / 2 - (sub ? 30 : 0));
+        ctx.shadowBlur = 0;
+        if (sub) {
+          ctx.font = '700 44px system-ui, sans-serif';
+          ctx.fillStyle = UI.text;
+          ctx.shadowColor = 'rgba(0,0,0,0.8)';
+          ctx.shadowBlur = 10;
+          ctx.fillText(sub, w / 2, h / 2 + 78);
+          ctx.shadowBlur = 0;
+        }
       }
-      tex.needsUpdate = true;
+      centre.tex.needsUpdate = true;
     },
   };
 }

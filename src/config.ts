@@ -261,9 +261,10 @@ export const CAMPAIGN = {
   victoryDelay: 8, // seconds of collapse + payout card before the line-up
   defeatDelay: 5, // seconds of SCRAPPED card before the line-up
 
-  // Weak-point law (Hitbox.damageScale): armour clanks, the visor always
-  // counts, the exposed core takes double.
-  headScale: 1.0,
+  // Weak-point law (Hitbox.damageScale): armour clanks; the LIVE point of
+  // the head↔core cycle takes real damage (every landed hit flips the cycle:
+  // head, then core, then head… until the titan is dead).
+  headScale: 1.5,
   coreScale: 2.0,
   podScale: 1.5,
 

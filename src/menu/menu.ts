@@ -1867,7 +1867,7 @@ function drawCampaign(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | n
   ctx.textAlign = 'left';
   ctx.font = '600 22px system-ui, sans-serif';
   ctx.fillStyle = UI.textDim;
-  ctx.fillText('first fell pays double coins & xp · runs are timed on fight time only', 48, CAMP_CLOSE.y + CAMP_CLOSE.h / 2 + 1);
+  ctx.fillText('first fell pays ×2', 48, CAMP_CLOSE.y + CAMP_CLOSE.h / 2 + 1);
   ctx.textAlign = 'center';
   buttonPlate(ctx, CAMP_CLOSE.x, CAMP_CLOSE.y, CAMP_CLOSE.w, CAMP_CLOSE.h, 'CLOSE', UI.amber, hoverAction === 'campaign-close');
 }

@@ -6,13 +6,14 @@
  *            (Squeeze a trigger to skip the ceremony.)
  *  FIGHT   : the titan cycles telegraphed attacks — every kill zone charges
  *            visibly ON YOUR PLATFORM (see campaign/telegraphs.ts): fist
- *            SLAMS (step out of the disc), horizontal SWEEPS (duck the
- *            blade), eye BEAMS (sidestep the strip) and mortar BARRAGES
- *            (thread the footprints). Its armour clanks your fire away;
- *            damage goes in through the visor, the pauldron pods while a
- *            barrage cooks, and — double — the chest core that vents open
- *            after every melee swing. Dodge, then punish.
- *  VICTORY : collapse, payout card (double scrap/XP on a first fell).
+ *            SLAMS (a ghost hammer descends onto the disc — step out),
+ *            horizontal SWEEPS (duck the travelling blade), eye BEAMS
+ *            (sidestep the strip) and mortar BARRAGES (thread the
+ *            footprints). Damage runs on the HEAD↔CORE cycle: exactly one
+ *            weak point is live at a time (it blazes; a floating prompt
+ *            names it), every landed hit flips it, and everything else is
+ *            armour that clanks. Dodge, re-aim, punish, repeat.
+ *  VICTORY : collapse, floating payout line (double coins/XP on a first fell).
  *  DEFEAT  : SCRAPPED. The titan stands. Consolation pay.
  *
  * The titan is NOT the pose-bus opponent — OpponentSystem stands down in
@@ -24,7 +25,9 @@
 import { createSystem, InputComponent, Vector3, type Entity } from '@iwsdk/core';
 import {
   AdditiveBlending,
+  BoxGeometry,
   CylinderGeometry,
+  Group,
   Mesh,
   MeshBasicMaterial,
   Object3D,
@@ -58,7 +61,7 @@ import { announce } from '../audio/announcer.js';
 import { playCash } from '../audio/cash.js';
 import { playVictory, startBattleMusic, stopBattleTrack } from '../audio/battleMusic.js';
 import { emberBurst } from '../fx/fire.js';
-import { spawnFireImpact } from '../fx/effects.js';
+import { spawnFireImpact, spawnPopup } from '../fx/effects.js';
 import { feedback } from '../fx/feedback.js';
 import { glowSprite } from '../materials/glow.js';
 import { pulseHand } from '../input/haptics.js';
@@ -74,7 +77,6 @@ import {
   PROGRESSION,
 } from '../config.js';
 
-const ROMAN = ['I', 'II', 'III', 'IV', 'V'];
 
 type Phase = 'idle' | 'intro' | 'fight' | 'victory' | 'defeat';
 
@@ -97,6 +99,12 @@ interface ActiveAttack {
   tracks: boolean;
   /** Per-beam lateral offsets, kept so tracking re-aims stay parallel. */
   beamOffsets: number[];
+  /**
+   * Slam attacks only: a ghost hammer hovering over each marked disc,
+   * descending as its countdown fills — so "arm goes up" visibly connects to
+   * "THIS spot gets hit". Disposed at that zone's detonation.
+   */
+  markers: (Group | null)[];
 }
 
 /** A burning floor patch left by JUGGERNAUT's mortars — the ground war. */
@@ -143,7 +151,12 @@ export class CampaignSystem extends createSystem({
   private lastKind: AttackKind | null = null;
   private strikes: Strike[] = [];
   private patches: BurnPatch[] = [];
-  private coreOpen = 0; // seconds left on the vented-core window
+  /**
+   * The head↔core cycle: exactly ONE weak point is live at a time (the other
+   * is armour). Every landed hit flips it — head, core, head, core… until
+   * the titan is dead. Starts on the head.
+   */
+  private lit: 'head' | 'core' = 'head';
   private invuln = 0; // player i-frames after eating a strike
   private strikeSwing: [number, number] = [0, 0]; // post-strike arm follow-through
   private flinch = 0;
@@ -152,7 +165,6 @@ export class CampaignSystem extends createSystem({
   private hudTimer = 0;
   private emberTimer = 0;
   private cardTimer = 0; // auto-clear for transient cards (ENRAGED)
-  private payoutLines: string[] = [];
   // Gauntlet runs: fight-time-only clock, and whether this victory chains on.
   private runClock = 0;
   private advanceAfterVictory = false;
@@ -247,14 +259,15 @@ export class CampaignSystem extends createSystem({
 
     this.ensureHitboxes();
     this.clearPatches();
-    this.attack = null;
-    this.coreOpen = 0;
+    this.disposeAttack();
+    this.lit = 'head'; // the cycle always opens on the head
     this.invuln = 0;
     this.enraged = false;
     this.cardTimer = 0;
     this.cooldown = rand(this.def.cooldownMin, this.def.cooldownMax) + 0.8;
     this.lastKind = null;
     campaign.coreOpen = false;
+    this.hud.setBoss(this.def.name, this.accentCss(), '');
 
     // Collisions and rim-drain stay off until the bell (phase 'roundOver').
     match.phase = 'roundOver';
@@ -267,14 +280,33 @@ export class CampaignSystem extends createSystem({
 
     this.phase = 'intro';
     this.t = 0;
-    this.hud.showCard('WARNING', [warning], '#ffb000');
+    this.hud.title('WARNING', warning, '#ffb000');
     sfx.klaxon();
+  }
+
+  /** Tear down the live attack: telegraphs AND any ghost hammer markers. */
+  private disposeAttack(): void {
+    const a = this.attack;
+    if (!a) return;
+    a.telegraphs.forEach((t) => t?.dispose());
+    a.markers.forEach((m) => this.disposeMarker(m));
+    this.attack = null;
+  }
+
+  private disposeMarker(m: Group | null): void {
+    if (!m) return;
+    m.traverse((o) => {
+      const mesh = o as Mesh;
+      if (mesh.geometry) mesh.geometry.dispose();
+      const mat = mesh.material as MeshBasicMaterial | undefined;
+      mat?.dispose?.();
+    });
+    m.removeFromParent();
   }
 
   private teardown(): void {
     this.phase = 'idle';
-    this.attack?.telegraphs.forEach((t) => t?.dispose());
-    this.attack = null;
+    this.disposeAttack();
     this.clearPatches();
     for (const s of this.strikes) s.dispose();
     this.strikes = [];
@@ -282,7 +314,7 @@ export class CampaignSystem extends createSystem({
     this.rig = undefined;
     this.light.visible = false;
     this.hud.setVisible(false);
-    this.hud.showCard('', []);
+    this.hud.title('', '');
     campaign.coreOpen = false;
     campaign.aimPoint.set(0, 1.25, -ARENA_GAP);
     this.parkHitboxes();
@@ -325,22 +357,18 @@ export class CampaignSystem extends createSystem({
       }
     }
 
-    // Name card + roar once it stands.
+    // Name reveal + roar once it stands.
     const titleStart = klaxonTime + riseTime;
     if (this.t >= titleStart && this.t - delta < titleStart) {
       rig.root.position.y = 0;
-      this.hud.showCard(
-        this.def.name,
-        [`stage ${ROMAN[app.campaignStage]} — ${this.def.epithet}`, this.def.taunt],
-        this.accentCss(),
-      );
-      sfx.bossRoar(this.def.scale * 0.55);
+      this.hud.title(this.def.name, this.def.epithet, this.accentCss());
+      sfx.bossRoar(this.def.scale * 0.8);
     }
 
     // FIGHT flash, then the bell.
     const fightStart = titleStart + titleTime;
     if (this.t >= fightStart && this.t - delta < fightStart) {
-      this.hud.showCard('FIGHT', [], '#ffc04d');
+      this.hud.title('FIGHT', '', '#ffc04d');
     }
 
     const skip = this.triggerDown();
@@ -361,11 +389,23 @@ export class CampaignSystem extends createSystem({
     this.phase = 'fight';
     this.t = 0;
     match.phase = 'playing';
-    this.hud.showCard('', []);
+    this.hud.title('', '');
     this.light.intensity = 5; // steady key light (a skip can leave a strobe)
     startBattleMusic(); // the quiet background score, same as any bout
     announce('fight');
     sfx.roundBell();
+    // The opening prompt: floating words on the target, not a board.
+    this.litPopup();
+  }
+
+  /** Float "HIT THE HEAD" / "HIT THE CORE" on the live weak point. */
+  private litPopup(): void {
+    const rig = this.rig;
+    if (!rig) return;
+    if (this.lit === 'head') rig.head.getWorldPosition(_v);
+    else rig.core.getWorldPosition(_v);
+    _v.y += 0.24 * this.def.scale;
+    spawnPopup(this.world, _v, this.lit === 'head' ? 'HIT THE HEAD' : 'HIT THE CORE', '#ffd24a', 'rgba(255,190,40,1)', 1.5);
   }
 
   // --- the fight --------------------------------------------------------------
@@ -374,16 +414,10 @@ export class CampaignSystem extends createSystem({
     this.invuln = Math.max(0, this.invuln - delta);
     if (this.runMode()) this.runClock += delta; // fights only — intros are free
 
-    // Transient card (ENRAGED) auto-clears.
+    // Transient title (ENRAGED) auto-clears.
     if (this.cardTimer > 0) {
       this.cardTimer -= delta;
-      if (this.cardTimer <= 0) this.hud.showCard('', []);
-    }
-
-    // The vented-core punish window.
-    if (this.coreOpen > 0) {
-      this.coreOpen -= delta;
-      if (this.coreOpen <= 0) campaign.coreOpen = false;
+      if (this.cardTimer <= 0) this.hud.title('', '');
     }
 
     this.updatePatches(delta);
@@ -396,6 +430,13 @@ export class CampaignSystem extends createSystem({
     if (bossHp < this.lastBossHp) {
       this.flinch = 0.35;
       this.hudTimer = 0; // instant bar update on damage
+      // The cycle: every landed hit flips the live weak point — head, core,
+      // head, core… so the fight is a rhythm of re-aiming, not a grind.
+      if (bossHp > 0) {
+        this.lit = this.lit === 'head' ? 'core' : 'head';
+        sfx.coreExposed();
+        this.litPopup();
+      }
     }
     this.lastBossHp = bossHp;
 
@@ -403,9 +444,9 @@ export class CampaignSystem extends createSystem({
     if (!this.enraged && this.def.enrageAt > 0 && bossHp > 0 && bossHp / bossMax <= this.def.enrageAt) {
       this.enraged = true;
       this.flinch = 0.35;
-      this.hud.showCard('ENRAGED', [], this.accentCss());
+      this.hud.title('ENRAGED', '', this.accentCss());
       this.cardTimer = 1.3;
-      sfx.bossRoar(this.def.scale * 0.9);
+      sfx.bossRoar(this.def.scale * 1.1);
     }
 
     if (bossHp <= 0) {
@@ -486,6 +527,7 @@ export class CampaignSystem extends createSystem({
     const telegraphs: (Telegraph | null)[] = [];
     const staggers: number[] = [];
     const beamOffsets: number[] = [];
+    const markers: (Group | null)[] = [];
     // Strike with the nearer arm. The root carries a π yaw, so arm 0
     // (local −X) hangs on the world +X side.
     const arm: 0 | 1 = _head.x < 0 ? 1 : 0;
@@ -508,6 +550,9 @@ export class CampaignSystem extends createSystem({
         this.scene.add(tg.group);
         telegraphs.push(tg);
         staggers.push(i * (this.def.slamStyle === 'rehit' ? CAMPAIGN.rehitDelay : CAMPAIGN.marchDelay));
+        // The ghost hammer: hangs over the disc and descends with the
+        // countdown, so the raised arm connects to THIS spot on the floor.
+        markers.push(this.makeHammerMarker(x, z0));
       }
     } else if (kind === 'sweep') {
       // A horizontal blade slice just under head height: duck it. Never
@@ -561,8 +606,40 @@ export class CampaignSystem extends createSystem({
       arm,
       tracks: kind === 'beam' && this.def.beamTracks,
       beamOffsets,
+      markers,
     };
     sfx.chargeWhine(chargeTime);
+  }
+
+  /**
+   * The ghost hammer: a translucent accent block + glow hanging over a slam
+   * disc. advanceAttack lowers it with the countdown; the crash replaces it.
+   */
+  private makeHammerMarker(x: number, z: number): Group {
+    const s = this.def.scale;
+    const g = new Group();
+    const block = new Mesh(
+      new BoxGeometry(0.24 * s, 0.2 * s, 0.24 * s),
+      new MeshBasicMaterial({
+        color: this.def.accent,
+        transparent: true,
+        opacity: 0.45,
+        blending: AdditiveBlending,
+        depthWrite: false,
+      }),
+    );
+    g.add(block);
+    const halo = glowSprite(this.def.accent, 0.5 * s);
+    halo.position.y = -0.05 * s;
+    g.add(halo);
+    g.position.set(x, this.markerStartY(), z);
+    this.scene.add(g);
+    return g;
+  }
+
+  /** Where a ghost hammer starts its descent (well above head height). */
+  private markerStartY(): number {
+    return 2.1 + this.def.scale * 0.35;
   }
 
   /** Aim one beam zone (and its telegraph) at the player, offset sideways. */
@@ -606,18 +683,26 @@ export class CampaignSystem extends createSystem({
         a.resolved[i] = true;
         a.telegraphs[i]?.dispose();
         a.telegraphs[i] = null;
+        // The ghost hammer's hover spot feeds the crash, then it's gone.
+        const m = a.markers[i] ?? null;
+        this.disposeMarker(m);
+        a.markers[i] = null;
         this.detonate(a.kind, a.zones[i], i === 0);
       } else {
-        a.telegraphs[i]?.update(clamp(a.time / dueAt, 0, 1), this.time);
+        const fill = clamp(a.time / dueAt, 0, 1);
+        a.telegraphs[i]?.update(fill, this.time);
+        // Lower the ghost hammer with the countdown — a spinning descent.
+        const m = a.markers[i];
+        if (m) {
+          m.position.y = this.markerStartY() * (1 - fill * fill) + 0.55;
+          m.rotation.y += delta * 3;
+        }
         allDone = false;
       }
     }
 
     if (allDone && a.time >= a.chargeTime + (a.staggers[a.zones.length - 1] ?? 0) + 0.4) {
-      // A finished melee pattern is the punish cue: the core vents AFTER the
-      // last hit of the chain, never in the middle of it.
-      if (a.kind === 'slam' || a.kind === 'sweep') this.openCore();
-      this.attack = null;
+      this.disposeAttack();
       this.cooldown = rand(this.def.cooldownMin, this.def.cooldownMax) * (this.enraged ? CAMPAIGN.enrageCooldownMult : 1);
     }
   }
@@ -693,76 +778,98 @@ export class CampaignSystem extends createSystem({
     pulseHand(this.world.session, 'right', 0.9, 140);
   }
 
-  /** A melee swing always vents the core — the souls-like punish window. */
-  private openCore(): void {
-    this.coreOpen = this.def.coreOpenTime;
-    if (!campaign.coreOpen) sfx.coreExposed();
-    campaign.coreOpen = true;
-  }
-
   // --- strike visuals ----------------------------------------------------------
 
   private spawnFistCrash(x: number, z: number): void {
-    // A shadow gauntlet plunges out of the sky onto the marked disc.
+    // The hammer LANDS: a solid accent block crashes the last half-metre in
+    // a few frames, buries itself in the disc, and erupts — a floor flash,
+    // a double burst and a spray of sparks. You SEE the platform get hit.
     const s = this.def.scale;
     const fist = new Mesh(
-      new CylinderGeometry(0.16 * s, 0.2 * s, 0.26 * s, 8),
-      new MeshBasicMaterial({ color: this.def.accent, transparent: true, opacity: 0.85 }),
+      new BoxGeometry(0.26 * s, 0.22 * s, 0.26 * s),
+      new MeshBasicMaterial({ color: this.def.accent, transparent: true, opacity: 0.95 }),
     );
     this.scene.add(fist);
-    const startY = 2.6 + s * 0.4;
+    const flash = glowSprite(0xfff3cf, 1.5 * s, 0.95);
+    flash.position.set(x, 0.12, z);
+    flash.visible = false;
+    this.scene.add(flash);
+    const startY = this.markerStartY() * 0.35 + 0.55; // pick up where the ghost left off
     const world = this.world;
     let burst = false;
     this.strikes.push({
       age: 0,
-      life: 0.55,
+      life: 0.7,
       update(age) {
-        const drop = Math.min(1, age / 0.12);
-        fist.position.set(x, startY * (1 - drop * drop) + 0.12, z);
+        const drop = Math.min(1, age / 0.08); // near-instant, brutal
+        fist.position.set(x, startY * (1 - drop) + 0.11 * s, z);
         if (drop >= 1 && !burst) {
           burst = true;
-          _v.set(x, 0.1, z);
-          spawnFireImpact(world, _v, 1);
-          emberBurst(_v, 20, true);
+          _v.set(x, 0.12, z);
+          spawnFireImpact(world, _v, 1, 2.0);
+          emberBurst(_v, 34, true);
+          flash.visible = true;
         }
-        (fist.material as MeshBasicMaterial).opacity = 0.85 * (1 - Math.max(0, (age - 0.25) / 0.3));
+        if (burst) {
+          const settle = Math.min(1, (age - 0.08) / 0.62);
+          (fist.material as MeshBasicMaterial).opacity = 0.95 * (1 - settle);
+          flash.material.opacity = 0.95 * (1 - settle) * (1 - settle);
+          flash.scale.setScalar(1.5 * s * (1 + settle * 1.6));
+        }
       },
       dispose() {
         fist.geometry.dispose();
         (fist.material as MeshBasicMaterial).dispose();
         fist.removeFromParent();
+        flash.material.dispose();
+        flash.removeFromParent();
       },
     });
   }
 
   private spawnBladeSweep(y: number, arm: 0 | 1): void {
-    // A white-hot bar scythes across the platform at the marked height.
-    const bar = new Mesh(
-      new CylinderGeometry(0.05, 0.05, OCTAGON_HALF_DEPTH * 2 + 0.6, 8),
+    // The SLICE: a tall glowing blade wall scythes across the whole platform
+    // at the marked height, shedding sparks as it goes — a cut you can watch
+    // travel, not a flicker.
+    const s = this.def.scale;
+    const blade = new Mesh(
+      new BoxGeometry(0.09, 0.4, OCTAGON_HALF_DEPTH * 2 + 0.7),
       new MeshBasicMaterial({
         color: this.def.accent,
         transparent: true,
-        opacity: 0.95,
+        opacity: 0.9,
         blending: AdditiveBlending,
         depthWrite: false,
       }),
     );
-    bar.rotation.x = Math.PI / 2; // lie along Z
-    this.scene.add(bar);
+    this.scene.add(blade);
+    const edge = glowSprite(this.def.accent, 0.5 * s);
+    this.scene.add(edge);
     const from = arm === 0 ? 1 : -1; // the striking arm's world side (see yaw)
-    const span = OCTAGON_HALF_WIDTH + 0.6;
+    const span = OCTAGON_HALF_WIDTH + 0.7;
+    let emberClock = 0;
     this.strikes.push({
       age: 0,
-      life: 0.3,
+      life: 0.42,
       update(age) {
-        const k = Math.min(1, age / 0.22);
-        bar.position.set(from * span * (1 - 2 * k), y, 0);
-        (bar.material as MeshBasicMaterial).opacity = 0.95 * (1 - k * k);
+        const k = Math.min(1, age / 0.34); // slow enough to watch it travel
+        const bx = from * span * (1 - 2 * k);
+        blade.position.set(bx, y, 0);
+        edge.position.set(bx, y, 0);
+        (blade.material as MeshBasicMaterial).opacity = 0.9 * (1 - k * k * k);
+        // Sparks shed along the cut.
+        if (age > emberClock) {
+          emberClock = age + 0.045;
+          _v.set(bx, y - 0.1, rand(-OCTAGON_HALF_DEPTH, OCTAGON_HALF_DEPTH));
+          emberBurst(_v, 4, true);
+        }
       },
       dispose() {
-        bar.geometry.dispose();
-        (bar.material as MeshBasicMaterial).dispose();
-        bar.removeFromParent();
+        blade.geometry.dispose();
+        (blade.material as MeshBasicMaterial).dispose();
+        blade.removeFromParent();
+        edge.material.dispose();
+        edge.removeFromParent();
       },
     });
   }
@@ -872,16 +979,18 @@ export class CampaignSystem extends createSystem({
     rig.head.lookAt(_head.x, _head.y, _head.z);
     rig.head.rotateY(Math.PI);
 
-    // Visor heat: calm → blazing while a beam cooks; permanently furious
-    // once enraged.
+    // The head↔core cycle wears its state: the LIVE point blazes and
+    // breathes, the armoured one dims to dull steel. Beams still superheat
+    // the eye while they cook; enrage keeps the eye furious throughout.
+    const headLit = this.lit === 'head' && fighting;
+    const coreLit = this.lit === 'core' && fighting;
     const beamCharging = this.attack?.kind === 'beam' ? clamp(this.attack.time / this.attack.chargeTime, 0, 1) : 0;
     rig.visorMat.emissiveIntensity =
-      1.8 + beamCharging * 3.2 + (this.enraged ? 1.6 + Math.sin(this.time * 10) * 0.6 : Math.sin(this.time * 3) * 0.2);
-
-    // Core shutters: dim steel until it vents, then it blazes and breathes.
-    const open = this.coreOpen > 0;
-    rig.coreMat.emissiveIntensity = open ? 2.6 + Math.sin(this.time * 9) * 0.7 : 0.25;
-    rig.core.scale.setScalar(open ? 1.12 + Math.sin(this.time * 9) * 0.06 : 1);
+      (headLit ? 2.8 + Math.sin(this.time * 9) * 0.8 : 0.7) +
+      beamCharging * 3.2 +
+      (this.enraged ? 1.6 + Math.sin(this.time * 10) * 0.6 : 0);
+    rig.coreMat.emissiveIntensity = coreLit ? 2.8 + Math.sin(this.time * 9) * 0.8 : 0.25;
+    rig.core.scale.setScalar(coreLit ? 1.14 + Math.sin(this.time * 9) * 0.07 : 1);
 
     // Pods glow while a barrage cooks.
     const barraging = this.attack?.kind === 'barrage';
@@ -890,6 +999,8 @@ export class CampaignSystem extends createSystem({
     }
 
     // Arms: wind up with the charge, whip through on the strike, ease home.
+    // The sweep winds OUT wide and whips ACROSS; the slam hoists sky-high
+    // and hammers DOWN — two silhouettes you can tell apart at a glance.
     const a = this.attack;
     for (const i of [0, 1] as const) {
       const arm = rig.arms[i];
@@ -899,17 +1010,23 @@ export class CampaignSystem extends createSystem({
       if (a && a.arm === i && (a.kind === 'slam' || a.kind === 'sweep')) {
         const fill = clamp(a.time / a.chargeTime, 0, 1);
         if (a.kind === 'slam') {
-          targetX = arm.restX - 2.3 * fill; // raise the fist sky-high
+          targetX = arm.restX - 2.5 * fill; // hoist the fist sky-high
         } else {
-          targetZ = arm.restZ + (i === 0 ? -1 : 1) * 1.5 * fill; // wind out wide
-          targetX = arm.restX - 0.5 * fill;
+          targetZ = arm.restZ + (i === 0 ? -1 : 1) * 1.7 * fill; // wind out wide
+          targetX = arm.restX - 0.4 * fill;
         }
       } else if (this.strikeSwing[i] > 0) {
         const k = this.strikeSwing[i] / 0.6;
-        targetX = arm.restX + 1.1 * k; // followed through, down and across
-        targetZ = arm.restZ * (1 - k);
+        // Follow-through: hammered down-and-through, or swung hard across.
+        if (this.lastKind === 'sweep') {
+          targetZ = arm.restZ + (i === 0 ? 1 : -1) * 1.4 * k; // crossed the body
+          targetX = arm.restX + 0.3 * k;
+        } else {
+          targetX = arm.restX + 1.3 * k; // buried in the floor
+          targetZ = arm.restZ * (1 - k);
+        }
       }
-      const ease = Math.min(1, delta * (this.strikeSwing[i] > 0.45 ? 22 : 7));
+      const ease = Math.min(1, delta * (this.strikeSwing[i] > 0.45 ? 26 : 7));
       arm.pivot.rotation.x += (targetX - arm.pivot.rotation.x) * ease;
       arm.pivot.rotation.z += (targetZ - arm.pivot.rotation.z) * ease;
     }
@@ -938,14 +1055,18 @@ export class CampaignSystem extends createSystem({
 
   private sizeHitboxes(): void {
     const s = this.def.scale;
-    this.boxes.body?.setValue(Hitbox, 'radius', 0.5 * s);
-    this.boxes.pelvis?.setValue(Hitbox, 'radius', 0.3 * s);
-    this.boxes.head?.setValue(Hitbox, 'radius', 0.21 * s);
-    this.boxes.core?.setValue(Hitbox, 'radius', 0.17 * s);
+    // Armour spheres hug the VISIBLE chassis (the trunk is only ~0.3·s
+    // wide) — an inflated armour sphere used to eat balls out of the air
+    // before they could ever reach the core, which made the "hit the core"
+    // prompt a lie. Weak points sit proud of the plate.
+    this.boxes.body?.setValue(Hitbox, 'radius', 0.32 * s);
+    this.boxes.pelvis?.setValue(Hitbox, 'radius', 0.2 * s);
+    this.boxes.head?.setValue(Hitbox, 'radius', 0.24 * s);
+    this.boxes.core?.setValue(Hitbox, 'radius', 0.22 * s);
     for (const pod of this.boxes.pods) pod.setValue(Hitbox, 'radius', 0.15 * s);
   }
 
-  /** Glue the spheres to the rig and apply the weak-point law every frame. */
+  /** Glue the spheres to the rig and apply the head↔core cycle every frame. */
   private placeHitboxes(): void {
     const rig = this.rig;
     if (!rig || this.phase === 'idle') return;
@@ -958,12 +1079,11 @@ export class CampaignSystem extends createSystem({
 
     rig.head.getWorldPosition(_v);
     this.boxes.head?.object3D?.position.copy(_v);
-    this.boxes.head?.setValue(Hitbox, 'damageScale', CAMPAIGN.headScale);
+    this.boxes.head?.setValue(Hitbox, 'damageScale', this.lit === 'head' ? CAMPAIGN.headScale : 0);
 
     rig.core.getWorldPosition(_v);
     this.boxes.core?.object3D?.position.copy(_v);
-    const coreScale = this.coreOpen > 0 ? CAMPAIGN.coreScale : 0;
-    this.boxes.core?.setValue(Hitbox, 'damageScale', coreScale);
+    this.boxes.core?.setValue(Hitbox, 'damageScale', this.lit === 'core' ? CAMPAIGN.coreScale : 0);
 
     this.boxes.body?.object3D?.position.set(root.x, root.y + 1.05 * s, root.z);
     this.boxes.body?.setValue(Hitbox, 'damageScale', 0);
@@ -977,9 +1097,10 @@ export class CampaignSystem extends createSystem({
       pod.setValue(Hitbox, 'damageScale', barraging ? CAMPAIGN.podScale : 0);
     });
 
-    // Keep the aim assist on the current sweet spot.
-    if (this.coreOpen > 0) rig.core.getWorldPosition(campaign.aimPoint);
+    // Keep the aim assist on the LIVE point of the cycle.
+    if (this.lit === 'core') rig.core.getWorldPosition(campaign.aimPoint);
     else rig.head.getWorldPosition(campaign.aimPoint);
+    campaign.coreOpen = this.lit === 'core';
   }
 
   private parkHitboxes(): void {
@@ -995,8 +1116,7 @@ export class CampaignSystem extends createSystem({
     this.phase = 'victory';
     this.t = 0;
     match.phase = 'matchOver';
-    this.attack?.telegraphs.forEach((t) => t?.dispose());
-    this.attack = null;
+    this.disposeAttack();
     this.clearPatches();
     campaign.coreOpen = false;
     this.parkHitboxes();
@@ -1028,13 +1148,9 @@ export class CampaignSystem extends createSystem({
     this.victoryDelay = this.advanceAfterVictory ? CAMPAIGN.runVictoryDelay : CAMPAIGN.victoryDelay;
 
     if (this.advanceAfterVictory) {
-      this.hud.showCard(
-        'TITAN FELLED',
-        [`clock ${fmtRunTime(this.runClock)}`, `next: ${BOSSES[app.campaignStage + 1].name}`],
-        this.accentCss(),
-      );
+      this.hud.title('FELLED', BOSSES[app.campaignStage + 1].name, this.accentCss());
       sfx.roundEnd(true); // the full fanfare waits for the end of the run
-      sfx.bossRoar(this.def.scale * 0.8);
+      sfx.bossRoar(this.def.scale * 1.0);
       return;
     }
 
@@ -1042,37 +1158,35 @@ export class CampaignSystem extends createSystem({
       // The run is complete: the clock goes on the board.
       const hardcore = app.campaignMode === 'hardcore';
       const record = recordRunTime(hardcore, this.runClock);
-      const best = (hardcore ? campaignProgress.runTimesHardcore : campaignProgress.runTimesGauntlet)[0];
-      this.payoutLines = [
-        `time ${fmtRunTime(this.runClock)}`,
-        record ? '★ NEW RECORD ★' : `best ${fmtRunTime(best)}`,
-      ];
       if (!hardcore && !campaignProgress.hardcoreUnlocked) {
         campaignProgress.hardcoreUnlocked = true;
         saveCampaignProgress();
-        this.payoutLines.push('HARDCORE UNLOCKED — no healing, no mercy');
       }
-      this.hud.showCard(hardcore ? 'HARDCORE COMPLETE' : 'GAUNTLET COMPLETE', this.payoutLines, this.accentCss());
+      this.hud.title(
+        hardcore ? 'HARDCORE' : 'GAUNTLET',
+        `${fmtRunTime(this.runClock)}${record ? ' · NEW RECORD' : ''}`,
+        this.accentCss(),
+      );
     } else {
       const mult = firstClear ? 2 : 1;
-      this.payoutLines = [
-        `+${CURRENCY.perGame * mult} COINS  ·  +${PROGRESSION.campaign * mult} XP`,
-        firstClear ? 'FIRST FELL — DOUBLE PAYOUT' : 'already felled — standard payout',
-      ];
-      if (crowned) this.payoutLines.push('★ CHAMPION PLATFORM UNLOCKED ★');
-      this.hud.showCard('TITAN FELLED', this.payoutLines, this.accentCss());
+      this.hud.title(
+        'TITAN FELLED',
+        crowned
+          ? 'CHAMPION PLATFORM UNLOCKED'
+          : `+${CURRENCY.perGame * mult}¢  +${PROGRESSION.campaign * mult}xp${firstClear ? '  ×2' : ''}`,
+        this.accentCss(),
+      );
     }
     playVictory(); // stops the battle score and rings the end-of-game sting
     sfx.matchEnd(true);
-    sfx.bossRoar(this.def.scale * 0.8); // the death bellow
+    sfx.bossRoar(this.def.scale * 1.0); // the death bellow
   }
 
   private toDefeat(): void {
     this.phase = 'defeat';
     this.t = 0;
     match.phase = 'matchOver';
-    this.attack?.telegraphs.forEach((t) => t?.dispose());
-    this.attack = null;
+    this.disposeAttack();
     this.clearPatches();
     campaign.coreOpen = false;
     this.parkHitboxes();
@@ -1082,21 +1196,13 @@ export class CampaignSystem extends createSystem({
     reportCampaign(false, false); // the consolation rate, same as a bot loss
     if (this.runMode()) {
       // A run dies where you do — no continues, back to the line-up.
-      this.hud.showCard(
-        'RUN OVER',
-        [`felled ${app.campaignStage} of ${BOSSES.length}`, `clock ${fmtRunTime(this.runClock)}`],
-        '#e8352a',
-      );
+      this.hud.title('RUN OVER', `${app.campaignStage} of ${BOSSES.length}`, '#e8352a');
     } else {
-      this.hud.showCard(
-        'SCRAPPED',
-        ['the titan stands', `+${CURRENCY.perGame} coins · +${PROGRESSION.campaign} xp`],
-        '#e8352a',
-      );
+      this.hud.title('SCRAPPED', '', '#e8352a');
     }
     playVictory(); // stops the battle score and rings the end sting
     sfx.matchEnd(false);
-    sfx.bossRoar(this.def.scale); // it laughs, kind of
+    sfx.bossRoar(this.def.scale * 1.2); // it laughs, kind of
   }
 
   private outro(delta: number): void {
@@ -1146,18 +1252,12 @@ export class CampaignSystem extends createSystem({
     this.hudTimer = 0.15;
     const boss = fighterAt(1);
     const me = fighterAt(0);
-    this.hud.updateBoards({
-      stageLabel: `STAGE ${ROMAN[app.campaignStage]}`,
-      bossName: this.def.name,
-      accent: this.accentCss(),
-      bossHp: boss?.getValue(Health, 'current') ?? 0,
-      bossMax: boss?.getValue(Health, 'max') ?? 1,
-      playerHp: me?.getValue(Health, 'current') ?? 0,
-      playerMax: me?.getValue(Health, 'max') ?? 1,
-      coreOpen: this.coreOpen > 0,
-      hint: this.def.hint,
-      timer: this.runMode() ? fmtRunTime(this.runClock) : '',
-    });
+    this.hud.setBoss(this.def.name, this.accentCss(), this.runMode() ? fmtRunTime(this.runClock) : '');
+    this.hud.setBars(
+      (boss?.getValue(Health, 'current') ?? 0) / (boss?.getValue(Health, 'max') ?? 1),
+      (me?.getValue(Health, 'current') ?? 0) / (me?.getValue(Health, 'max') ?? 1),
+      this.accentCss(),
+    );
   }
 
   private accentCss(): string {

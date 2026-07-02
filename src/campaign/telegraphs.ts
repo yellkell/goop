@@ -49,7 +49,8 @@ const COMMON = /* glsl */ `
   }
 `;
 
-/** Disc: bold rim ring, hazard ticks, and a radial fill that eats inward. */
+/** Disc: bold rim ring, hazard ticks, a hot centre dot, and a radial fill
+ *  that eats outward — LOUD, because this marks where a fist lands. */
 const CIRCLE_FRAG = /* glsl */ `
   ${COMMON}
   void main(){
@@ -59,13 +60,16 @@ const CIRCLE_FRAG = /* glsl */ `
     vec3 col = warnColor();
     float a = 0.0;
     // Rim ring.
-    a += smoothstep(0.86, 0.92, r) * (1.0 - smoothstep(0.97, 1.0, r)) * 0.95;
+    a += smoothstep(0.84, 0.9, r) * (1.0 - smoothstep(0.97, 1.0, r)) * 1.0;
     // Rotating hazard ticks just inside the rim.
     float ang = atan(p.y, p.x) + uTime * 1.2;
     float ticks = step(0.5, fract(ang * 3.8195)); // 24 segments
-    a += ticks * smoothstep(0.74, 0.8, r) * (1.0 - smoothstep(0.84, 0.86, r)) * 0.55;
-    // Charge disc growing outward from the centre.
-    a += (1.0 - smoothstep(uFill * 0.85, uFill * 0.9, r)) * 0.38;
+    a += ticks * smoothstep(0.72, 0.78, r) * (1.0 - smoothstep(0.82, 0.84, r)) * 0.6;
+    // Hot centre dot — the exact impact point.
+    a += (1.0 - smoothstep(0.05, 0.14, r)) * 0.9;
+    // Charge disc growing outward from the centre — solid enough to read
+    // against a bright passthrough room.
+    a += (1.0 - smoothstep(uFill * 0.85, uFill * 0.9, r)) * 0.6;
     a *= pulse();
     gl_FragColor = vec4(col, a);
   }
