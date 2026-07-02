@@ -71,10 +71,8 @@ import {
   ARENA_GAP,
   CAMPAIGN,
   COMBAT,
-  CURRENCY,
   OCTAGON_HALF_DEPTH,
   OCTAGON_HALF_WIDTH,
-  PROGRESSION,
 } from '../config.js';
 
 
@@ -1201,14 +1199,8 @@ export class CampaignSystem extends createSystem({
         this.accentCss(),
       );
     } else {
-      const mult = firstClear ? 2 : 1;
-      this.hud.title(
-        'TITAN FELLED',
-        crowned
-          ? 'CHAMPION PLATFORM UNLOCKED'
-          : `+${CURRENCY.perGame * mult}¢  +${PROGRESSION.campaign * mult}xp${firstClear ? '  ×2' : ''}`,
-        this.accentCss(),
-      );
+      // No payout readout — just the fell (and the one-time crown unlock).
+      this.hud.title('TITAN FELLED', crowned ? 'CHAMPION PLATFORM UNLOCKED' : '', this.accentCss());
     }
     playVictory(); // stops the battle score and rings the end-of-game sting
     sfx.matchEnd(true);
