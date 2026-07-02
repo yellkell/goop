@@ -44,6 +44,7 @@ import {
 import {
   beamTelegraph,
   circleTelegraph,
+  novaTelegraph,
   sweepTelegraph,
   type Telegraph,
 } from '../campaign/telegraphs.js';
@@ -81,7 +82,15 @@ type Phase = 'idle' | 'intro' | 'fight' | 'victory' | 'defeat';
 type Zone =
   | { kind: 'circle'; x: number; z: number; r: number }
   | { kind: 'beam'; x: number; z: number; dx: number; dz: number; halfW: number }
-  | { kind: 'sweep'; y: number };
+  | { kind: 'sweep'; y: number }
+  /** GOLIATH's nova: everything burns EXCEPT the safe wedge at `angle`. */
+  | { kind: 'nova'; angle: number; halfAngle: number };
+
+/** A weak point a pattern can light. The crown circuit uses all five. */
+type WeakSpot = 'head' | 'core' | 'low' | 'shoulderL' | 'shoulderR';
+
+/** GOLIATH's ring order — one full loop of the crown. */
+const CROWN_RING: WeakSpot[] = ['head', 'shoulderR', 'core', 'shoulderL', 'low'];
 
 interface ActiveAttack {
   kind: AttackKind;
@@ -142,7 +151,15 @@ export class CampaignSystem extends createSystem({
   private rig?: TitanRig;
 
   // Boss weak-point spheres (created once, repositioned per stage/frame).
-  private boxes: { body?: Entity; pelvis?: Entity; head?: Entity; core?: Entity; pods: Entity[] } = { pods: [] };
+  private boxes: {
+    body?: Entity;
+    pelvis?: Entity;
+    head?: Entity;
+    core?: Entity;
+    shoulderL?: Entity;
+    shoulderR?: Entity;
+    pods: Entity[];
+  } = { pods: [] };
 
   private attack: ActiveAttack | null = null;
   private cooldown = 2.5;
@@ -265,7 +282,7 @@ export class CampaignSystem extends createSystem({
     this.invuln = 0;
     this.enraged = false;
     this.cardTimer = 0;
-    this.cooldown = rand(this.def.cooldownMin, this.def.cooldownMax) + 0.8;
+    this.cooldown = this.attackCooldown() + 0.8;
     this.lastKind = null;
     campaign.coreOpen = false;
     this.hud.setBoss(this.def.name, this.accentCss(), '');
@@ -398,15 +415,22 @@ export class CampaignSystem extends createSystem({
   }
 
   /** Which points blink live right now, per the boss's weak pattern. */
-  private litPoints(): Array<'head' | 'core' | 'low'> {
+  private litPoints(): WeakSpot[] {
     switch (this.def.weakPattern) {
       case 'both':
         return ['head', 'core']; // any order, all fight
       case 'triple':
         return [(['head', 'core', 'low'] as const)[this.cycleIdx % 3]];
+      case 'crown':
+        return [CROWN_RING[this.cycleIdx % CROWN_RING.length]];
       default: // 'alternate' and 'double' walk head↔core
         return [this.cycleIdx % 2 === 0 ? 'head' : 'core'];
     }
+  }
+
+  /** GOLIATH's kill condition: total ring hits to fell the crown. */
+  private crownTarget(): number {
+    return CROWN_RING.length * CAMPAIGN.crownLoops;
   }
 
   // --- the fight --------------------------------------------------------------
@@ -425,7 +449,7 @@ export class CampaignSystem extends createSystem({
 
     // Watch the health pools.
     const boss = fighterAt(1);
-    const bossHp = boss?.getValue(Health, 'current') ?? 0;
+    let bossHp = boss?.getValue(Health, 'current') ?? 0;
     const bossMax = boss?.getValue(Health, 'max') ?? 1;
     const meHp = fighterAt(0)?.getValue(Health, 'current') ?? 0;
     if (bossHp < this.lastBossHp) {
@@ -433,8 +457,23 @@ export class CampaignSystem extends createSystem({
       this.hudTimer = 0; // instant bar update on damage
       // Walk the weak-point pattern: RUSTHOOK's stays put (both open),
       // VULTURE needs two hits per stop, the others advance every hit. The
-      // servo cue + the new blink say where — no words.
-      if (bossHp > 0 && this.def.weakPattern !== 'both') {
+      // servo cue + the blink say where — no words.
+      if (this.def.weakPattern === 'crown') {
+        // GOLIATH: the ring hit is the unit of damage. The bar steps down
+        // one notch per stop, so the kill is EXACTLY three full loops no
+        // matter what the ball would have dealt.
+        this.cycleIdx += 1;
+        bossHp = bossMax * Math.max(0, 1 - this.cycleIdx / this.crownTarget());
+        boss?.setValue(Health, 'current', bossHp);
+        if (bossHp > 0) {
+          sfx.coreExposed();
+          if (this.cycleIdx % CROWN_RING.length === 0) {
+            // A full loop closed: the king roars and quickens.
+            this.flinch = 0.5;
+            sfx.bossRoar(this.def.scale * 1.1);
+          }
+        }
+      } else if (bossHp > 0 && this.def.weakPattern !== 'both') {
         this.hitsOnPoint += 1;
         const perStop = this.def.weakPattern === 'double' ? 2 : 1;
         if (this.hitsOnPoint >= perStop) {
@@ -511,7 +550,7 @@ export class CampaignSystem extends createSystem({
 
   /** Pick a weighted attack (avoiding an immediate repeat) and telegraph it. */
   private startAttack(): void {
-    const kinds: AttackKind[] = ['slam', 'sweep', 'beam', 'barrage'];
+    const kinds: AttackKind[] = ['slam', 'sweep', 'beam', 'barrage', 'nova'];
     let total = 0;
     const pool: Array<[AttackKind, number]> = [];
     for (const k of kinds) {
@@ -590,6 +629,19 @@ export class CampaignSystem extends createSystem({
         staggers.push(i * 0.35);
         this.aimBeam(zone, tg, offset); // initial aim (tracking re-aims later)
       }
+    } else if (kind === 'nova') {
+      // GOLIATH's nova: everything burns EXCEPT one safe wedge — and the
+      // wedge opens roughly OPPOSITE where you stand, so you must cross the
+      // platform while the flood charges. Run to the marked ground.
+      const playerAng = Math.hypot(_head.x, _head.z) > 0.15 ? Math.atan2(_head.x, _head.z) : rand(-Math.PI, Math.PI);
+      const angle = playerAng + Math.PI + rand(-0.5, 0.5);
+      const halfAngle = this.enraged ? CAMPAIGN.novaEnragedHalfAngle : CAMPAIGN.novaHalfAngle;
+      zones.push({ kind: 'nova', angle, halfAngle });
+      const tg = novaTelegraph(CAMPAIGN.novaRadius, angle, halfAngle);
+      tg.group.position.set(0, 0.012, 0);
+      this.scene.add(tg.group);
+      telegraphs.push(tg);
+      staggers.push(0);
     } else {
       // Barrage: first shell on your feet, the rest scattered — but never
       // bunched. Min spacing between shell centres guarantees walkable
@@ -724,8 +776,18 @@ export class CampaignSystem extends createSystem({
 
     if (allDone && a.time >= a.chargeTime + (a.staggers[a.zones.length - 1] ?? 0) + 0.4) {
       this.disposeAttack();
-      this.cooldown = rand(this.def.cooldownMin, this.def.cooldownMax) * (this.enraged ? CAMPAIGN.enrageCooldownMult : 1);
+      this.cooldown = this.attackCooldown();
     }
+  }
+
+  /** Seconds until the next attack: enrage quickens it, and every closed
+   *  crown loop quickens GOLIATH further — the last loop is a storm. */
+  private attackCooldown(): number {
+    let mult = this.enraged ? CAMPAIGN.enrageCooldownMult : 1;
+    if (this.def.weakPattern === 'crown') {
+      mult *= Math.pow(CAMPAIGN.crownHaste, Math.floor(this.cycleIdx / CROWN_RING.length));
+    }
+    return rand(this.def.cooldownMin, this.def.cooldownMax) * mult;
   }
 
   /** A zone goes off: strike visual + sound, and damage if you're in it. */
@@ -743,6 +805,10 @@ export class CampaignSystem extends createSystem({
     } else if (kind === 'beam') {
       sfx.beamBlast();
       if (zone.kind === 'beam') this.spawnBeamColumn(zone);
+    } else if (kind === 'nova') {
+      sfx.beamBlast();
+      sfx.slamImpact();
+      if (zone.kind === 'nova') this.spawnNovaWave(zone.angle, zone.halfAngle);
     } else {
       if (first || Math.random() < 0.6) sfx.mortarThump();
       if (zone.kind === 'circle') {
@@ -760,6 +826,14 @@ export class CampaignSystem extends createSystem({
 
   /** Any of the player's three body spheres inside the zone? */
   private zoneTouchesPlayer(zone: Zone): boolean {
+    // The nova judges the HEAD alone (angular test) — body spheres trail the
+    // head by design, and clipping someone who reached the wedge feels rigged.
+    if (zone.kind === 'nova') {
+      this.playerHead(_p);
+      const ang = Math.atan2(_p.x, _p.z);
+      const d = Math.abs(((ang - zone.angle + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+      return d > zone.halfAngle;
+    }
     for (const part of this.queries.playerParts.entities) {
       const obj = part.object3D;
       if (!obj) continue;
@@ -776,7 +850,7 @@ export class CampaignSystem extends createSystem({
         const perpX = relX - along * zone.dx;
         const perpZ = relZ - along * zone.dz;
         if (Math.hypot(perpX, perpZ) <= zone.halfW + r * 0.7) return true;
-      } else {
+      } else if (zone.kind === 'sweep') {
         if (Math.abs(_p.y - zone.y) <= CAMPAIGN.sweepThickness + r * 0.6) return true;
       }
     }
@@ -938,6 +1012,52 @@ export class CampaignSystem extends createSystem({
     });
   }
 
+  /** The nova lands: fire sweeps the platform, sparing only the wedge. */
+  private spawnNovaWave(angle: number, halfAngle: number): void {
+    const ring = new Mesh(
+      new CylinderGeometry(1, 1, 0.06, 32, 1, true),
+      new MeshBasicMaterial({
+        color: this.def.accent,
+        transparent: true,
+        opacity: 0.9,
+        blending: AdditiveBlending,
+        depthWrite: false,
+        side: 2, // DoubleSide — the open tube must show both faces
+      }),
+    );
+    ring.position.set(0, 0.1, 0);
+    this.scene.add(ring);
+    const world = this.world;
+    let burstClock = 0;
+    this.strikes.push({
+      age: 0,
+      life: 0.45,
+      update(age) {
+        const k = Math.min(1, age / 0.38);
+        ring.scale.set(0.15 + k * CAMPAIGN.novaRadius, 1, 0.15 + k * CAMPAIGN.novaRadius);
+        (ring.material as MeshBasicMaterial).opacity = 0.9 * (1 - k * k);
+        // Fire erupts along the expanding front — everywhere but the wedge.
+        if (age > burstClock) {
+          burstClock = age + 0.05;
+          for (let i = 0; i < 3; i++) {
+            const a = rand(-Math.PI, Math.PI);
+            const d = Math.abs(((a - angle + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+            if (d <= halfAngle) continue; // the safe ground stays safe
+            const rr = 0.15 + k * CAMPAIGN.novaRadius * 0.85;
+            _v.set(Math.sin(a) * rr, 0.12, Math.cos(a) * rr);
+            emberBurst(_v, 6, true);
+            if (i === 0 && k > 0.4) spawnFireImpact(world, _v, 1, 0.8);
+          }
+        }
+      },
+      dispose() {
+        ring.geometry.dispose();
+        (ring.material as MeshBasicMaterial).dispose();
+        ring.removeFromParent();
+      },
+    });
+  }
+
   private spawnMortarBurst(x: number, z: number): void {
     // The shell drops fast out of the sky and bursts on the disc.
     const shell = glowSprite(this.def.accent, 0.34);
@@ -1017,6 +1137,11 @@ export class CampaignSystem extends createSystem({
     const lowLit = lit.includes('low');
     rig.lowMat.emissiveIntensity = lowLit ? 0.5 + wink * 2.8 : 0.2;
     rig.low.scale.setScalar(lowLit ? 1 + wink * 0.18 : 1);
+    for (const [i, spot] of (['shoulderL', 'shoulderR'] as const).entries()) {
+      const on = lit.includes(spot);
+      rig.shoulderMats[i].emissiveIntensity = on ? 0.5 + wink * 2.8 : 0.2;
+      rig.shoulders[i].scale.setScalar(on ? 1 + wink * 0.18 : 1);
+    }
 
     // Pods glow while a barrage cooks.
     const barraging = this.attack?.kind === 'barrage';
@@ -1033,7 +1158,12 @@ export class CampaignSystem extends createSystem({
       this.strikeSwing[i] = Math.max(0, this.strikeSwing[i] - delta);
       let targetX = arm.restX;
       let targetZ = arm.restZ;
-      if (a && a.arm === i && (a.kind === 'slam' || a.kind === 'sweep')) {
+      if (a && a.kind === 'nova') {
+        // The nova: BOTH arms hoist together — the whole machine coils.
+        const fill = clamp(a.time / a.chargeTime, 0, 1);
+        targetX = arm.restX - 2.2 * fill;
+        targetZ = arm.restZ * (1 + fill);
+      } else if (a && a.arm === i && (a.kind === 'slam' || a.kind === 'sweep')) {
         const fill = clamp(a.time / a.chargeTime, 0, 1);
         if (a.kind === 'slam') {
           targetX = arm.restX - 2.5 * fill; // hoist the fist sky-high
@@ -1075,6 +1205,8 @@ export class CampaignSystem extends createSystem({
     this.boxes.pelvis = make();
     this.boxes.head = make();
     this.boxes.core = make();
+    this.boxes.shoulderL = make();
+    this.boxes.shoulderR = make();
     this.boxes.pods = [make(), make()];
     this.sizeHitboxes();
   }
@@ -1089,6 +1221,8 @@ export class CampaignSystem extends createSystem({
     this.boxes.pelvis?.setValue(Hitbox, 'radius', 0.2 * s);
     this.boxes.head?.setValue(Hitbox, 'radius', 0.24 * s);
     this.boxes.core?.setValue(Hitbox, 'radius', 0.22 * s);
+    this.boxes.shoulderL?.setValue(Hitbox, 'radius', 0.18 * s);
+    this.boxes.shoulderR?.setValue(Hitbox, 'radius', 0.18 * s);
     for (const pod of this.boxes.pods) pod.setValue(Hitbox, 'radius', 0.15 * s);
   }
 
@@ -1120,22 +1254,43 @@ export class CampaignSystem extends createSystem({
     this.boxes.pelvis?.object3D?.position.copy(_v);
     this.boxes.pelvis?.setValue(Hitbox, 'damageScale', lit.includes('low') ? CAMPAIGN.lowScale : 0);
 
-    const barraging = this.attack?.kind === 'barrage';
+    // Shoulder emblems — the crown circuit's ring stops.
+    rig.shoulders[0].getWorldPosition(_v);
+    this.boxes.shoulderL?.object3D?.position.copy(_v);
+    this.boxes.shoulderL?.setValue(Hitbox, 'damageScale', lit.includes('shoulderL') ? CAMPAIGN.podScale : 0);
+    rig.shoulders[1].getWorldPosition(_v);
+    this.boxes.shoulderR?.object3D?.position.copy(_v);
+    this.boxes.shoulderR?.setValue(Hitbox, 'damageScale', lit.includes('shoulderR') ? CAMPAIGN.podScale : 0);
+
+    // Pods pay bonus during a barrage — except on the crown, where stray pod
+    // hits would skip ring stops out of order.
+    const barraging = this.attack?.kind === 'barrage' && this.def.weakPattern !== 'crown';
     this.boxes.pods.forEach((pod, i) => {
       const side = i === 0 ? -1 : 1;
       pod.object3D?.position.set(root.x + side * 0.37 * s, root.y + 1.44 * s, root.z);
       pod.setValue(Hitbox, 'damageScale', barraging ? CAMPAIGN.podScale : 0);
     });
 
-    // Aim assist rides the best live point: core, then head, then low.
+    // Aim assist rides the live point (crown: whichever ring stop blinks).
     if (lit.includes('core')) rig.core.getWorldPosition(campaign.aimPoint);
     else if (lit.includes('head')) rig.head.getWorldPosition(campaign.aimPoint);
+    else if (lit.includes('shoulderL')) rig.shoulders[0].getWorldPosition(campaign.aimPoint);
+    else if (lit.includes('shoulderR')) rig.shoulders[1].getWorldPosition(campaign.aimPoint);
     else rig.low.getWorldPosition(campaign.aimPoint);
     campaign.coreOpen = lit.includes('core');
   }
 
   private parkHitboxes(): void {
-    for (const e of [this.boxes.body, this.boxes.pelvis, this.boxes.head, this.boxes.core, ...this.boxes.pods]) {
+    const all = [
+      this.boxes.body,
+      this.boxes.pelvis,
+      this.boxes.head,
+      this.boxes.core,
+      this.boxes.shoulderL,
+      this.boxes.shoulderR,
+      ...this.boxes.pods,
+    ];
+    for (const e of all) {
       e?.object3D?.position.set(0, -100, 0);
       e?.setValue(Hitbox, 'damageScale', 0);
     }

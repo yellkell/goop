@@ -94,6 +94,36 @@ const STRIP_FRAG = /* glsl */ `
   }
 `;
 
+/**
+ * Nova: the whole disc floods with warning EXCEPT one safe wedge, whose
+ * edges are drawn as two bright rays — the one telegraph that means
+ * "stand HERE". uAngle = wedge centre (radians), uHalf = wedge half-width.
+ */
+const NOVA_FRAG = /* glsl */ `
+  ${COMMON}
+  uniform float uAngle, uHalf;
+  void main(){
+    vec2 p = vUv * 2.0 - 1.0;
+    float r = length(p);
+    if (r > 1.0) discard;
+    // World-space angle: the plane is rotated flat, so uv v runs down −z.
+    float ang = atan(p.x, -p.y);
+    float d = abs(mod(ang - uAngle + 3.14159, 6.28318) - 3.14159);
+    float inWedge = step(d, uHalf);
+    vec3 col = warnColor();
+    float a = 0.0;
+    // The flood: everything OUTSIDE the wedge fills and pulses.
+    a += (1.0 - inWedge) * (0.16 + 0.5 * uFill);
+    // Rim ring all the way round, dimmer through the wedge.
+    a += smoothstep(0.9, 0.95, r) * (1.0 - smoothstep(0.98, 1.0, r)) * (1.0 - inWedge * 0.7);
+    // The wedge's edge rays — the doorposts of the safe ground.
+    float edge = smoothstep(0.06, 0.0, abs(d - uHalf));
+    a += edge * 0.9;
+    a *= pulse();
+    gl_FragColor = vec4(col, a);
+  }
+`;
+
 /** Blade: a horizontal slice hanging in the air — bright core line, soft body. */
 const BLADE_FRAG = /* glsl */ `
   ${COMMON}
@@ -108,9 +138,9 @@ const BLADE_FRAG = /* glsl */ `
   }
 `;
 
-function warnMat(frag: string): ShaderMaterial {
+function warnMat(frag: string, extra: Record<string, { value: number }> = {}): ShaderMaterial {
   return new ShaderMaterial({
-    uniforms: { uFill: { value: 0 }, uTime: { value: 0 } },
+    uniforms: { uFill: { value: 0 }, uTime: { value: 0 }, ...extra },
     vertexShader: VERT,
     fragmentShader: frag,
     transparent: true,
@@ -137,6 +167,19 @@ function makeTelegraph(meshes: Mesh[], mats: ShaderMaterial[]): Telegraph {
       group.removeFromParent();
     },
   };
+}
+
+/**
+ * GOLIATH's nova: a platform-covering disc where everything floods with
+ * warning EXCEPT the safe wedge centred on `angle` (world radians, atan2(x,z)
+ * around the platform centre), `halfAngle` wide each side. Place the group
+ * at the platform centre on the floor.
+ */
+export function novaTelegraph(radius: number, angle: number, halfAngle: number): Telegraph {
+  const mat = warnMat(NOVA_FRAG, { uAngle: { value: angle }, uHalf: { value: halfAngle } });
+  const disc = new Mesh(new PlaneGeometry(radius * 2, radius * 2), mat);
+  disc.rotation.x = -Math.PI / 2;
+  return makeTelegraph([disc], [mat]);
 }
 
 /** A slam / mortar footprint. Place the group at the zone centre, y≈floor. */

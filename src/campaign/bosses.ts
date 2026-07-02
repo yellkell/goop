@@ -33,7 +33,12 @@ import {
 } from 'three';
 import { PALETTE } from '../config.js';
 
-export type AttackKind = 'slam' | 'sweep' | 'beam' | 'barrage';
+/**
+ * 'nova' is GOLIATH's alone: fire floods the WHOLE platform except one
+ * marked safe wedge — the only telegraph in the game that says "stand HERE"
+ * instead of "get out".
+ */
+export type AttackKind = 'slam' | 'sweep' | 'beam' | 'barrage' | 'nova';
 
 /**
  * How a titan's slam lands — its melee signature:
@@ -55,8 +60,12 @@ export type TitanStyle = 'hook' | 'piston' | 'vulture' | 'fortress' | 'king';
  *  - 'alternate' : one point at a time; every landed hit flips head↔core.
  *  - 'double'    : two hits on the blinking point, then it swaps.
  *  - 'triple'    : the cycle adds the LOW BLOW — head → core → low → repeat.
+ *  - 'crown'     : GOLIATH's five-point circuit — head → right shoulder →
+ *                  core → left shoulder → low — walked THREE full loops to
+ *                  kill (the health bar steps down per ring hit, so it is
+ *                  exactly fifteen hits no matter what you throw).
  */
-export type WeakPattern = 'both' | 'alternate' | 'double' | 'triple';
+export type WeakPattern = 'both' | 'alternate' | 'double' | 'triple' | 'crown';
 
 export interface BossDef {
   name: string;
@@ -109,8 +118,8 @@ export const BOSSES: BossDef[] = [
     zOffset: 0.2,
     cooldownMin: 2.6,
     cooldownMax: 3.6,
-    charge: { slam: 1.9, sweep: 2.1, beam: 1.7, barrage: 2.0 },
-    weights: { slam: 5, sweep: 0, beam: 3, barrage: 0 },
+    charge: { slam: 1.9, sweep: 2.1, beam: 1.7, barrage: 2.0, nova: 2.2 },
+    weights: { slam: 5, sweep: 0, beam: 3, barrage: 0, nova: 0 },
     barrageCount: 3,
     beams: 1,
     swayAmp: 0.4,
@@ -131,8 +140,8 @@ export const BOSSES: BossDef[] = [
     zOffset: 0.3,
     cooldownMin: 2.2,
     cooldownMax: 3.2,
-    charge: { slam: 1.6, sweep: 1.9, beam: 1.6, barrage: 1.9 },
-    weights: { slam: 4, sweep: 3, beam: 2, barrage: 0 },
+    charge: { slam: 1.6, sweep: 1.9, beam: 1.6, barrage: 1.9, nova: 2.2 },
+    weights: { slam: 4, sweep: 3, beam: 2, barrage: 0, nova: 0 },
     barrageCount: 3,
     beams: 1,
     swayAmp: 0.5,
@@ -153,8 +162,8 @@ export const BOSSES: BossDef[] = [
     zOffset: 0.45,
     cooldownMin: 1.9,
     cooldownMax: 2.8,
-    charge: { slam: 1.45, sweep: 1.7, beam: 1.55, barrage: 1.7 },
-    weights: { slam: 3, sweep: 4, beam: 4, barrage: 2 },
+    charge: { slam: 1.45, sweep: 1.7, beam: 1.55, barrage: 1.7, nova: 2.2 },
+    weights: { slam: 3, sweep: 4, beam: 4, barrage: 2, nova: 0 },
     barrageCount: 4,
     beams: 1,
     swayAmp: 0.6,
@@ -175,8 +184,8 @@ export const BOSSES: BossDef[] = [
     zOffset: 0.6,
     cooldownMin: 1.6,
     cooldownMax: 2.4,
-    charge: { slam: 1.3, sweep: 1.5, beam: 1.25, barrage: 2.0 },
-    weights: { slam: 3, sweep: 2, beam: 4, barrage: 5 },
+    charge: { slam: 1.3, sweep: 1.5, beam: 1.25, barrage: 2.0, nova: 2.2 },
+    weights: { slam: 3, sweep: 2, beam: 4, barrage: 5, nova: 0 },
     barrageCount: 3,
     beams: 2,
     swayAmp: 0.45,
@@ -197,8 +206,8 @@ export const BOSSES: BossDef[] = [
     zOffset: 0.8,
     cooldownMin: 1.35,
     cooldownMax: 2.1,
-    charge: { slam: 1.15, sweep: 1.35, beam: 1.2, barrage: 1.8 },
-    weights: { slam: 3, sweep: 3, beam: 4, barrage: 4 },
+    charge: { slam: 1.15, sweep: 1.35, beam: 1.2, barrage: 1.8, nova: 2.1 },
+    weights: { slam: 3, sweep: 3, beam: 3, barrage: 3, nova: 4 },
     barrageCount: 4,
     beams: 2,
     swayAmp: 0.35,
@@ -207,7 +216,7 @@ export const BOSSES: BossDef[] = [
     beamTracks: true,
     burnPatches: true,
     enrageAt: 0.5,
-    weakPattern: 'alternate',
+    weakPattern: 'crown',
   },
 ];
 
@@ -235,6 +244,10 @@ export interface TitanRig {
   low: Mesh;
   /** Its glow — blinks while the low blow is the live weak point. */
   lowMat: MeshStandardMaterial;
+  /** Shoulder emblems [left, right] — GOLIATH's crown circuit stops. */
+  shoulders: [Mesh, Mesh];
+  /** Their glows — blink while that shoulder is the live weak point. */
+  shoulderMats: [MeshStandardMaterial, MeshStandardMaterial];
   podMats: [MeshStandardMaterial, MeshStandardMaterial];
   arms: [TitanArm, TitanArm];
   /** Key world-frame heights (root at y=0): head centre and core centre. */
@@ -519,6 +532,19 @@ export function buildTitan(def: BossDef): TitanRig {
     }
   });
 
+  // ── Shoulder emblems: octagonal lamps set proud of each pauldron. Dim on
+  //    most machines; GOLIATH's crown circuit blinks them as ring stops. ────
+  const shoulderMats: [MeshStandardMaterial, MeshStandardMaterial] = [glowMat(accent, 0.2), glowMat(accent, 0.2)];
+  const makeShoulderLamp = (i: 0 | 1): Mesh => {
+    const side = i === 0 ? -1 : 1;
+    const lamp = new Mesh(new CylinderGeometry(0.06 * s, 0.06 * s, 0.05 * s, 8), shoulderMats[i]);
+    lamp.rotation.x = Math.PI / 2;
+    lamp.position.set(side * 0.38 * s, shoulderY + 0.13 * s, -0.13 * s);
+    root.add(lamp);
+    return lamp;
+  };
+  const shoulders: [Mesh, Mesh] = [makeShoulderLamp(0), makeShoulderLamp(1)];
+
   // ── Pelvis + hover skirt: no legs — floating hands and iron, on brand ────
   const pelvis = new Mesh(new BoxGeometry(0.28 * s, 0.18 * s, 0.22 * s), chassis(accent, 0.03));
   pelvis.position.y = hipY - 0.28 * s;
@@ -652,6 +678,8 @@ export function buildTitan(def: BossDef): TitanRig {
     coreMat,
     low,
     lowMat,
+    shoulders,
+    shoulderMats,
     podMats,
     arms,
     headY,

@@ -270,6 +270,21 @@ export const CAMPAIGN = {
   lowScale: 2.0, // the low blow — hard to hit, pays like the core
   podScale: 1.5,
 
+  // GOLIATH's crown circuit: five stops (head → right shoulder → core →
+  // left shoulder → low) walked this many full loops to kill. The health
+  // bar steps down one notch per ring hit, so the count is exact whatever
+  // the ball's damage.
+  crownLoops: 3,
+  // Each completed loop multiplies GOLIATH's attack cooldowns by this.
+  crownHaste: 0.85,
+
+  // The NOVA (GOLIATH only): fire floods the whole platform except one safe
+  // wedge — run to the marked ground. Wedge half-width in radians (narrower
+  // once enraged).
+  novaRadius: 1.15,
+  novaHalfAngle: 0.52,
+  novaEnragedHalfAngle: 0.4,
+
   // Strike-zone geometry defaults (per-boss defs tune sizes/cadence).
   slamRadius: 0.55,
   beamHalfWidth: 0.22,

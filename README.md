@@ -44,10 +44,15 @@ in-your-face boxing feel.
   you and lock late), barrages ripple with guaranteed walkable lanes and
   JUGGERNAUT's leave (capped, short-lived) burning ground; GOLIATH enrages
   at half health. Damage runs on **per-boss weak-point patterns** — whatever
-  is vulnerable **blinks** (the visor tell, the chest core, JUGGERNAUT's
-  low-blow emblem): RUSTHOOK keeps head AND core open, PISTONKAISER flips
-  head↔core every hit, VULTURE wants two hits per point, JUGGERNAUT cycles
-  head → core → **low blow**, everything else clanks. Wins bank coins + XP at the flat
+  is vulnerable **blinks** (the visor tell, the chest core, the low-blow
+  emblem, GOLIATH's shoulder lamps): RUSTHOOK keeps head AND core open,
+  PISTONKAISER flips head↔core every hit, VULTURE wants two hits per point,
+  JUGGERNAUT cycles head → core → **low blow**, and GOLIATH is the exam —
+  a five-point **crown circuit** (head → right shoulder → core → left
+  shoulder → low) walked **three full loops** to kill, quickening with every
+  closed loop, with its own attack: the **NOVA**, fire flooding the whole
+  platform except one marked safe wedge — the only telegraph that means
+  *stand here*. Everything else clanks. Wins bank coins + XP at the flat
   per-game rate; the **first fell of each titan pays double**, and the first
   fell of GOLIATH awards the **CHAMPION platform** (a locker exclusive the
   shop only teases). Fell all five and the line-up opens **THE GAUNTLET
