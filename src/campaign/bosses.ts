@@ -360,15 +360,12 @@ export function buildTitan(def: BossDef): TitanRig {
       break;
     }
     case 'vulture': {
-      // A hooded scavenger skull: narrow casque, hooked beak, ONE round eye —
-      // the source of the tracking beam, so the tell reads at a glance.
+      // A hooded scavenger skull: narrow casque and ONE big round eye — the
+      // source of the tracking beam, so the tell reads at a glance. (No beak:
+      // the old cone hung straight over the eye and hid the blink.)
       const hood = new Mesh(new CylinderGeometry(headR * 0.55, headR * 0.9, headR * 1.9, 8), chassis(accent, 0.06));
       hood.rotation.x = 0.28; // craned forward, watching you
       head.add(hood);
-      const beak = new Mesh(new CylinderGeometry(0.012 * s, headR * 0.5, headR * 1.5, 6), dark());
-      beak.rotation.x = Math.PI / 2 + 0.45;
-      beak.position.set(0, -headR * 0.35, -headR * 1.1);
-      head.add(beak);
       // The eye sits PROUD of the hood's rim — tucked inside the casque it
       // was invisible, and a blink nobody can see is no tell at all.
       const eye = new Mesh(new CylinderGeometry(headR * 0.42, headR * 0.42, 0.05 * s, 12), visorMat);
