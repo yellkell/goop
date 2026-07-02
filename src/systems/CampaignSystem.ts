@@ -61,7 +61,7 @@ import { ownPlatform, platformOwned, setPlatformSkin } from '../menu/customizati
 import { reportCampaign } from '../net/leaderboard.js';
 import { announce } from '../audio/announcer.js';
 import { playCash } from '../audio/cash.js';
-import { playVictory, startBattleMusic, stopBattleTrack } from '../audio/battleMusic.js';
+import { BOSS_BATTLE_VOLUME, playVictory, startBattleMusic, stopBattleTrack } from '../audio/battleMusic.js';
 import { emberBurst } from '../fx/fire.js';
 import { spawnFireImpact } from '../fx/effects.js';
 import { feedback } from '../fx/feedback.js';
@@ -544,7 +544,7 @@ export class CampaignSystem extends createSystem({
     match.phase = 'playing';
     this.hud.title('', '');
     this.light.intensity = 5; // steady key light (a skip can leave a strobe)
-    startBattleMusic(); // the quiet background score, same as any bout
+    startBattleMusic(BOSS_BATTLE_VOLUME); // a score loud enough to carry over the titan's SFX
     announce('fight');
     sfx.roundBell();
   }

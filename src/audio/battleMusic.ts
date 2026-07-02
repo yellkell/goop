@@ -22,6 +22,10 @@ const battleUrls = Object.values(
 );
 
 const BATTLE_VOLUME = 0.18; // quiet background, well under the lobby music (0.5)
+// Titan bouts run over a wall of SFX (klaxons, roars, slams, beams) — the
+// quiet 0.18 background vanishes under it, so boss fights get a louder score
+// that actually reads as MUSIC through the fight.
+export const BOSS_BATTLE_VOLUME = 0.42;
 const VICTORY_VOLUME = 0.26;
 
 // Post-match handoff timings.
@@ -45,19 +49,26 @@ function clearHandoff(): void {
   if (victory) victory.onended = null;
 }
 
-/** Start a random battle track (looping). Call when a bout begins. */
-export function startBattleMusic(): void {
+/**
+ * Start a random battle track (looping). Call when a bout begins. `volume`
+ * defaults to the quiet background level; boss fights pass a louder one
+ * (BOSS_BATTLE_VOLUME) so the score carries over the titan's SFX.
+ */
+export function startBattleMusic(volume: number = BATTLE_VOLUME): void {
   clearHandoff(); // a new bout abandons any victory handoff
   victory?.pause();
   if (isMusicMuted() || battleUrls.length === 0) return;
-  if (battle && !battle.paused) return; // already scoring this bout
+  if (battle && !battle.paused) {
+    battle.volume = volume; // already scoring this bout — just match the level
+    return;
+  }
   const url = battleUrls[Math.floor(Math.random() * battleUrls.length)];
   if (!battle) {
     battle = new Audio();
     battle.loop = true;
   }
   if (battle.src !== url) battle.src = url;
-  battle.volume = BATTLE_VOLUME;
+  battle.volume = volume;
   battle.currentTime = 0;
   void battle.play().catch(() => {
     /* autoplay blocked or decode failed — stay silent */
