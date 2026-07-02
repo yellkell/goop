@@ -338,18 +338,25 @@ export function buildTitan(def: BossDef): TitanRig {
       break;
     }
     case 'piston': {
-      // An anvil: flat-topped block head with a heavy brow and a wide visor.
+      // An anvil: flat-topped block head with a heavy brow and two big
+      // rectangular lamp EYES set proud of the face — the thin visor strip
+      // it had before never read as a blink from across the arena.
       const anvil = new Mesh(new BoxGeometry(headR * 2.4, headR * 1.5, headR * 1.8), chassis(accent, 0.06));
       head.add(anvil);
       const horn = new Mesh(new BoxGeometry(headR * 0.9, headR * 0.9, headR * 0.8), dark());
       horn.position.set(headR * 1.5, headR * 0.1, 0);
       head.add(horn);
-      const brow = new Mesh(new BoxGeometry(headR * 2.5, 0.05 * s, headR * 0.5), dark());
-      brow.position.set(0, headR * 0.55, -headR * 0.75);
+      const brow = new Mesh(new BoxGeometry(headR * 2.5, 0.08 * s, headR * 0.5), dark());
+      brow.position.set(0, headR * 0.5, -headR * 0.78);
       head.add(brow);
-      const visor = new Mesh(new BoxGeometry(headR * 2.0, 0.035 * s, 0.03 * s), visorMat);
-      visor.position.set(0, 0.05 * s, -headR * 0.92);
-      head.add(visor);
+      for (const ex of [-1, 1]) {
+        const socket = new Mesh(new BoxGeometry(headR * 0.9, headR * 0.52, 0.04 * s), dark());
+        socket.position.set(ex * headR * 0.62, headR * 0.02, -headR * 0.92);
+        head.add(socket);
+        const eye = new Mesh(new BoxGeometry(headR * 0.64, headR * 0.34, 0.06 * s), visorMat);
+        eye.position.set(ex * headR * 0.62, headR * 0.02, -headR * 0.99);
+        head.add(eye);
+      }
       break;
     }
     case 'vulture': {
@@ -541,9 +548,12 @@ export function buildTitan(def: BossDef): TitanRig {
   // ── Shoulder emblems: octagonal lamps set proud of each pauldron. Dim on
   //    most machines; GOLIATH's crown circuit blinks them as ring stops. ────
   const shoulderMats: [MeshStandardMaterial, MeshStandardMaterial] = [glowMat(accent, 0.2), glowMat(accent, 0.2)];
+  // The king's crown-circuit shoulder stops run larger than the other
+  // machines' vestigial lamps — they're targets you must hunt, so they read.
+  const lampR = (def.style === 'king' ? 0.09 : 0.06) * s;
   const makeShoulderLamp = (i: 0 | 1): Mesh => {
     const side = i === 0 ? -1 : 1;
-    const lamp = new Mesh(new CylinderGeometry(0.06 * s, 0.06 * s, 0.05 * s, 8), shoulderMats[i]);
+    const lamp = new Mesh(new CylinderGeometry(lampR, lampR, 0.055 * s, 8), shoulderMats[i]);
     lamp.rotation.x = Math.PI / 2;
     lamp.position.set(side * 0.38 * s, shoulderY + 0.13 * s, -0.13 * s);
     root.add(lamp);

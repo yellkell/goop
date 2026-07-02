@@ -290,7 +290,8 @@ export const CAMPAIGN = {
   // top out near 0.032 and the corner bolts near 0.035, so anything lower
   // reads as "under the platform" and the warning goes unseen.
   decalY: 0.05,
-  slamRadius: 0.4, // tight discs — a slam threatens a spot, not half the pad
+  slamRadius: 0.32, // tight discs — a slam threatens a spot, not half the pad
+  slamImpactDelay: 0.14, // a breath of extra hang before the fist lands — a fairer dodge
   beamHalfWidth: 0.22,
   sweepThickness: 0.19, // half-height of the horizontal blade slice
 

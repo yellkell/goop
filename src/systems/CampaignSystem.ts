@@ -49,6 +49,7 @@ import {
   sweepTelegraph,
   type Telegraph,
 } from '../campaign/telegraphs.js';
+import { BallState, Fireball } from '../components/Fireball.js';
 import { Combatant } from '../components/Combatant.js';
 import { Health } from '../components/Health.js';
 import { Hitbox } from '../components/Hitbox.js';
@@ -146,6 +147,7 @@ const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.m
 export class CampaignSystem extends createSystem({
   playerParts: { required: [Hitbox, PlayerBodyPart] },
   combatants: { required: [Combatant, Health] },
+  balls: { required: [Fireball] },
 }) {
   private hud!: CampaignHud;
   private light!: PointLight;
@@ -684,17 +686,21 @@ export class CampaignSystem extends createSystem({
         emberBurst(shot.pos, 2, true);
       }
 
-      // BLOCKED: a fist in the path detonates the shot harmlessly — the
-      // volley is the one titan attack you can PARRY instead of outrun.
+      // BLOCKED: a fist in the path detonates the shot harmlessly — but ONLY
+      // an ARMED fist. Same law as the main game's parry: your ball must be
+      // roaring in ORBIT (trigger/grip held) or homing back (RETURNING). A
+      // bare, un-orbited hand passes straight through and takes the hit.
       let blocked = false;
       for (const hand of ['left', 'right'] as const) {
+        const idx: 0 | 1 = hand === 'left' ? 0 : 1;
+        if (!this.handArmed(idx)) continue;
         const grip = this.world.playerSpaceEntities.gripSpaces[hand]?.object3D;
         if (!grip) continue;
         grip.getWorldPosition(_p);
         if (_p.distanceTo(shot.pos) <= CAMPAIGN.volleyBlockRadius) {
           spawnFireImpact(this.world, shot.pos, 1, 0.9);
           emberBurst(shot.pos, 20, true);
-          sfx.armorClank();
+          sfx.deflect();
           pulseHand(this.world.session, hand, 0.8, 90);
           blocked = true;
           break;
@@ -747,6 +753,19 @@ export class CampaignSystem extends createSystem({
     for (let i = this.shots.length - 1; i >= 0; i--) this.disposeShot(i);
   }
 
+  /** Is this hand's ball ARMED to parry — roaring in orbit or homing back?
+   *  (The same states CollisionSystem lets deflect an enemy ball.) */
+  private handArmed(hand: 0 | 1): boolean {
+    for (const e of this.queries.balls.entities) {
+      if ((e.getValue(Fireball, 'owner') ?? 0) !== 0) continue;
+      if ((e.getValue(Fireball, 'hand') ?? 0) !== hand) continue;
+      if ((e.getValue(Fireball, 'transient') ?? 0) !== 0) continue;
+      const st = e.getValue(Fireball, 'state') ?? 0;
+      return st === BallState.Orbit || st === BallState.Returning;
+    }
+    return false;
+  }
+
   /** Pick a weighted attack (avoiding an immediate repeat) and telegraph it. */
   private startAttack(): void {
     const kinds: AttackKind[] = ['slam', 'sweep', 'beam', 'volley', 'nova'];
@@ -782,7 +801,7 @@ export class CampaignSystem extends createSystem({
     const arm: 0 | 1 = _head.x < 0 ? 1 : 0;
 
     if (kind === 'slam') {
-      const r = CAMPAIGN.slamRadius + this.def.scale * 0.025;
+      const r = CAMPAIGN.slamRadius + this.def.scale * 0.02;
       const x0 = clamp(_head.x, -OCTAGON_HALF_WIDTH + 0.15, OCTAGON_HALF_WIDTH - 0.15);
       const z0 = clamp(_head.z, -OCTAGON_HALF_DEPTH + 0.1, OCTAGON_HALF_DEPTH - 0.1);
       const count = this.def.slamStyle === 'single' ? 1 : Math.max(1, this.def.slamCount);
@@ -798,7 +817,9 @@ export class CampaignSystem extends createSystem({
         tg.group.position.set(x, CAMPAIGN.decalY, z0);
         this.scene.add(tg.group);
         telegraphs.push(tg);
-        staggers.push(i * (this.def.slamStyle === 'rehit' ? CAMPAIGN.rehitDelay : CAMPAIGN.marchDelay));
+        // A breath of extra hang on top of the charge, so the fist lands a
+        // touch later than the disc fills — a fairer window to clear it.
+        staggers.push(CAMPAIGN.slamImpactDelay + i * (this.def.slamStyle === 'rehit' ? CAMPAIGN.rehitDelay : CAMPAIGN.marchDelay));
         // The ghost hammer: hangs over the disc and descends with the
         // countdown, so the raised arm connects to THIS spot on the floor.
         markers.push(this.makeHammerMarker(x, z0));
@@ -1323,8 +1344,11 @@ export class CampaignSystem extends createSystem({
     rig.low.scale.setScalar(lowLit ? 1 + wink * 0.18 : 1);
     for (const [i, spot] of (['shoulderL', 'shoulderR'] as const).entries()) {
       const on = lit.includes(spot);
-      rig.shoulderMats[i].emissiveIntensity = on ? 0.5 + wink * 2.8 : 0.2;
-      rig.shoulders[i].scale.setScalar(on ? 1 + wink * 0.18 : 1);
+      // The shoulder lamps sit small and off to the sides, so they get the
+      // LOUDEST strobe of all the tells — near-dark to a hard flare, and a
+      // big scale pulse — or GOLIATH's ring stop is easy to miss.
+      rig.shoulderMats[i].emissiveIntensity = on ? 0.2 + wink * 6.0 : 0.2;
+      rig.shoulders[i].scale.setScalar(on ? 1 + wink * 0.55 : 1);
     }
 
     // Pods glow while a volley cooks.

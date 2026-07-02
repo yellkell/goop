@@ -47,8 +47,10 @@ in-your-face boxing feel.
   descends onto each slam disc so you always know where it lands, sweeps
   send a blade you watch travel, beams rake marked strips (VULTURE's track
   you and lock late), and pod **VOLLEYS** hurl fireballs straight at you —
-  the one attack you can **BLOCK**: catch the shot on a fist and it bursts
-  harmlessly; GOLIATH enrages at half health. Damage runs on **per-boss weak-point patterns** — whatever
+  the one attack you can **BLOCK**: catch the shot on an ARMED fist (a ball
+  roaring in orbit, trigger/grip held — the same parry law as a duel) and it
+  bursts harmlessly; a bare hand takes the hit. GOLIATH enrages at half
+  health. Damage runs on **per-boss weak-point patterns** — whatever
   is vulnerable **blinks** (the visor tell, the chest core, the low-blow
   emblem, GOLIATH's shoulder lamps): RUSTHOOK keeps head AND core open,
   PISTONKAISER flips head↔core every hit, VULTURE wants two hits per point,
