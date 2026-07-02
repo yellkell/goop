@@ -41,10 +41,13 @@ in-your-face boxing feel.
   whose kill zones charge up visibly on YOUR platform** — a ghost hammer
   descends onto each slam disc so you always know where it lands, sweeps
   send a blade you watch travel, beams rake marked strips (VULTURE's track
-  you and lock late), barrages ripple and JUGGERNAUT's leave burning ground;
-  GOLIATH enrages at half health. Damage runs on the **head↔core cycle**:
-  one weak point blazes at a time (a floating prompt names it), every landed
-  hit flips it, everything else clanks. Wins bank coins + XP at the flat
+  you and lock late), barrages ripple with guaranteed walkable lanes and
+  JUGGERNAUT's leave (capped, short-lived) burning ground; GOLIATH enrages
+  at half health. Damage runs on **per-boss weak-point patterns** — whatever
+  is vulnerable **blinks** (the visor tell, the chest core, JUGGERNAUT's
+  low-blow emblem): RUSTHOOK keeps head AND core open, PISTONKAISER flips
+  head↔core every hit, VULTURE wants two hits per point, JUGGERNAUT cycles
+  head → core → **low blow**, everything else clanks. Wins bank coins + XP at the flat
   per-game rate; the **first fell of each titan pays double**, and the first
   fell of GOLIATH awards the **CHAMPION platform** (a locker exclusive the
   shop only teases). Fell all five and the line-up opens **THE GAUNTLET

@@ -1785,10 +1785,6 @@ function drawCampaign(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | n
   ctx.font = stencilFont(42);
   ctx.fillStyle = UI.danger;
   ctx.fillText('THE TITAN GAUNTLET', 118, 46);
-  ctx.textAlign = 'right';
-  ctx.font = '700 24px system-ui, sans-serif';
-  ctx.fillStyle = UI.textDim;
-  ctx.fillText('fight them in order · left to right', CAMP_W - 48, 46);
   ctx.strokeStyle = UI.steelDim;
   ctx.lineWidth = 2;
   ctx.beginPath();

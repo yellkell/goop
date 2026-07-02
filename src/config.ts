@@ -261,11 +261,13 @@ export const CAMPAIGN = {
   victoryDelay: 8, // seconds of collapse + payout card before the line-up
   defeatDelay: 5, // seconds of SCRAPPED card before the line-up
 
-  // Weak-point law (Hitbox.damageScale): armour clanks; the LIVE point of
-  // the head↔core cycle takes real damage (every landed hit flips the cycle:
-  // head, then core, then head… until the titan is dead).
+  // Weak-point law (Hitbox.damageScale): armour clanks; whatever BLINKS is
+  // live. Each titan opens its points its own way (BossDef.weakPattern):
+  // both at once, alternating, two-hits-then-swap, or the three-point cycle
+  // that ends in the low blow.
   headScale: 1.5,
   coreScale: 2.0,
+  lowScale: 2.0, // the low blow — hard to hit, pays like the core
   podScale: 1.5,
 
   // Strike-zone geometry defaults (per-boss defs tune sizes/cadence).
@@ -279,8 +281,12 @@ export const CAMPAIGN = {
   marchStep: 0.6, // metres between marching slam discs
   marchDelay: 0.55, // seconds between marching detonations — the drumbeat
   beamLockAt: 0.72, // tracking beams freeze at this charge fraction
-  patchTime: 3.5, // seconds a burning floor patch stays hot
-  patchRadius: 0.34,
+  // Burning ground, kept HONEST: short-lived, small, few — pressure that
+  // shrinks your footing without ever sealing the whole platform.
+  patchTime: 2.2, // seconds a burning floor patch stays hot
+  patchRadius: 0.28,
+  maxPatches: 3, // oldest patch gutters out early past this many
+  shellSpacing: 0.6, // min distance between barrage shell centres (m)
   enrageCooldownMult: 0.65, // enraged titans attack this much sooner…
   enrageChargeMult: 0.85, // …and charge that much faster
 

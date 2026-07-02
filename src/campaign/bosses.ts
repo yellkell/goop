@@ -48,6 +48,16 @@ export type SlamStyle = 'single' | 'rehit' | 'march';
 /** Which bespoke chassis buildTitan assembles. */
 export type TitanStyle = 'hook' | 'piston' | 'vulture' | 'fortress' | 'king';
 
+/**
+ * How a titan's weak points open up. No prompts — whatever is vulnerable
+ * BLINKS (the visor tell on the head, the chest core, the low emblem):
+ *  - 'both'      : head AND core are open the whole fight, any order.
+ *  - 'alternate' : one point at a time; every landed hit flips head↔core.
+ *  - 'double'    : two hits on the blinking point, then it swaps.
+ *  - 'triple'    : the cycle adds the LOW BLOW — head → core → low → repeat.
+ */
+export type WeakPattern = 'both' | 'alternate' | 'double' | 'triple';
+
 export interface BossDef {
   name: string;
   epithet: string;
@@ -84,6 +94,8 @@ export interface BossDef {
   burnPatches: boolean;
   /** Enrage threshold as an HP fraction (0 = never): faster, angrier. */
   enrageAt: number;
+  /** How its weak points open (see WeakPattern) — the blink says where. */
+  weakPattern: WeakPattern;
 }
 
 export const BOSSES: BossDef[] = [
@@ -107,6 +119,7 @@ export const BOSSES: BossDef[] = [
     beamTracks: false,
     burnPatches: false,
     enrageAt: 0,
+    weakPattern: 'both',
   },
   {
     name: 'PISTONKAISER',
@@ -128,6 +141,7 @@ export const BOSSES: BossDef[] = [
     beamTracks: false,
     burnPatches: false,
     enrageAt: 0,
+    weakPattern: 'alternate',
   },
   {
     name: 'VULTURE',
@@ -149,6 +163,7 @@ export const BOSSES: BossDef[] = [
     beamTracks: true,
     burnPatches: false,
     enrageAt: 0,
+    weakPattern: 'double',
   },
   {
     name: 'JUGGERNAUT',
@@ -160,9 +175,9 @@ export const BOSSES: BossDef[] = [
     zOffset: 0.6,
     cooldownMin: 1.6,
     cooldownMax: 2.4,
-    charge: { slam: 1.3, sweep: 1.5, beam: 1.25, barrage: 1.5 },
+    charge: { slam: 1.3, sweep: 1.5, beam: 1.25, barrage: 2.0 },
     weights: { slam: 3, sweep: 2, beam: 4, barrage: 5 },
-    barrageCount: 5,
+    barrageCount: 3,
     beams: 2,
     swayAmp: 0.45,
     slamStyle: 'single',
@@ -170,6 +185,7 @@ export const BOSSES: BossDef[] = [
     beamTracks: false,
     burnPatches: true,
     enrageAt: 0,
+    weakPattern: 'triple',
   },
   {
     name: 'GOLIATH',
@@ -181,9 +197,9 @@ export const BOSSES: BossDef[] = [
     zOffset: 0.8,
     cooldownMin: 1.35,
     cooldownMax: 2.1,
-    charge: { slam: 1.15, sweep: 1.35, beam: 1.2, barrage: 1.35 },
+    charge: { slam: 1.15, sweep: 1.35, beam: 1.2, barrage: 1.8 },
     weights: { slam: 3, sweep: 3, beam: 4, barrage: 4 },
-    barrageCount: 6,
+    barrageCount: 4,
     beams: 2,
     swayAmp: 0.35,
     slamStyle: 'march',
@@ -191,6 +207,7 @@ export const BOSSES: BossDef[] = [
     beamTracks: true,
     burnPatches: true,
     enrageAt: 0.5,
+    weakPattern: 'alternate',
   },
 ];
 
@@ -209,11 +226,15 @@ export interface TitanArm {
 export interface TitanRig {
   root: Group;
   head: Group;
-  /** The eye/visor glow — blazes while the HEAD is the live weak point. */
+  /** The eye/visor glow — blinks while the HEAD is a live weak point. */
   visorMat: MeshStandardMaterial;
   core: Mesh;
-  /** The chest core glow — blazes while the CORE is the live weak point. */
+  /** The chest core glow — blinks while the CORE is a live weak point. */
   coreMat: MeshStandardMaterial;
+  /** The LOW-BLOW emblem on the pelvis (JUGGERNAUT's third target). */
+  low: Mesh;
+  /** Its glow — blinks while the low blow is the live weak point. */
+  lowMat: MeshStandardMaterial;
   podMats: [MeshStandardMaterial, MeshStandardMaterial];
   arms: [TitanArm, TitanArm];
   /** Key world-frame heights (root at y=0): head centre and core centre. */
@@ -502,6 +523,13 @@ export function buildTitan(def: BossDef): TitanRig {
   const pelvis = new Mesh(new BoxGeometry(0.28 * s, 0.18 * s, 0.22 * s), chassis(accent, 0.03));
   pelvis.position.y = hipY - 0.28 * s;
   root.add(pelvis);
+  // The LOW-BLOW emblem: an octagonal lamp set proud of the belt plate.
+  // Dim on most machines; JUGGERNAUT's weak-point cycle blinks it live.
+  const lowMat = glowMat(accent, 0.2);
+  const low = new Mesh(new CylinderGeometry(0.07 * s, 0.07 * s, 0.05 * s, 8), lowMat);
+  low.rotation.x = Math.PI / 2;
+  low.position.set(0, hipY - 0.28 * s, -0.14 * s);
+  root.add(low);
   if (def.style === 'fortress') {
     // The armour curtain: a ring of riveted skirt plates.
     for (let i = 0; i < 8; i++) {
@@ -622,6 +650,8 @@ export function buildTitan(def: BossDef): TitanRig {
     visorMat,
     core,
     coreMat,
+    low,
+    lowMat,
     podMats,
     arms,
     headY,

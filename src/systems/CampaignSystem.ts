@@ -9,10 +9,10 @@
  *            SLAMS (a ghost hammer descends onto the disc — step out),
  *            horizontal SWEEPS (duck the travelling blade), eye BEAMS
  *            (sidestep the strip) and mortar BARRAGES (thread the
- *            footprints). Damage runs on the HEAD↔CORE cycle: exactly one
- *            weak point is live at a time (it blazes; a floating prompt
- *            names it), every landed hit flips it, and everything else is
- *            armour that clanks. Dodge, re-aim, punish, repeat.
+ *            footprints). Damage runs on per-boss WEAK-POINT PATTERNS
+ *            (BossDef.weakPattern): whatever is vulnerable BLINKS — the
+ *            visor tell, the chest core, the low emblem — and everything
+ *            else is armour that clanks. Dodge, re-aim, punish, repeat.
  *  VICTORY : collapse, floating payout line (double coins/XP on a first fell).
  *  DEFEAT  : SCRAPPED. The titan stands. Consolation pay.
  *
@@ -61,7 +61,7 @@ import { announce } from '../audio/announcer.js';
 import { playCash } from '../audio/cash.js';
 import { playVictory, startBattleMusic, stopBattleTrack } from '../audio/battleMusic.js';
 import { emberBurst } from '../fx/fire.js';
-import { spawnFireImpact, spawnPopup } from '../fx/effects.js';
+import { spawnFireImpact } from '../fx/effects.js';
 import { feedback } from '../fx/feedback.js';
 import { glowSprite } from '../materials/glow.js';
 import { pulseHand } from '../input/haptics.js';
@@ -152,11 +152,13 @@ export class CampaignSystem extends createSystem({
   private strikes: Strike[] = [];
   private patches: BurnPatch[] = [];
   /**
-   * The head↔core cycle: exactly ONE weak point is live at a time (the other
-   * is armour). Every landed hit flips it — head, core, head, core… until
-   * the titan is dead. Starts on the head.
+   * The weak-point pattern (BossDef.weakPattern) drives which point(s) BLINK
+   * live right now: `cycleIdx` walks the boss's sequence, `hitsOnPoint`
+   * counts landed hits on the current stop (VULTURE needs two per stop).
+   * No text prompts — the blink IS the tell.
    */
-  private lit: 'head' | 'core' = 'head';
+  private cycleIdx = 0;
+  private hitsOnPoint = 0;
   private invuln = 0; // player i-frames after eating a strike
   private strikeSwing: [number, number] = [0, 0]; // post-strike arm follow-through
   private flinch = 0;
@@ -260,7 +262,8 @@ export class CampaignSystem extends createSystem({
     this.ensureHitboxes();
     this.clearPatches();
     this.disposeAttack();
-    this.lit = 'head'; // the cycle always opens on the head
+    this.cycleIdx = 0; // every pattern opens on the head
+    this.hitsOnPoint = 0;
     this.invuln = 0;
     this.enraged = false;
     this.cardTimer = 0;
@@ -394,18 +397,18 @@ export class CampaignSystem extends createSystem({
     startBattleMusic(); // the quiet background score, same as any bout
     announce('fight');
     sfx.roundBell();
-    // The opening prompt: floating words on the target, not a board.
-    this.litPopup();
   }
 
-  /** Float "HIT THE HEAD" / "HIT THE CORE" on the live weak point. */
-  private litPopup(): void {
-    const rig = this.rig;
-    if (!rig) return;
-    if (this.lit === 'head') rig.head.getWorldPosition(_v);
-    else rig.core.getWorldPosition(_v);
-    _v.y += 0.24 * this.def.scale;
-    spawnPopup(this.world, _v, this.lit === 'head' ? 'HIT THE HEAD' : 'HIT THE CORE', '#ffd24a', 'rgba(255,190,40,1)', 1.5);
+  /** Which points blink live right now, per the boss's weak pattern. */
+  private litPoints(): Array<'head' | 'core' | 'low'> {
+    switch (this.def.weakPattern) {
+      case 'both':
+        return ['head', 'core']; // any order, all fight
+      case 'triple':
+        return [(['head', 'core', 'low'] as const)[this.cycleIdx % 3]];
+      default: // 'alternate' and 'double' walk head↔core
+        return [this.cycleIdx % 2 === 0 ? 'head' : 'core'];
+    }
   }
 
   // --- the fight --------------------------------------------------------------
@@ -430,12 +433,17 @@ export class CampaignSystem extends createSystem({
     if (bossHp < this.lastBossHp) {
       this.flinch = 0.35;
       this.hudTimer = 0; // instant bar update on damage
-      // The cycle: every landed hit flips the live weak point — head, core,
-      // head, core… so the fight is a rhythm of re-aiming, not a grind.
-      if (bossHp > 0) {
-        this.lit = this.lit === 'head' ? 'core' : 'head';
-        sfx.coreExposed();
-        this.litPopup();
+      // Walk the weak-point pattern: RUSTHOOK's stays put (both open),
+      // VULTURE needs two hits per stop, the others advance every hit. The
+      // servo cue + the new blink say where — no words.
+      if (bossHp > 0 && this.def.weakPattern !== 'both') {
+        this.hitsOnPoint += 1;
+        const perStop = this.def.weakPattern === 'double' ? 2 : 1;
+        if (this.hitsOnPoint >= perStop) {
+          this.hitsOnPoint = 0;
+          this.cycleIdx += 1;
+          sfx.coreExposed();
+        }
       }
     }
     this.lastBossHp = bossHp;
@@ -470,6 +478,11 @@ export class CampaignSystem extends createSystem({
   // --- burning ground (JUGGERNAUT / GOLIATH) ---------------------------------
 
   private spawnPatch(x: number, z: number): void {
+    // Capped: past maxPatches the oldest gutters out early, so burning
+    // ground pressures your footing without ever sealing the platform.
+    while (this.patches.length >= CAMPAIGN.maxPatches) {
+      this.patches.shift()?.tg.dispose();
+    }
     const tg = circleTelegraph(CAMPAIGN.patchRadius);
     tg.group.position.set(x, 0.013, z);
     this.scene.add(tg.group);
@@ -580,11 +593,21 @@ export class CampaignSystem extends createSystem({
         this.aimBeam(zone, tg, offset); // initial aim (tracking re-aims later)
       }
     } else {
-      // Barrage: first shell on your feet, the rest scattered, landing in a
-      // ripple — keep moving.
+      // Barrage: first shell on your feet, the rest scattered — but never
+      // bunched. Min spacing between shell centres guarantees walkable
+      // lanes, so a barrage is pressure to MOVE through, never a death wall.
+      const placed: Array<[number, number]> = [];
       for (let i = 0; i < this.def.barrageCount; i++) {
-        const x = i === 0 ? clamp(_head.x, -0.7, 0.7) : rand(-OCTAGON_HALF_WIDTH + 0.2, OCTAGON_HALF_WIDTH - 0.2);
-        const z = i === 0 ? clamp(_head.z, -0.55, 0.55) : rand(-OCTAGON_HALF_DEPTH + 0.15, OCTAGON_HALF_DEPTH - 0.15);
+        let x = clamp(_head.x, -0.7, 0.7);
+        let z = clamp(_head.z, -0.55, 0.55);
+        if (i > 0) {
+          for (let tries = 0; tries < 14; tries++) {
+            x = rand(-OCTAGON_HALF_WIDTH + 0.2, OCTAGON_HALF_WIDTH - 0.2);
+            z = rand(-OCTAGON_HALF_DEPTH + 0.15, OCTAGON_HALF_DEPTH - 0.15);
+            if (placed.every(([px, pz]) => Math.hypot(x - px, z - pz) >= CAMPAIGN.shellSpacing)) break;
+          }
+        }
+        placed.push([x, z]);
         zones.push({ kind: 'circle', x, z, r: CAMPAIGN.mortarRadius });
         const tg = circleTelegraph(CAMPAIGN.mortarRadius);
         tg.group.position.set(x, 0.014, z);
@@ -979,18 +1002,23 @@ export class CampaignSystem extends createSystem({
     rig.head.lookAt(_head.x, _head.y, _head.z);
     rig.head.rotateY(Math.PI);
 
-    // The head↔core cycle wears its state: the LIVE point blazes and
-    // breathes, the armoured one dims to dull steel. Beams still superheat
-    // the eye while they cook; enrage keeps the eye furious throughout.
-    const headLit = this.lit === 'head' && fighting;
-    const coreLit = this.lit === 'core' && fighting;
+    // Whatever is vulnerable BLINKS — a hard on/off wink, not a breath, so
+    // it reads as a signal: the head's visor tell, the chest core, the low
+    // emblem. Beams still superheat the eye while they cook; enrage keeps
+    // the eye furious throughout.
+    const lit = fighting ? this.litPoints() : [];
+    const wink = this.time % 0.5 < 0.3 ? 1 : 0;
     const beamCharging = this.attack?.kind === 'beam' ? clamp(this.attack.time / this.attack.chargeTime, 0, 1) : 0;
     rig.visorMat.emissiveIntensity =
-      (headLit ? 2.8 + Math.sin(this.time * 9) * 0.8 : 0.7) +
+      (lit.includes('head') ? 0.6 + wink * 2.8 : 0.7) +
       beamCharging * 3.2 +
       (this.enraged ? 1.6 + Math.sin(this.time * 10) * 0.6 : 0);
-    rig.coreMat.emissiveIntensity = coreLit ? 2.8 + Math.sin(this.time * 9) * 0.8 : 0.25;
-    rig.core.scale.setScalar(coreLit ? 1.14 + Math.sin(this.time * 9) * 0.07 : 1);
+    const coreLit = lit.includes('core');
+    rig.coreMat.emissiveIntensity = coreLit ? 0.5 + wink * 2.8 : 0.25;
+    rig.core.scale.setScalar(coreLit ? 1 + wink * 0.16 : 1);
+    const lowLit = lit.includes('low');
+    rig.lowMat.emissiveIntensity = lowLit ? 0.5 + wink * 2.8 : 0.2;
+    rig.low.scale.setScalar(lowLit ? 1 + wink * 0.18 : 1);
 
     // Pods glow while a barrage cooks.
     const barraging = this.attack?.kind === 'barrage';
@@ -1076,19 +1104,23 @@ export class CampaignSystem extends createSystem({
     }
     const s = this.def.scale;
     const root = rig.root.position;
+    const lit = this.litPoints();
 
     rig.head.getWorldPosition(_v);
     this.boxes.head?.object3D?.position.copy(_v);
-    this.boxes.head?.setValue(Hitbox, 'damageScale', this.lit === 'head' ? CAMPAIGN.headScale : 0);
+    this.boxes.head?.setValue(Hitbox, 'damageScale', lit.includes('head') ? CAMPAIGN.headScale : 0);
 
     rig.core.getWorldPosition(_v);
     this.boxes.core?.object3D?.position.copy(_v);
-    this.boxes.core?.setValue(Hitbox, 'damageScale', this.lit === 'core' ? CAMPAIGN.coreScale : 0);
+    this.boxes.core?.setValue(Hitbox, 'damageScale', lit.includes('core') ? CAMPAIGN.coreScale : 0);
 
     this.boxes.body?.object3D?.position.set(root.x, root.y + 1.05 * s, root.z);
     this.boxes.body?.setValue(Hitbox, 'damageScale', 0);
-    this.boxes.pelvis?.object3D?.position.set(root.x, root.y + 0.55 * s, root.z);
-    this.boxes.pelvis?.setValue(Hitbox, 'damageScale', 0);
+    // The pelvis sphere doubles as the LOW-BLOW target when the pattern
+    // calls it; otherwise it's armour like the trunk.
+    rig.low.getWorldPosition(_v);
+    this.boxes.pelvis?.object3D?.position.copy(_v);
+    this.boxes.pelvis?.setValue(Hitbox, 'damageScale', lit.includes('low') ? CAMPAIGN.lowScale : 0);
 
     const barraging = this.attack?.kind === 'barrage';
     this.boxes.pods.forEach((pod, i) => {
@@ -1097,10 +1129,11 @@ export class CampaignSystem extends createSystem({
       pod.setValue(Hitbox, 'damageScale', barraging ? CAMPAIGN.podScale : 0);
     });
 
-    // Keep the aim assist on the LIVE point of the cycle.
-    if (this.lit === 'core') rig.core.getWorldPosition(campaign.aimPoint);
-    else rig.head.getWorldPosition(campaign.aimPoint);
-    campaign.coreOpen = this.lit === 'core';
+    // Aim assist rides the best live point: core, then head, then low.
+    if (lit.includes('core')) rig.core.getWorldPosition(campaign.aimPoint);
+    else if (lit.includes('head')) rig.head.getWorldPosition(campaign.aimPoint);
+    else rig.low.getWorldPosition(campaign.aimPoint);
+    campaign.coreOpen = lit.includes('core');
   }
 
   private parkHitboxes(): void {
