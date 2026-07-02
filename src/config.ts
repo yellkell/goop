@@ -290,22 +290,21 @@ export const CAMPAIGN = {
   // top out near 0.032 and the corner bolts near 0.035, so anything lower
   // reads as "under the platform" and the warning goes unseen.
   decalY: 0.05,
-  slamRadius: 0.55,
+  slamRadius: 0.4, // tight discs — a slam threatens a spot, not half the pad
   beamHalfWidth: 0.22,
   sweepThickness: 0.19, // half-height of the horizontal blade slice
-  mortarRadius: 0.42,
 
   // Signature-mechanic tuning (which titans use which lives in bosses.ts).
   rehitDelay: 0.85, // seconds between a rehit slam's two detonations
   marchStep: 0.6, // metres between marching slam discs
   marchDelay: 0.55, // seconds between marching detonations — the drumbeat
   beamLockAt: 0.72, // tracking beams freeze at this charge fraction
-  // Burning ground, kept HONEST: short-lived, small, few — pressure that
-  // shrinks your footing without ever sealing the whole platform.
-  patchTime: 2.2, // seconds a burning floor patch stays hot
-  patchRadius: 0.28,
-  maxPatches: 3, // oldest patch gutters out early past this many
-  shellSpacing: 0.6, // min distance between barrage shell centres (m)
+  // The VOLLEY: shoulder pods spool up, then hurl fireballs straight at you
+  // — the one titan attack you can BLOCK: put a fist in its path.
+  volleySpeed: 4.2, // projectile speed (m/s) — roughly a one-second flight
+  volleyInterval: 0.45, // seconds between shots in a volley
+  volleyBlockRadius: 0.32, // a fist this close deflects the shot
+  volleyHitRadius: 0.22, // shot core radius vs your body spheres
   enrageCooldownMult: 0.65, // enraged titans attack this much sooner…
   enrageChargeMult: 0.85, // …and charge that much faster
 

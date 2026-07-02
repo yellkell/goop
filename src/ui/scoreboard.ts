@@ -25,7 +25,7 @@ import {
 import { ARENA_GAP, MATCH } from '../config.js';
 import type { MatchState } from '../combat/matchState.js';
 import { app, training } from '../menu/appState.js';
-import { UI, fitStencilText, hazardStrip, metalText, plate, solidBar, stencilFont } from './industrial.js';
+import { UI, chamferPath, fitStencilText, metalText, solidBar, stencilFont } from './industrial.js';
 import { countdownArt } from './countdownArt.js';
 import { verdictArt } from './verdictArt.js';
 
@@ -153,26 +153,61 @@ function drawContentPlate(ctx: CanvasRenderingContext2D, img: HTMLImageElement, 
   ctx.drawImage(img, W / 2 - cx, H / 2 - cy, img.naturalWidth * scale, img.naturalHeight * scale);
 }
 
+/** Thin lit corner brackets — a neon frame SUGGESTION, not a box. */
+function neonCorners(ctx: CanvasRenderingContext2D, neon: string): void {
+  const L = 44;
+  ctx.save();
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = neon;
+  ctx.globalAlpha = 0.5;
+  ctx.shadowColor = neon;
+  ctx.shadowBlur = 10;
+  for (const [x, y, dx, dy] of [
+    [24, 24, 1, 1],
+    [W - 24, 24, -1, 1],
+    [24, H - 78, 1, -1],
+    [W - 24, H - 78, -1, -1],
+  ] as const) {
+    ctx.beginPath();
+    ctx.moveTo(x + dx * L, y);
+    ctx.lineTo(x, y);
+    ctx.lineTo(x, y + dy * L);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 /**
- * The shared board skeleton: clear canvas, a hazard keying chip + stencilled
- * title + neon underline up top. Everything below floats over passthrough.
+ * The shared board skeleton: clear canvas, corner tubing, a lit keying notch,
+ * the name in steel-white with a soft neon halo, and a neon rule that fades
+ * out to the right. Everything floats over passthrough — no boxes.
  */
 function header(ctx: CanvasRenderingContext2D, title: string, neon: string): void {
   ctx.clearRect(0, 0, W, H);
-  hazardStrip(ctx, 32, 38, 64, 22, UI.amber);
+  neonCorners(ctx, neon);
+  // Keying notch — the team's lit tab.
+  ctx.fillStyle = neon;
+  ctx.shadowColor = neon;
+  ctx.shadowBlur = 14;
+  ctx.fillRect(34, 30, 8, 46);
+  ctx.shadowBlur = 0;
+  // Steel-white stencil name, haloed in the team neon.
   ctx.textAlign = 'left';
   const px = fitStencilText(ctx, title, W - 148, 54, 26);
   ctx.font = stencilFont(px);
-  ctx.fillStyle = neon;
-  ctx.fillText(title, 116, 54);
-  ctx.strokeStyle = neon;
-  ctx.lineWidth = 3;
   ctx.shadowColor = neon;
-  ctx.shadowBlur = 12;
-  ctx.beginPath();
-  ctx.moveTo(32, 96);
-  ctx.lineTo(W - 32, 96);
-  ctx.stroke();
+  ctx.shadowBlur = 16;
+  ctx.fillStyle = UI.text;
+  ctx.fillText(title, 64, 56);
+  ctx.shadowBlur = 0;
+  // The rule: lit at the notch, gone by the far edge.
+  const rule = ctx.createLinearGradient(34, 0, W - 34, 0);
+  rule.addColorStop(0, neon);
+  rule.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = rule;
+  ctx.shadowColor = neon;
+  ctx.shadowBlur = 8;
+  ctx.fillRect(34, 94, W - 68, 3);
   ctx.shadowBlur = 0;
 }
 
@@ -254,11 +289,12 @@ export function createScoreboard(scene: Scene): Scoreboard {
 
   // Both boards side by side behind/above the opponent's pad, barely angled
   // inward — read your bar and theirs without turning your head.
+  const BOARD_Y = 2.18; // lifted clear of the far platform's sight line
   const left = makeBoard(1.5, 0.72); // YOU — ember
-  left.mesh.position.set(-1.0, 2.0, -ARENA_GAP - 1.1);
+  left.mesh.position.set(-1.0, BOARD_Y, -ARENA_GAP - 1.1);
   left.mesh.rotation.y = 0.18;
   const right = makeBoard(1.5, 0.72); // primary opponent — blue
-  right.mesh.position.set(1.0, 2.0, -ARENA_GAP - 1.1);
+  right.mesh.position.set(1.0, BOARD_Y, -ARENA_GAP - 1.1);
   right.mesh.rotation.y = -0.18;
 
   // Arcade stacks: a teammate above your bar, extra opponents above theirs.
@@ -268,25 +304,26 @@ export function createScoreboard(scene: Scene): Scoreboard {
   // instead of leaving a big gap and floating the top bar near the ceiling.
   const STACK_STEP = 0.54;
   const extraLeft = makeBoard(1.5, 0.72);
-  extraLeft.mesh.position.set(-1.0, 2.0 + STACK_STEP, -ARENA_GAP - 1.1);
+  extraLeft.mesh.position.set(-1.0, BOARD_Y + STACK_STEP, -ARENA_GAP - 1.1);
   extraLeft.mesh.rotation.y = 0.18;
   const extraRightA = makeBoard(1.5, 0.72);
-  extraRightA.mesh.position.set(1.0, 2.0 + STACK_STEP, -ARENA_GAP - 1.1);
+  extraRightA.mesh.position.set(1.0, BOARD_Y + STACK_STEP, -ARENA_GAP - 1.1);
   extraRightA.mesh.rotation.y = -0.18;
   const extraRightB = makeBoard(1.5, 0.72);
-  extraRightB.mesh.position.set(1.0, 2.0 + 2 * STACK_STEP, -ARENA_GAP - 1.1);
+  extraRightB.mesh.position.set(1.0, BOARD_Y + 2 * STACK_STEP, -ARENA_GAP - 1.1);
   extraRightB.mesh.rotation.y = -0.18;
   const extras = [extraLeft, extraRightA, extraRightB];
   for (const e of extras) e.mesh.visible = false;
 
-  // ONE shared round clock, big, in the slot between the two boards.
+  // ONE shared round clock — bare digits (no box), floating slightly above
+  // the health-bar line in the slot between the two boards.
   const timer = makeBoard(0.46, 0.29, 256, 160);
-  timer.mesh.position.set(0, 2.0, -ARENA_GAP - 1.1);
+  timer.mesh.position.set(0, BOARD_Y + 0.17, -ARENA_GAP - 1.1);
 
   // Headline strip (KO, YOU WIN...) floating just above the boards.
   // Sized to the canvas aspect so the stencil type renders undistorted.
   const centre = makeBoard(2.2, 1.05);
-  const CENTRE_Y = 2.9;
+  const CENTRE_Y = 3.06;
   const CENTRE_Z = -ARENA_GAP - 1.15;
   centre.mesh.position.set(0, CENTRE_Y, CENTRE_Z);
   centre.mesh.renderOrder = 12;
@@ -341,13 +378,16 @@ export function createScoreboard(scene: Scene): Scoreboard {
     timer.key = key;
     const { ctx, tex } = timer;
     ctx.clearRect(0, 0, 256, 160);
-    plate(ctx, 6, 6, 244, 148, { cut: 18, fill: UI.ink, rivets: false });
+    // No box: bare steel-white digits wrapped in amber neon, floating in the
+    // gap between the two boards.
     ctx.textAlign = 'center';
-    ctx.font = stencilFont(84);
+    ctx.font = stencilFont(88);
+    ctx.shadowColor = 'rgba(255,176,0,0.9)';
+    ctx.shadowBlur = 24;
     ctx.fillStyle = UI.text;
-    ctx.shadowColor = 'rgba(255,176,0,0.55)';
-    ctx.shadowBlur = 14;
     ctx.fillText(text, 128, 84);
+    ctx.shadowBlur = 10;
+    ctx.fillText(text, 128, 84); // second pass: crisp core, denser halo
     ctx.shadowBlur = 0;
     tex.needsUpdate = true;
   };
@@ -364,14 +404,26 @@ export function createScoreboard(scene: Scene): Scoreboard {
     board.key = key;
     const { ctx, tex } = board;
     header(ctx, name, neon);
-    // The health readout gets the only solid-ish backing on the board — one
-    // continuous bar that slides with every point (no chunky 5-point steps).
-    plate(ctx, 28, 124, W - 56, 110, { cut: 16, fill: UI.ink, rivets: false });
+    // The health readout: a slim smoked-glass track edged in faint neon —
+    // lit tubing instead of the old slab of plate armour. One continuous
+    // bar that slides with every point (no chunky 5-point steps).
+    chamferPath(ctx, 34, 128, W - 68, 96, 14);
+    ctx.fillStyle = UI.ink;
+    ctx.fill();
+    ctx.save();
+    chamferPath(ctx, 34, 128, W - 68, 96, 14);
+    ctx.globalAlpha = 0.5;
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = neon;
+    ctx.shadowColor = neon;
+    ctx.shadowBlur = 9;
+    ctx.stroke();
+    ctx.restore();
     // Fighter in the danger zone: the bar goes red once health dips below a
     // quarter, so a glance reads "nearly out" even on a teammate's board.
     const barColour = hpFrac < 0.25 ? UI.danger : neon;
-    solidBar(ctx, 52, 148, W - 104, 60, hpFrac, barColour);
-    scorePips(ctx, 70, 308, pips, neon);
+    solidBar(ctx, 52, 148, W - 104, 58, hpFrac, barColour);
+    scorePips(ctx, 70, 304, pips, neon);
     tex.needsUpdate = true;
   };
 

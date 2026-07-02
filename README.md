@@ -46,15 +46,15 @@ in-your-face boxing feel.
   whose kill zones charge up visibly on YOUR platform** — a ghost hammer
   descends onto each slam disc so you always know where it lands, sweeps
   send a blade you watch travel, beams rake marked strips (VULTURE's track
-  you and lock late), barrages ripple with guaranteed walkable lanes and
-  JUGGERNAUT's leave (capped, short-lived) burning ground; GOLIATH enrages
-  at half health. Damage runs on **per-boss weak-point patterns** — whatever
+  you and lock late), and pod **VOLLEYS** hurl fireballs straight at you —
+  the one attack you can **BLOCK**: catch the shot on a fist and it bursts
+  harmlessly; GOLIATH enrages at half health. Damage runs on **per-boss weak-point patterns** — whatever
   is vulnerable **blinks** (the visor tell, the chest core, the low-blow
   emblem, GOLIATH's shoulder lamps): RUSTHOOK keeps head AND core open,
   PISTONKAISER flips head↔core every hit, VULTURE wants two hits per point,
   JUGGERNAUT cycles head → core → **low blow**, and GOLIATH is the exam —
-  a five-point **crown circuit** (head → right shoulder → core → left
-  shoulder → low) walked **three full loops** to kill, quickening with every
+  a five-point **crown circuit** (head → his left shoulder → core → his
+  right shoulder → low) walked **three full loops** to kill, quickening with every
   closed loop, with its own attack: the **NOVA**, fire flooding the whole
   platform except one marked safe wedge — the only telegraph that means
   *stand here*. Everything else clanks. Wins bank coins + XP at the flat
@@ -109,9 +109,11 @@ walls glow awake as your head nears the edge; lean your head out past the rim
 and the arena's fire drains your health *fast*. Dodge with your body, but stay
 on your platform.
 
-Match UI is arena-style: angled neon scoreboards flank the gap (your board
-orange, theirs blue) with big health bars, round pips and the timer, plus a
-stats board hung behind you that you can glance back at mid-bout.
+Match UI is arena-style: angled boards flank the gap (your board orange,
+theirs blue) — steel-white names haloed in team neon over corner tubing and a
+fading neon rule, health in a slim neon-edged track (red when nearly out),
+round pips, and the bare round clock floating boxless between the bars —
+plus a stats board hung behind you that you can glance back at mid-bout.
 
 ## Run it
 

@@ -86,7 +86,10 @@ export class OpponentSystem extends createSystem({
   }
 
   update(delta: number): void {
-    const playing = app.state === 'playing';
+    // Campaign bouts never field a humanoid — the titan replaces slot 1.
+    // Gating here (not just on Combatant.active) kills the one-frame flash
+    // of a normal bot before CampaignSystem's begin() stands it down.
+    const playing = app.state === 'playing' && app.mode !== 'campaign';
     const roster = localLayout();
 
     for (let i = 0; i < MAX_OPPONENTS; i++) {

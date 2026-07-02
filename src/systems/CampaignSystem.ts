@@ -8,8 +8,9 @@
  *            visibly ON YOUR PLATFORM (see campaign/telegraphs.ts): fist
  *            SLAMS (a ghost hammer descends onto the disc — step out),
  *            horizontal SWEEPS (duck the travelling blade), eye BEAMS
- *            (sidestep the strip) and mortar BARRAGES (thread the
- *            footprints). Damage runs on per-boss WEAK-POINT PATTERNS
+ *            (sidestep the strip) and pod VOLLEYS (fireballs hurled straight
+ *            at you — dodge them or BLOCK with a fist). Damage runs on
+ *            per-boss WEAK-POINT PATTERNS
  *            (BossDef.weakPattern): whatever is vulnerable BLINKS — the
  *            visor tell, the chest core, the low emblem — and everything
  *            else is armour that clanks. Dodge, re-aim, punish, repeat.
@@ -83,14 +84,18 @@ type Zone =
   | { kind: 'circle'; x: number; z: number; r: number }
   | { kind: 'beam'; x: number; z: number; dx: number; dz: number; halfW: number }
   | { kind: 'sweep'; y: number }
+  /** One volley shot: launches from the pod on `side` when its stagger hits. */
+  | { kind: 'shot'; side: -1 | 1 }
   /** GOLIATH's nova: everything burns EXCEPT the safe wedge at `angle`. */
   | { kind: 'nova'; angle: number; halfAngle: number };
 
 /** A weak point a pattern can light. The crown circuit uses all five. */
 type WeakSpot = 'head' | 'core' | 'low' | 'shoulderL' | 'shoulderR';
 
-/** GOLIATH's ring order — one full loop of the crown. */
-const CROWN_RING: WeakSpot[] = ['head', 'shoulderR', 'core', 'shoulderL', 'low'];
+/** GOLIATH's ring order — one full loop of the crown. `shoulderL` is the
+ *  KING's left (the lamp on YOUR right as you face him), so the circuit
+ *  reads head → his left shoulder → core → his right shoulder → low. */
+const CROWN_RING: WeakSpot[] = ['head', 'shoulderL', 'core', 'shoulderR', 'low'];
 
 interface ActiveAttack {
   kind: AttackKind;
@@ -114,12 +119,13 @@ interface ActiveAttack {
   markers: (Group | null)[];
 }
 
-/** A burning floor patch left by JUGGERNAUT's mortars — the ground war. */
-interface BurnPatch {
-  x: number;
-  z: number;
-  ttl: number;
-  tg: Telegraph;
+/** One volley fireball in flight — dodge it, or put a fist in its path. */
+interface VolleyShot {
+  pos: Vector3;
+  vel: Vector3;
+  age: number;
+  group: Group;
+  trail: number;
 }
 
 /** A short-lived strike visual driven by a closure. */
@@ -165,7 +171,7 @@ export class CampaignSystem extends createSystem({
   private cooldown = 2.5;
   private lastKind: AttackKind | null = null;
   private strikes: Strike[] = [];
-  private patches: BurnPatch[] = [];
+  private shots: VolleyShot[] = [];
   /**
    * The weak-point pattern (BossDef.weakPattern) drives which point(s) BLINK
    * live right now: `cycleIdx` walks the boss's sequence, `hitsOnPoint`
@@ -282,7 +288,7 @@ export class CampaignSystem extends createSystem({
     this.lastBossHp = this.def.health;
 
     this.ensureHitboxes();
-    this.clearPatches();
+    this.disposeShots();
     this.disposeAttack();
     this.cycleIdx = 0; // every pattern opens on the head
     this.hitsOnPoint = 0;
@@ -332,7 +338,7 @@ export class CampaignSystem extends createSystem({
   private teardown(): void {
     this.phase = 'idle';
     this.disposeAttack();
-    this.clearPatches();
+    this.disposeShots();
     for (const s of this.strikes) s.dispose();
     this.strikes = [];
     this.rig?.dispose();
@@ -574,7 +580,7 @@ export class CampaignSystem extends createSystem({
       if (this.cardTimer <= 0) this.hud.title('', '');
     }
 
-    this.updatePatches(delta);
+    this.updateShots(delta);
 
     // Watch the health pools.
     const boss = fighterAt(1);
@@ -641,45 +647,109 @@ export class CampaignSystem extends createSystem({
     }
   }
 
-  // --- burning ground (JUGGERNAUT / GOLIATH) ---------------------------------
+  // --- the volley: blockable fireballs -----------------------------------------
 
-  private spawnPatch(x: number, z: number): void {
-    // Capped: past maxPatches the oldest gutters out early, so burning
-    // ground pressures your footing without ever sealing the platform.
-    while (this.patches.length >= CAMPAIGN.maxPatches) {
-      this.patches.shift()?.tg.dispose();
-    }
-    const tg = circleTelegraph(CAMPAIGN.patchRadius);
-    tg.group.position.set(x, CAMPAIGN.decalY, z);
-    this.scene.add(tg.group);
-    this.patches.push({ x, z, ttl: CAMPAIGN.patchTime, tg });
+  /** Pod muzzle world position on `side` (matches the pod bonus hitboxes). */
+  private podPos(side: -1 | 1, out: Vector3): void {
+    const s = this.def.scale;
+    const root = this.rig!.root.position;
+    out.set(root.x + side * 0.37 * s, root.y + 1.44 * s, root.z);
   }
 
-  private updatePatches(delta: number): void {
-    for (let i = this.patches.length - 1; i >= 0; i--) {
-      const p = this.patches[i];
-      p.ttl -= delta;
-      if (p.ttl <= 0) {
-        p.tg.dispose();
-        this.patches.splice(i, 1);
+  /** Hurl one fireball from the pod on `side`, aimed at your head RIGHT NOW
+   *  — after launch it flies straight: step off the line, or block it. */
+  private launchShot(side: -1 | 1): void {
+    this.podPos(side, _v);
+    this.playerHead(_head);
+    const group = new Group();
+    group.add(glowSprite(this.def.accent, 0.55));
+    const core = glowSprite(0xffe9c2, 0.26);
+    group.add(core);
+    group.position.copy(_v);
+    this.scene.add(group);
+    const vel = new Vector3().copy(_head).sub(_v).normalize().multiplyScalar(CAMPAIGN.volleySpeed);
+    this.shots.push({ pos: _v.clone(), vel, age: 0, group, trail: 0 });
+    sfx.mortarThump();
+  }
+
+  private updateShots(delta: number): void {
+    for (let i = this.shots.length - 1; i >= 0; i--) {
+      const shot = this.shots[i];
+      shot.age += delta;
+      shot.pos.addScaledVector(shot.vel, delta);
+      shot.group.position.copy(shot.pos);
+      shot.trail -= delta;
+      if (shot.trail <= 0) {
+        shot.trail = 0.07;
+        emberBurst(shot.pos, 2, true);
+      }
+
+      // BLOCKED: a fist in the path detonates the shot harmlessly — the
+      // volley is the one titan attack you can PARRY instead of outrun.
+      let blocked = false;
+      for (const hand of ['left', 'right'] as const) {
+        const grip = this.world.playerSpaceEntities.gripSpaces[hand]?.object3D;
+        if (!grip) continue;
+        grip.getWorldPosition(_p);
+        if (_p.distanceTo(shot.pos) <= CAMPAIGN.volleyBlockRadius) {
+          spawnFireImpact(this.world, shot.pos, 1, 0.9);
+          emberBurst(shot.pos, 20, true);
+          sfx.armorClank();
+          pulseHand(this.world.session, hand, 0.8, 90);
+          blocked = true;
+          break;
+        }
+      }
+      if (blocked) {
+        this.disposeShot(i);
         continue;
       }
-      p.tg.update(1, this.time); // full fill = the fast red pulse
-      if (this.invuln <= 0 && this.zoneTouchesPlayer({ kind: 'circle', x: p.x, z: p.z, r: CAMPAIGN.patchRadius })) {
-        this.invuln = 0.7;
-        this.damagePlayer(CAMPAIGN.attackDamage);
+
+      // HIT: the shot core reaching any body sphere burns like any strike.
+      let hit = false;
+      for (const part of this.queries.playerParts.entities) {
+        const obj = part.object3D;
+        if (!obj) continue;
+        obj.getWorldPosition(_p);
+        const r = part.getValue(Hitbox, 'radius') ?? 0.15;
+        if (_p.distanceTo(shot.pos) <= CAMPAIGN.volleyHitRadius + r * 0.8) {
+          hit = true;
+          break;
+        }
       }
+      if (hit) {
+        spawnFireImpact(this.world, shot.pos, 1, 1.2);
+        if (this.invuln <= 0) {
+          this.invuln = 0.7;
+          this.damagePlayer(CAMPAIGN.attackDamage);
+        }
+        this.disposeShot(i);
+        continue;
+      }
+
+      // Missed everything: let it sail past and gutter out.
+      if (shot.age > 3.5 || shot.pos.z > 2 || shot.pos.y < -0.4) this.disposeShot(i);
     }
   }
 
-  private clearPatches(): void {
-    for (const p of this.patches) p.tg.dispose();
-    this.patches = [];
+  private disposeShot(i: number): void {
+    const shot = this.shots[i];
+    shot.group.traverse((o) => {
+      const mesh = o as Mesh;
+      if (mesh.geometry) mesh.geometry.dispose();
+      (mesh.material as MeshBasicMaterial | undefined)?.dispose?.();
+    });
+    shot.group.removeFromParent();
+    this.shots.splice(i, 1);
+  }
+
+  private disposeShots(): void {
+    for (let i = this.shots.length - 1; i >= 0; i--) this.disposeShot(i);
   }
 
   /** Pick a weighted attack (avoiding an immediate repeat) and telegraph it. */
   private startAttack(): void {
-    const kinds: AttackKind[] = ['slam', 'sweep', 'beam', 'barrage', 'nova'];
+    const kinds: AttackKind[] = ['slam', 'sweep', 'beam', 'volley', 'nova'];
     let total = 0;
     const pool: Array<[AttackKind, number]> = [];
     for (const k of kinds) {
@@ -712,7 +782,7 @@ export class CampaignSystem extends createSystem({
     const arm: 0 | 1 = _head.x < 0 ? 1 : 0;
 
     if (kind === 'slam') {
-      const r = CAMPAIGN.slamRadius + this.def.scale * 0.04;
+      const r = CAMPAIGN.slamRadius + this.def.scale * 0.025;
       const x0 = clamp(_head.x, -OCTAGON_HALF_WIDTH + 0.15, OCTAGON_HALF_WIDTH - 0.15);
       const z0 = clamp(_head.z, -OCTAGON_HALF_DEPTH + 0.1, OCTAGON_HALF_DEPTH - 0.1);
       const count = this.def.slamStyle === 'single' ? 1 : Math.max(1, this.def.slamCount);
@@ -772,29 +842,18 @@ export class CampaignSystem extends createSystem({
       telegraphs.push(tg);
       staggers.push(0);
     } else {
-      // Barrage: first shell on your feet, the rest scattered — but never
-      // bunched. Min spacing between shell centres guarantees walkable
-      // lanes, so a barrage is pressure to MOVE through, never a death wall.
-      const placed: Array<[number, number]> = [];
-      for (let i = 0; i < this.def.barrageCount; i++) {
-        let x = clamp(_head.x, -0.7, 0.7);
-        let z = clamp(_head.z, -0.55, 0.55);
-        if (i > 0) {
-          for (let tries = 0; tries < 14; tries++) {
-            x = rand(-OCTAGON_HALF_WIDTH + 0.2, OCTAGON_HALF_WIDTH - 0.2);
-            z = rand(-OCTAGON_HALF_DEPTH + 0.15, OCTAGON_HALF_DEPTH - 0.15);
-            if (placed.every(([px, pz]) => Math.hypot(x - px, z - pz) >= CAMPAIGN.shellSpacing)) break;
-          }
-        }
-        placed.push([x, z]);
-        zones.push({ kind: 'circle', x, z, r: CAMPAIGN.mortarRadius });
-        const tg = circleTelegraph(CAMPAIGN.mortarRadius);
-        tg.group.position.set(x, CAMPAIGN.decalY, z);
-        this.scene.add(tg.group);
-        telegraphs.push(tg);
-        staggers.push(i * 0.28);
+      // The VOLLEY: no floor marks at all — the shoulder pods spool up
+      // (watch the muzzle glows swell through the windup) and then hurl
+      // blockable fireballs straight at you, alternating pods. Each shot is
+      // aimed where your head is at ITS launch: keep moving, or catch it
+      // on a fist.
+      for (let i = 0; i < this.def.volleyCount; i++) {
+        const side = (i % 2 === 0 ? -1 : 1) as -1 | 1;
+        zones.push({ kind: 'shot', side });
+        telegraphs.push(null);
+        staggers.push(i * CAMPAIGN.volleyInterval);
+        markers.push(this.makeMuzzleGlow(side));
       }
-      sfx.mortarThump(); // the launch thump from the pods
     }
 
     this.attack = {
@@ -844,6 +903,18 @@ export class CampaignSystem extends createSystem({
     return 2.1 + this.def.scale * 0.35;
   }
 
+  /** The volley's windup tell: a glow swelling at the pod muzzle while the
+   *  shot cooks (advanceAttack scales it with the charge fill). */
+  private makeMuzzleGlow(side: -1 | 1): Group {
+    const g = new Group();
+    g.add(glowSprite(this.def.accent, 0.34));
+    this.podPos(side, _v);
+    g.position.copy(_v);
+    g.scale.setScalar(0.4);
+    this.scene.add(g);
+    return g;
+  }
+
   /** Aim one beam zone (and its telegraph) at the player, offset sideways. */
   private aimBeam(zone: Zone & { kind: 'beam' }, tg: Telegraph, offset: number): void {
     this.playerHead(_head);
@@ -876,7 +947,7 @@ export class CampaignSystem extends createSystem({
     }
 
     // Each zone runs its OWN countdown to its own detonation — a marching
-    // drumline or a staggered barrage reads as a sequence of fills, not one.
+    // drumline or a staggered volley reads as a sequence of beats, not one.
     let allDone = true;
     for (let i = 0; i < a.zones.length; i++) {
       if (a.resolved[i]) continue;
@@ -889,13 +960,19 @@ export class CampaignSystem extends createSystem({
         const m = a.markers[i] ?? null;
         this.disposeMarker(m);
         a.markers[i] = null;
-        this.detonate(a.kind, a.zones[i], i === 0);
+        this.detonate(a.kind, a.zones[i]);
       } else {
         const fill = clamp(a.time / dueAt, 0, 1);
         a.telegraphs[i]?.update(fill, this.time);
-        // Lower the ghost hammer with the countdown — a spinning descent.
         const m = a.markers[i];
-        if (m) {
+        const zone = a.zones[i];
+        if (m && zone.kind === 'shot') {
+          // The muzzle glow rides its pod (the titan sways) and swells.
+          this.podPos(zone.side, _v);
+          m.position.copy(_v);
+          m.scale.setScalar(0.4 + fill * 1.1);
+        } else if (m) {
+          // Lower the ghost hammer with the countdown — a spinning descent.
           m.position.y = this.markerStartY() * (1 - fill * fill) + 0.55;
           m.rotation.y += delta * 3;
         }
@@ -919,8 +996,10 @@ export class CampaignSystem extends createSystem({
     return rand(this.def.cooldownMin, this.def.cooldownMax) * mult;
   }
 
-  /** A zone goes off: strike visual + sound, and damage if you're in it. */
-  private detonate(kind: AttackKind, zone: Zone, first: boolean): void {
+  /** A zone goes off: strike visual + sound, and damage if you're in it.
+   *  (A volley zone "detonating" is its LAUNCH — the shot itself judges
+   *  blocks and hits in flight, in updateShots.) */
+  private detonate(kind: AttackKind, zone: Zone): void {
     const hit = this.zoneTouchesPlayer(zone);
 
     if (kind === 'slam') {
@@ -939,12 +1018,7 @@ export class CampaignSystem extends createSystem({
       sfx.slamImpact();
       if (zone.kind === 'nova') this.spawnNovaWave(zone.angle, zone.halfAngle);
     } else {
-      if (first || Math.random() < 0.6) sfx.mortarThump();
-      if (zone.kind === 'circle') {
-        this.spawnMortarBurst(zone.x, zone.z);
-        // The fortress doctrine: every shell claims the ground it hit.
-        if (this.def.burnPatches) this.spawnPatch(zone.x, zone.z);
-      }
+      if (zone.kind === 'shot') this.launchShot(zone.side);
     }
 
     if (hit && this.invuln <= 0) {
@@ -1187,32 +1261,6 @@ export class CampaignSystem extends createSystem({
     });
   }
 
-  private spawnMortarBurst(x: number, z: number): void {
-    // The shell drops fast out of the sky and bursts on the disc.
-    const shell = glowSprite(this.def.accent, 0.34);
-    this.scene.add(shell);
-    const world = this.world;
-    let burst = false;
-    this.strikes.push({
-      age: 0,
-      life: 0.42,
-      update(age) {
-        const drop = Math.min(1, age / 0.14);
-        shell.position.set(x, 3.4 * (1 - drop * drop) + 0.1, z);
-        if (drop >= 1 && !burst) {
-          burst = true;
-          _v.set(x, 0.12, z);
-          spawnFireImpact(world, _v, 1);
-        }
-        shell.material.opacity = drop >= 1 ? Math.max(0, 1 - (age - 0.14) / 0.28) : 1;
-      },
-      dispose() {
-        shell.material.dispose();
-        shell.removeFromParent();
-      },
-    });
-  }
-
   private updateStrikes(delta: number): void {
     for (let i = this.strikes.length - 1; i >= 0; i--) {
       const s = this.strikes[i];
@@ -1261,8 +1309,10 @@ export class CampaignSystem extends createSystem({
     const lit = fighting ? this.litPoints() : [];
     const wink = this.time % 0.5 < 0.3 ? 1 : 0;
     const beamCharging = this.attack?.kind === 'beam' ? clamp(this.attack.time / this.attack.chargeTime, 0, 1) : 0;
+    // The eye blink is the loudest tell in the fight: near-dark on the off
+    // beat, a flare on the on beat — a hard strobe you can't miss.
     rig.visorMat.emissiveIntensity =
-      (lit.includes('head') ? 0.6 + wink * 2.8 : 0.7) +
+      (lit.includes('head') ? 0.25 + wink * 4.6 : 0.7) +
       beamCharging * 3.2 +
       (this.enraged ? 1.6 + Math.sin(this.time * 10) * 0.6 : 0);
     const coreLit = lit.includes('core');
@@ -1277,10 +1327,10 @@ export class CampaignSystem extends createSystem({
       rig.shoulders[i].scale.setScalar(on ? 1 + wink * 0.18 : 1);
     }
 
-    // Pods glow while a barrage cooks.
-    const barraging = this.attack?.kind === 'barrage';
+    // Pods glow while a volley cooks.
+    const volleying = this.attack?.kind === 'volley';
     for (const mat of rig.podMats) {
-      mat.emissiveIntensity += ((barraging ? 2.4 : 0.2) - mat.emissiveIntensity) * Math.min(1, delta * 6);
+      mat.emissiveIntensity += ((volleying ? 2.4 : 0.2) - mat.emissiveIntensity) * Math.min(1, delta * 6);
     }
 
     // Arms: wind up with the charge, whip through on the strike, ease home.
@@ -1396,13 +1446,13 @@ export class CampaignSystem extends createSystem({
     this.boxes.shoulderR?.object3D?.position.copy(_v);
     this.boxes.shoulderR?.setValue(Hitbox, 'damageScale', lit.includes('shoulderR') ? CAMPAIGN.podScale : 0);
 
-    // Pods pay bonus during a barrage — except on the crown, where stray pod
+    // Pods pay bonus during a volley — except on the crown, where stray pod
     // hits would skip ring stops out of order.
-    const barraging = this.attack?.kind === 'barrage' && this.def.weakPattern !== 'crown';
+    const volleying = this.attack?.kind === 'volley' && this.def.weakPattern !== 'crown';
     this.boxes.pods.forEach((pod, i) => {
       const side = i === 0 ? -1 : 1;
       pod.object3D?.position.set(root.x + side * 0.37 * s, root.y + 1.44 * s, root.z);
-      pod.setValue(Hitbox, 'damageScale', barraging ? CAMPAIGN.podScale : 0);
+      pod.setValue(Hitbox, 'damageScale', volleying ? CAMPAIGN.podScale : 0);
     });
 
     // Aim assist rides the live point (crown: whichever ring stop blinks).
@@ -1438,7 +1488,7 @@ export class CampaignSystem extends createSystem({
     this.outroStep = 0;
     match.phase = 'matchOver';
     this.disposeAttack();
-    this.clearPatches();
+    this.disposeShots();
     campaign.coreOpen = false;
     this.parkHitboxes();
 
@@ -1502,7 +1552,7 @@ export class CampaignSystem extends createSystem({
     this.t = 0;
     match.phase = 'matchOver';
     this.disposeAttack();
-    this.clearPatches();
+    this.disposeShots();
     campaign.coreOpen = false;
     this.parkHitboxes();
 

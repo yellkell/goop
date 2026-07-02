@@ -34,11 +34,13 @@ import {
 import { PALETTE } from '../config.js';
 
 /**
+ * 'volley' is the one attack aimed at YOU instead of the floor: the shoulder
+ * pods spool up and hurl fireballs you can dodge — or BLOCK with a fist.
  * 'nova' is GOLIATH's alone: fire floods the WHOLE platform except one
  * marked safe wedge — the only telegraph in the game that says "stand HERE"
  * instead of "get out".
  */
-export type AttackKind = 'slam' | 'sweep' | 'beam' | 'barrage' | 'nova';
+export type AttackKind = 'slam' | 'sweep' | 'beam' | 'volley' | 'nova';
 
 /**
  * How a titan's slam lands — its melee signature:
@@ -60,8 +62,8 @@ export type TitanStyle = 'hook' | 'piston' | 'vulture' | 'fortress' | 'king';
  *  - 'alternate' : one point at a time; every landed hit flips head↔core.
  *  - 'double'    : two hits on the blinking point, then it swaps.
  *  - 'triple'    : the cycle adds the LOW BLOW — head → core → low → repeat.
- *  - 'crown'     : GOLIATH's five-point circuit — head → right shoulder →
- *                  core → left shoulder → low — walked THREE full loops to
+ *  - 'crown'     : GOLIATH's five-point circuit — head → left shoulder →
+ *                  core → right shoulder → low — walked THREE full loops to
  *                  kill (the health bar steps down per ring hit, so it is
  *                  exactly fifteen hits no matter what you throw).
  */
@@ -86,8 +88,8 @@ export interface BossDef {
   charge: Record<AttackKind, number>;
   /** Attack roster weights; 0 = this titan never uses that attack. */
   weights: Record<AttackKind, number>;
-  /** Shells per mortar barrage. */
-  barrageCount: number;
+  /** Fireballs per volley (see 'volley' — the blockable projectiles). */
+  volleyCount: number;
   /** Parallel beam strips per beam attack. */
   beams: number;
   /** Lateral drift amplitude while idling (metres). */
@@ -99,8 +101,6 @@ export interface BossDef {
   slamCount: number;
   /** Beam telegraphs TRACK the player and only lock late — dodge late. */
   beamTracks: boolean;
-  /** Mortar shells leave burning floor patches — the platform shrinks. */
-  burnPatches: boolean;
   /** Enrage threshold as an HP fraction (0 = never): faster, angrier. */
   enrageAt: number;
   /** How its weak points open (see WeakPattern) — the blink says where. */
@@ -114,19 +114,18 @@ export const BOSSES: BossDef[] = [
     accent: PALETTE.coolFlame,
     style: 'hook',
     scale: 1.25,
-    health: 160,
+    health: 210,
     zOffset: 0.2,
     cooldownMin: 2.6,
     cooldownMax: 3.6,
-    charge: { slam: 1.9, sweep: 2.1, beam: 1.7, barrage: 2.0, nova: 2.2 },
-    weights: { slam: 5, sweep: 0, beam: 3, barrage: 0, nova: 0 },
-    barrageCount: 3,
+    charge: { slam: 1.9, sweep: 2.1, beam: 1.7, volley: 2.0, nova: 2.2 },
+    weights: { slam: 5, sweep: 0, beam: 3, volley: 0, nova: 0 },
+    volleyCount: 3,
     beams: 1,
     swayAmp: 0.4,
     slamStyle: 'rehit',
     slamCount: 2,
     beamTracks: false,
-    burnPatches: false,
     enrageAt: 0,
     weakPattern: 'both',
   },
@@ -140,15 +139,14 @@ export const BOSSES: BossDef[] = [
     zOffset: 0.3,
     cooldownMin: 2.2,
     cooldownMax: 3.2,
-    charge: { slam: 1.6, sweep: 1.9, beam: 1.6, barrage: 1.9, nova: 2.2 },
-    weights: { slam: 4, sweep: 3, beam: 2, barrage: 0, nova: 0 },
-    barrageCount: 3,
+    charge: { slam: 1.6, sweep: 1.9, beam: 1.6, volley: 1.9, nova: 2.2 },
+    weights: { slam: 4, sweep: 3, beam: 2, volley: 0, nova: 0 },
+    volleyCount: 3,
     beams: 1,
     swayAmp: 0.5,
     slamStyle: 'march',
     slamCount: 3,
     beamTracks: false,
-    burnPatches: false,
     enrageAt: 0,
     weakPattern: 'alternate',
   },
@@ -162,15 +160,14 @@ export const BOSSES: BossDef[] = [
     zOffset: 0.45,
     cooldownMin: 1.9,
     cooldownMax: 2.8,
-    charge: { slam: 1.45, sweep: 1.7, beam: 1.55, barrage: 1.7, nova: 2.2 },
-    weights: { slam: 3, sweep: 4, beam: 4, barrage: 2, nova: 0 },
-    barrageCount: 4,
+    charge: { slam: 1.45, sweep: 1.7, beam: 1.55, volley: 1.7, nova: 2.2 },
+    weights: { slam: 3, sweep: 4, beam: 4, volley: 2, nova: 0 },
+    volleyCount: 4,
     beams: 1,
     swayAmp: 0.6,
     slamStyle: 'single',
     slamCount: 1,
     beamTracks: true,
-    burnPatches: false,
     enrageAt: 0,
     weakPattern: 'double',
   },
@@ -184,15 +181,14 @@ export const BOSSES: BossDef[] = [
     zOffset: 0.6,
     cooldownMin: 1.6,
     cooldownMax: 2.4,
-    charge: { slam: 1.3, sweep: 1.5, beam: 1.25, barrage: 2.0, nova: 2.2 },
-    weights: { slam: 3, sweep: 2, beam: 4, barrage: 5, nova: 0 },
-    barrageCount: 3,
+    charge: { slam: 1.3, sweep: 1.5, beam: 1.25, volley: 2.0, nova: 2.2 },
+    weights: { slam: 3, sweep: 2, beam: 4, volley: 5, nova: 0 },
+    volleyCount: 3,
     beams: 2,
     swayAmp: 0.45,
     slamStyle: 'single',
     slamCount: 1,
     beamTracks: false,
-    burnPatches: true,
     enrageAt: 0,
     weakPattern: 'triple',
   },
@@ -206,15 +202,14 @@ export const BOSSES: BossDef[] = [
     zOffset: 0.8,
     cooldownMin: 1.35,
     cooldownMax: 2.1,
-    charge: { slam: 1.15, sweep: 1.35, beam: 1.2, barrage: 1.8, nova: 2.1 },
-    weights: { slam: 3, sweep: 3, beam: 3, barrage: 3, nova: 4 },
-    barrageCount: 4,
+    charge: { slam: 1.15, sweep: 1.35, beam: 1.2, volley: 1.8, nova: 2.1 },
+    weights: { slam: 3, sweep: 3, beam: 3, volley: 3, nova: 4 },
+    volleyCount: 4,
     beams: 2,
     swayAmp: 0.35,
     slamStyle: 'march',
     slamCount: 2,
     beamTracks: true,
-    burnPatches: true,
     enrageAt: 0.5,
     weakPattern: 'crown',
   },
@@ -320,7 +315,9 @@ export function buildTitan(def: BossDef): TitanRig {
 
   switch (def.style) {
     case 'hook': {
-      // A dented oil-drum head, tipped off-axis, with a crooked slit.
+      // A dented oil-drum head, tipped off-axis, with two big round lamp
+      // EYES set proud of the drum — the blink tell has to read from across
+      // the arena, and a thin slit never did.
       const drum = new Mesh(new CylinderGeometry(headR * 0.95, headR * 1.05, headR * 1.7, 10), chassis(accent, 0.05));
       drum.rotation.z = 0.12;
       head.add(drum);
@@ -328,10 +325,16 @@ export function buildTitan(def: BossDef): TitanRig {
       dent.position.set(headR * 0.2, headR * 0.75, 0);
       dent.rotation.z = -0.2;
       head.add(dent);
-      const slit = new Mesh(new BoxGeometry(headR * 1.3, 0.028 * s, 0.03 * s), visorMat);
-      slit.position.set(headR * 0.06, 0, -headR * 0.9);
-      slit.rotation.z = 0.12; // crooked, like everything else on it
-      head.add(slit);
+      for (const ex of [-1, 1]) {
+        const socket = new Mesh(new CylinderGeometry(headR * 0.32, headR * 0.32, 0.03 * s, 10), dark());
+        socket.rotation.x = Math.PI / 2;
+        socket.position.set(ex * headR * 0.44, headR * 0.12 * ex * 0.5, -headR * 0.95); // crooked pair
+        head.add(socket);
+        const eye = new Mesh(new CylinderGeometry(headR * 0.24, headR * 0.24, 0.045 * s, 10), visorMat);
+        eye.rotation.x = Math.PI / 2;
+        eye.position.set(ex * headR * 0.44, headR * 0.12 * ex * 0.5, -headR * 1.03);
+        head.add(eye);
+      }
       break;
     }
     case 'piston': {
@@ -359,9 +362,11 @@ export function buildTitan(def: BossDef): TitanRig {
       beak.rotation.x = Math.PI / 2 + 0.45;
       beak.position.set(0, -headR * 0.35, -headR * 1.1);
       head.add(beak);
-      const eye = new Mesh(new CylinderGeometry(headR * 0.34, headR * 0.34, 0.03 * s, 12), visorMat);
-      eye.rotation.x = Math.PI / 2;
-      eye.position.set(0, headR * 0.22, -headR * 0.78);
+      // The eye sits PROUD of the hood's rim — tucked inside the casque it
+      // was invisible, and a blink nobody can see is no tell at all.
+      const eye = new Mesh(new CylinderGeometry(headR * 0.42, headR * 0.42, 0.05 * s, 12), visorMat);
+      eye.rotation.x = Math.PI / 2 + 0.28; // faces out along the craned hood
+      eye.position.set(0, headR * 0.14, -headR * 1.12);
       head.add(eye);
       const crest = new Mesh(new BoxGeometry(0.015 * s, headR * 0.9, headR * 1.4), dark());
       crest.position.y = headR * 1.0;
@@ -507,7 +512,8 @@ export function buildTitan(def: BossDef): TitanRig {
   }
   root.add(chest);
 
-  // ── Mortar pods riding the shoulders (they glow during a barrage) ────────
+  // ── Launcher pods riding the shoulders (they glow — and fire — during a
+  //    volley: the blockable fireballs leave from here) ──────────────────────
   const podMats: [MeshStandardMaterial, MeshStandardMaterial] = [glowMat(accent, 0.2), glowMat(accent, 0.2)];
   podMats.forEach((mat, i) => {
     const side = i === 0 ? -1 : 1;
