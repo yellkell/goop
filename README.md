@@ -36,8 +36,13 @@ in-your-face boxing feel.
   smokestacks and hammer-block fists, VULTURE's hooded one-eyed skull with
   swept wing plates and talons, JUGGERNAUT's squat dome-headed fortress in
   skirt armour, GOLIATH's near-black gold-crowned king — with its own
-  pit-lane intro (klaxon, strobes, the rise from the floor, name reveal,
-  bell). Titans never throw balls: they wind up **melee and ranged strikes
+  pit-lane intro (klaxon, strobes, a bespoke entrance — RUSTHOOK winches up
+  crooked in seizing jerks, PISTONKAISER press-drops from above in slam
+  strokes, VULTURE swoops in off the flank, JUGGERNAUT rolls out of the dark
+  at ground level, GOLIATH's rise stalls and resumes on his own clock — then
+  name reveal, bell) and its own death (keel sideways / pancake in jolts /
+  topple backward off a wing / sink scuttled and listing / kneel, hold, fall
+  forward). Titans never throw balls: they wind up **melee and ranged strikes
   whose kill zones charge up visibly on YOUR platform** — a ghost hammer
   descends onto each slam disc so you always know where it lands, sweeps
   send a blade you watch travel, beams rake marked strips (VULTURE's track

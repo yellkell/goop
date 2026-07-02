@@ -20,6 +20,7 @@ import {
   PlaneGeometry,
   ShaderMaterial,
 } from 'three';
+import { CAMPAIGN } from '../config.js';
 
 export interface Telegraph {
   /** Position/rotate this; the shapes live inside. */
@@ -152,7 +153,12 @@ function warnMat(frag: string, extra: Record<string, { value: number }> = {}): S
 
 function makeTelegraph(meshes: Mesh[], mats: ShaderMaterial[]): Telegraph {
   const group = new Group();
-  for (const m of meshes) group.add(m);
+  for (const m of meshes) {
+    // Draw after the deck furniture — a warning that loses the depth fight
+    // to a rim bolt is a warning nobody saw.
+    m.renderOrder = 20;
+    group.add(m);
+  }
   return {
     group,
     update(fill, time) {
@@ -217,6 +223,6 @@ export function sweepTelegraph(width: number, depth: number, bladeY: number, thi
   const bandMat = warnMat(BLADE_FRAG);
   const band = new Mesh(new PlaneGeometry(width, depth), bandMat);
   band.rotation.x = -Math.PI / 2;
-  band.position.y = 0.015;
+  band.position.y = CAMPAIGN.decalY;
   return makeTelegraph([blade, band], [bladeMat, bandMat]);
 }

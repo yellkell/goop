@@ -186,6 +186,10 @@ export class CampaignSystem extends createSystem({
   private runClock = 0;
   private advanceAfterVictory = false;
   private victoryDelay = CAMPAIGN.victoryDelay;
+  // Beat counters for the staged entrances/deaths (press strokes, winch
+  // jerks, the king's stalls) — they gate the one-shot sfx per beat.
+  private introStep = 0;
+  private outroStep = 0;
 
   init(): void {
     this.hud = createCampaignHud(this.scene);
@@ -255,11 +259,14 @@ export class CampaignSystem extends createSystem({
     this.def = BOSSES[clamp(app.campaignStage, 0, BOSSES.length - 1)];
     this.rig?.dispose();
     this.rig = buildTitan(this.def);
-    this.rig.root.position.set(0, -this.rig.height - 0.4, this.bossZ());
     // The rig's face (visor/core) sits on local −Z, same as the duel boxer —
-    // yaw the whole machine to face the player across the gap.
+    // yaw the whole machine to face the player across the gap. Each chassis
+    // then stages its OWN entrance mark (the pit, the sky, the flank, the
+    // dark): entrancePose(0) parks it there until the klaxon ends.
     this.rig.root.rotation.set(0, Math.PI, 0);
     this.scene.add(this.rig.root);
+    this.introStep = 0;
+    this.entrancePose(0);
 
     // Health pools: the titan borrows the slot-1 fighter's Health — while its
     // HUMANOID stands down (Combatant.active 0 parks OpponentSystem's rig and
@@ -360,25 +367,75 @@ export class CampaignSystem extends createSystem({
     const strobing = this.t < klaxonTime;
     this.light.intensity = strobing ? (Math.sin(this.time * 26) > 0 ? 9 : 1) : 5;
 
-    // The rise: grind up out of the pit with an ember eruption.
+    // The arrival — each chassis makes its entrance its own way (see
+    // entrancePose): the hook grinds up crooked, the press drops in strokes,
+    // the vulture swoops the flank, the fortress rolls out of the dark, the
+    // king rises on his own clock.
     const riseStart = klaxonTime;
     if (this.t >= riseStart && this.t < riseStart + riseTime + 0.2) {
-      if (this.t - delta < riseStart) sfx.titanRise();
+      if (this.t - delta < riseStart) {
+        this.introStep = 0;
+        if (this.def.style === 'vulture') sfx.sweepWhoosh();
+        else sfx.titanRise();
+      }
       const k = clamp((this.t - riseStart) / riseTime, 0, 1);
-      const e = 1 - (1 - k) * (1 - k); // ease-out
-      rig.root.position.y = -(rig.height + 0.4) * (1 - e);
+      this.entrancePose(k);
+
+      // Per-chassis beats: the sounds that sell the motion.
+      if (this.def.style === 'piston') {
+        // Every press stroke seats with a slam and a splash of sparks.
+        const seg = Math.min(2, Math.floor(k * 3));
+        if (seg > this.introStep) {
+          this.introStep = seg;
+          sfx.slamImpact();
+          _v.set(0, 0.1, this.bossZ());
+          emberBurst(_v, 22, true);
+        }
+      } else if (this.def.style === 'hook') {
+        // Each jerk of the winch bites with a clank.
+        const seg = Math.min(4, Math.floor(k * 5));
+        if (seg > this.introStep) {
+          this.introStep = seg;
+          sfx.armorClank();
+        }
+      } else if (this.def.style === 'king') {
+        // The ascent stalls twice — each hold breaks with a deeper roar.
+        const seg = k < 0.45 ? 0 : k < 0.8 ? 1 : 2;
+        if (seg > this.introStep) {
+          this.introStep = seg;
+          sfx.bossRoar(this.def.scale * 0.5);
+        }
+      }
+
       this.emberTimer -= delta;
       if (this.emberTimer <= 0 && k < 1) {
-        this.emberTimer = 0.12;
-        _v.set(rig.root.position.x + rand(-0.8, 0.8), 0.1, this.bossZ() + rand(-0.4, 0.4));
-        emberBurst(_v, 8, true);
+        if (this.def.style === 'vulture') {
+          // Sparks stream off the banking wing on the way in.
+          this.emberTimer = 0.22;
+          _v.set(
+            rig.root.position.x + rand(-0.4, 0.4),
+            rig.root.position.y + rig.height * rand(0.5, 0.8),
+            rig.root.position.z,
+          );
+          emberBurst(_v, 5, true);
+        } else if (this.def.style === 'fortress') {
+          // A grinding wake kicked up along the roll-in.
+          this.emberTimer = 0.1;
+          _v.set(rand(-0.9, 0.9), 0.1, rig.root.position.z + rand(-0.3, 0.6));
+          emberBurst(_v, 8, true);
+        } else {
+          // Pit eruption under the climbers.
+          this.emberTimer = 0.12;
+          _v.set(rig.root.position.x + rand(-0.8, 0.8), 0.1, this.bossZ() + rand(-0.4, 0.4));
+          emberBurst(_v, 8, true);
+        }
       }
     }
 
     // Name reveal + roar once it stands.
     const titleStart = klaxonTime + riseTime;
     if (this.t >= titleStart && this.t - delta < titleStart) {
-      rig.root.position.y = 0;
+      this.entrancePose(1);
       this.hud.title(this.def.name, this.def.epithet, this.accentCss());
       sfx.bossRoar(this.def.scale * 0.8);
     }
@@ -391,8 +448,75 @@ export class CampaignSystem extends createSystem({
 
     const skip = this.triggerDown();
     if (this.t >= fightStart + fightCardTime || skip) {
-      rig.root.position.y = 0;
       this.startFight();
+    }
+  }
+
+  /**
+   * The entrance, per chassis — k runs 0 (staged at its mark) → 1 (standing
+   * ready at the boss line). Sets the FULL root transform, so a trigger-skip
+   * from any mid-entrance pose lands clean via startFight's reset.
+   */
+  private entrancePose(k: number): void {
+    const rig = this.rig!;
+    const h = rig.height;
+    const z = this.bossZ();
+    const root = rig.root;
+    root.rotation.set(0, Math.PI, 0);
+    root.scale.setScalar(1);
+    switch (this.def.style) {
+      case 'hook': {
+        // RUSTHOOK grinds up CROOKED, in seizing winch-jerks, and only
+        // straightens with a lurch at the top — salvage, not ceremony.
+        const steps = 5;
+        const seg = Math.floor(k * steps);
+        const bite = Math.min(1, (k * steps - seg) / 0.55); // jerk early, hold
+        const e = Math.min(1, (seg + bite) / steps);
+        root.position.set(0, -(h + 0.4) * (1 - e), z);
+        root.rotation.z = 0.3 * (1 - e * e) + Math.sin(this.time * 34) * 0.015 * (1 - k);
+        break;
+      }
+      case 'piston': {
+        // PISTON arrives from ABOVE — the press comes down in strokes, and
+        // the last stroke is the slam that seats it on its mark.
+        const strokes = 3;
+        const seg = Math.floor(k * strokes);
+        const drop = Math.min(1, (k * strokes - seg) / 0.4); // fast fall, long hold
+        const e = Math.min(1, (seg + drop * drop) / strokes);
+        root.position.set(0, (h * 0.8 + 2.2) * (1 - e), z);
+        break;
+      }
+      case 'vulture': {
+        // VULTURE swoops in high off the flank, banking through the dive
+        // and flaring level at the mark.
+        const e = k * k * (3 - 2 * k); // smoothstep
+        root.position.set(3.4 * (1 - e), 2.6 * (1 - e) * (1 - e), z - 1.6 * (1 - e));
+        root.rotation.z = -0.5 * Math.sin(e * Math.PI);
+        break;
+      }
+      case 'fortress': {
+        // JUGGERNAUT was never below the floor — it rolls up out of the
+        // dark at ground level, rattling on its own tracks.
+        const e = k * k * (3 - 2 * k);
+        root.position.set(
+          0,
+          Math.abs(Math.sin(this.time * 22)) * 0.03 * (1 - k),
+          z - 3.8 * (1 - e),
+        );
+        break;
+      }
+      default: {
+        // GOLIATH rises the old way but on HIS clock — the ascent stalls
+        // twice, holds, and resumes. A king does not hurry.
+        let e: number;
+        if (k < 0.3) e = (k / 0.3) * 0.42;
+        else if (k < 0.45) e = 0.42;
+        else if (k < 0.7) e = 0.42 + ((k - 0.45) / 0.25) * 0.36;
+        else if (k < 0.8) e = 0.78;
+        else e = 0.78 + ((k - 0.8) / 0.2) * 0.22;
+        root.position.set(0, -(h + 0.4) * (1 - e), z);
+        break;
+      }
     }
   }
 
@@ -406,6 +530,11 @@ export class CampaignSystem extends createSystem({
   private startFight(): void {
     this.phase = 'fight';
     this.t = 0;
+    // Snap to the rest pose — a trigger-skip can land mid-swoop/mid-stroke.
+    const root = this.rig!.root;
+    root.position.set(0, 0, this.bossZ());
+    root.rotation.set(0, Math.PI, 0);
+    root.scale.setScalar(1);
     match.phase = 'playing';
     this.hud.title('', '');
     this.light.intensity = 5; // steady key light (a skip can leave a strobe)
@@ -521,7 +650,7 @@ export class CampaignSystem extends createSystem({
       this.patches.shift()?.tg.dispose();
     }
     const tg = circleTelegraph(CAMPAIGN.patchRadius);
-    tg.group.position.set(x, 0.013, z);
+    tg.group.position.set(x, CAMPAIGN.decalY, z);
     this.scene.add(tg.group);
     this.patches.push({ x, z, ttl: CAMPAIGN.patchTime, tg });
   }
@@ -596,7 +725,7 @@ export class CampaignSystem extends createSystem({
             : x0; // 'rehit' re-marks the SAME crater
         zones.push({ kind: 'circle', x, z: z0, r });
         const tg = circleTelegraph(r);
-        tg.group.position.set(x, 0.014, z0);
+        tg.group.position.set(x, CAMPAIGN.decalY, z0);
         this.scene.add(tg.group);
         telegraphs.push(tg);
         staggers.push(i * (this.def.slamStyle === 'rehit' ? CAMPAIGN.rehitDelay : CAMPAIGN.marchDelay));
@@ -638,7 +767,7 @@ export class CampaignSystem extends createSystem({
       const halfAngle = this.enraged ? CAMPAIGN.novaEnragedHalfAngle : CAMPAIGN.novaHalfAngle;
       zones.push({ kind: 'nova', angle, halfAngle });
       const tg = novaTelegraph(CAMPAIGN.novaRadius, angle, halfAngle);
-      tg.group.position.set(0, 0.012, 0);
+      tg.group.position.set(0, CAMPAIGN.decalY, 0);
       this.scene.add(tg.group);
       telegraphs.push(tg);
       staggers.push(0);
@@ -660,7 +789,7 @@ export class CampaignSystem extends createSystem({
         placed.push([x, z]);
         zones.push({ kind: 'circle', x, z, r: CAMPAIGN.mortarRadius });
         const tg = circleTelegraph(CAMPAIGN.mortarRadius);
-        tg.group.position.set(x, 0.014, z);
+        tg.group.position.set(x, CAMPAIGN.decalY, z);
         this.scene.add(tg.group);
         telegraphs.push(tg);
         staggers.push(i * 0.28);
@@ -728,7 +857,7 @@ export class CampaignSystem extends createSystem({
     zone.dz = _v.z;
     // Group origin at the NEAR (player-side) end; local −Z runs back
     // toward the titan.
-    tg.group.position.set(px + _v.x * 1.5, 0.014, pz + _v.z * 1.5);
+    tg.group.position.set(px + _v.x * 1.5, CAMPAIGN.decalY, pz + _v.z * 1.5);
     tg.group.rotation.y = Math.atan2(_v.x, _v.z); // local −Z → −dir
   }
 
@@ -1103,17 +1232,22 @@ export class CampaignSystem extends createSystem({
     const rig = this.rig!;
     const fighting = this.phase === 'fight';
 
-    // Idle drift + hover bob (frozen mid-collapse). Enraged machines pace.
-    if (fighting || this.phase === 'intro') {
+    // Idle drift + hover bob — fight only: the entrance and the fall own
+    // the root transform outright (a sway lerp would drag the vulture's
+    // swoop back to centre, and the flinch snap would erase the fortress's
+    // roll-in). Enraged machines pace.
+    if (fighting) {
       const swayRate = this.enraged ? 0.85 : 0.45;
-      const sway = fighting ? Math.sin(this.time * swayRate) * this.def.swayAmp : 0;
+      const sway = Math.sin(this.time * swayRate) * this.def.swayAmp;
       rig.root.position.x += (sway - rig.root.position.x) * Math.min(1, delta * 1.6);
-      if (fighting) rig.root.position.y = Math.sin(this.time * 1.1) * 0.04 * this.def.scale;
+      rig.root.position.y = Math.sin(this.time * 1.1) * 0.04 * this.def.scale;
     }
 
     // Flinch: the whole chassis rocks back when the core takes fire.
     this.flinch = Math.max(0, this.flinch - delta);
-    rig.root.position.z = this.bossZ() + (this.flinch > 0 ? -0.18 * (this.flinch / 0.35) : 0);
+    if (fighting) {
+      rig.root.position.z = this.bossZ() + (this.flinch > 0 ? -0.18 * (this.flinch / 0.35) : 0);
+    }
 
     // The head tracks you (lookAt aims +Z; the visor lives on −Z, so flip).
     this.playerHead(_head);
@@ -1301,6 +1435,7 @@ export class CampaignSystem extends createSystem({
   private toVictory(): void {
     this.phase = 'victory';
     this.t = 0;
+    this.outroStep = 0;
     match.phase = 'matchOver';
     this.disposeAttack();
     this.clearPatches();
@@ -1388,11 +1523,9 @@ export class CampaignSystem extends createSystem({
   private outro(delta: number): void {
     const rig = this.rig!;
     if (this.phase === 'victory') {
-      // Collapse: pitch forward (toward the player — the root carries a π
-      // yaw, so positive X pitch tips the face down), sink, shed fire.
+      // Each chassis dies its own death (see deathPose), shedding fire.
       const k = clamp(this.t / Math.min(3.2, this.victoryDelay), 0, 1);
-      rig.root.rotation.x = 0.45 * k * k;
-      rig.root.position.y = -rig.height * 0.55 * k * k;
+      this.deathPose(k);
       this.emberTimer -= delta;
       if (this.emberTimer <= 0 && k < 1) {
         this.emberTimer = 0.16;
@@ -1413,6 +1546,83 @@ export class CampaignSystem extends createSystem({
       // Defeat: it looms and powers down the show.
       this.light.intensity = Math.max(0, 5 - this.t);
       if (this.t >= CAMPAIGN.defeatDelay) this.finish();
+    }
+  }
+
+  /**
+   * The fall, per chassis — k runs 0 (killing blow) → 1 (down). Owns the
+   * full root transform for the collapse; sign conventions under the π yaw:
+   * +X pitch tips the face DOWN toward the player, −X tips it backward.
+   */
+  private deathPose(k: number): void {
+    const rig = this.rig!;
+    const h = rig.height;
+    const z = this.bossZ();
+    const root = rig.root;
+    switch (this.def.style) {
+      case 'hook': {
+        // RUSTHOOK keels over SIDEWAYS — a slow list past the point of no
+        // return, then the crash.
+        const lean = k < 0.45 ? (k / 0.45) * 0.3 : 0.3 + ((k - 0.45) / 0.55) ** 2 * 1.15;
+        root.rotation.z = lean;
+        root.position.set(lean * 0.5, -h * 0.3 * k * k, z);
+        if (k >= 0.95 && this.outroStep === 0) {
+          this.outroStep = 1;
+          sfx.slamImpact();
+        }
+        break;
+      }
+      case 'piston': {
+        // The press pancakes STRAIGHT DOWN, one jolt at a time, until the
+        // chassis is a stack of plates.
+        const steps = 4;
+        const seg = Math.floor(k * steps);
+        const jolt = Math.min(1, (k * steps - seg) / 0.35);
+        const e = Math.min(1, (seg + jolt) / steps);
+        root.scale.y = 1 - 0.55 * e;
+        root.position.set(0, 0, z);
+        if (seg > this.outroStep && k < 1) {
+          this.outroStep = seg;
+          sfx.slamImpact();
+        }
+        break;
+      }
+      case 'vulture': {
+        // Shot out of its hover: topples BACKWARD, rolling off one wing.
+        root.rotation.x = -0.85 * k * k;
+        root.rotation.z = 0.7 * k * k;
+        root.position.set(-0.4 * k, -h * 0.45 * k * k, z - 0.5 * k);
+        break;
+      }
+      case 'fortress': {
+        // Scuttled at anchor — sinks listing back into the floor, rattling
+        // as the magazine cooks off.
+        const e = k * k;
+        root.rotation.z = -0.3 * e;
+        root.position.set(Math.sin(this.time * 26) * 0.02 * (1 - k), -(h + 0.5) * e, z);
+        break;
+      }
+      default: {
+        // GOLIATH kneels, HOLDS — long enough to mean it — then falls
+        // forward at the player's feet.
+        if (k < 0.35) {
+          const e = k / 0.35;
+          root.rotation.x = 0.12 * e;
+          root.position.set(0, -h * 0.16 * e, z);
+        } else if (k < 0.6) {
+          root.rotation.x = 0.12;
+          root.position.set(0, -h * 0.16, z);
+        } else {
+          const e = ((k - 0.6) / 0.4) ** 2;
+          root.rotation.x = 0.12 + 0.75 * e;
+          root.position.set(0, -h * (0.16 + 0.38 * e), z);
+          if (this.outroStep === 0) {
+            this.outroStep = 1;
+            sfx.bossRoar(this.def.scale * 0.9); // the last breath as he goes
+          }
+        }
+        break;
+      }
     }
   }
 

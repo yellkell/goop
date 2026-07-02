@@ -286,6 +286,10 @@ export const CAMPAIGN = {
   novaEnragedHalfAngle: 0.4,
 
   // Strike-zone geometry defaults (per-boss defs tune sizes/cadence).
+  // Floor decals hover HERE, clear of the deck furniture — the rim glow bars
+  // top out near 0.032 and the corner bolts near 0.035, so anything lower
+  // reads as "under the platform" and the warning goes unseen.
+  decalY: 0.05,
   slamRadius: 0.55,
   beamHalfWidth: 0.22,
   sweepThickness: 0.19, // half-height of the horizontal blade slice
