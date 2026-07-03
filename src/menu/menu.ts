@@ -811,8 +811,9 @@ function drawBoard(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null
     });
     ctx.font = '700 19px system-ui, sans-serif';
     ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
     ctx.fillStyle = active || hot ? UI.amber : UI.textDim;
-    ctx.fillText(label, x + BOARD_TAB_W / 2, 110);
+    ctx.fillText(label, x + BOARD_TAB_W / 2, 88 + 44 / 2);
     x += BOARD_TAB_W + 16;
   }
 
@@ -839,8 +840,9 @@ function drawBoard(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null
         ctx.font = `700 ${px}px system-ui, sans-serif`;
       }
       ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
       ctx.fillStyle = active ? UI.cool : hot ? UI.amber : UI.textDim;
-      ctx.fillText(label, sx + subW / 2, SUB_Y + SUB_H / 2 + 6);
+      ctx.fillText(label, sx + subW / 2, SUB_Y + SUB_H / 2);
       sx += subW + gap;
     }
   }
