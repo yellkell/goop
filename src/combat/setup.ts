@@ -81,16 +81,26 @@ export function applyRoster(): void {
 }
 
 /**
- * Mid-bout reconciliation for a LIVE mesh brawl: any non-local fighter whose
- * canonical seat is no longer occupied (a peer whose headset died / dropped)
- * is marked ELIMINATED — deactivated AND zeroed. That stops it being an
- * un-hittable frozen statue, drops it out of the HUD, and removes its (frozen,
- * often full) health from its team's total — so the round resolves by KO and
- * the bout plays out short-handed instead of running the clock against a ghost.
+ * Mid-bout reconciliation for a LIVE mesh brawl — run EVERY frame, heals BOTH
+ * ways so a fighter's active flag always tracks whether its canonical seat is
+ * occupied RIGHT NOW (occupants masks dropped peers to '', so "occupied" means
+ * "a live peer is there"):
  *
- * Unlike {@link applyRoster} this NEVER refills a living fighter's health and
- * never re-activates a seat, so it's safe to call every frame. No-op outside a
- * live net arcade bout. Returns true if a fighter was just eliminated.
+ *  - occupied but INACTIVE  → ACTIVATE it. This is the self-heal for the FFA
+ *    "everyone's a ghost" bug: applyRoster only lights peers on the one
+ *    bot→net 'entering' frame, so a peer whose seat filled a beat later — or
+ *    one wrongly dropped by a transient occupants gap — used to stay invisible,
+ *    un-hittable and nameless for the whole bout (its platform + the timer +
+ *    voice all kept working, since none of those read `active`). Its real
+ *    health resyncs from the next pose packet.
+ *  - occupied → EMPTY/DROPPED → ELIMINATE it (deactivate AND zero). That stops
+ *    it being an un-hittable frozen statue, drops it from the HUD, and removes
+ *    its (frozen, often full) health from its team's total — so the round
+ *    resolves by KO and the bout plays out short-handed, not against a ghost.
+ *
+ * Only ever touches a fighter's health on an active-flag TRANSITION, so a
+ * living, connected peer's pose-synced health is never trampled. No-op outside
+ * a live net arcade bout. Returns true if any fighter's state just changed.
  */
 export function syncNetRoster(): boolean {
   if (!(app.mode === 'net' && app.arcade !== '1v1')) return false;
@@ -98,13 +108,22 @@ export function syncNetRoster(): boolean {
   let changed = false;
   for (let slot = 1; slot < fighters.length; slot++) {
     const e = fighters[slot];
-    if (!e || (e.getValue(Combatant, 'active') ?? 0) !== 1) continue; // already out
+    if (!e) continue;
     const canonical = slot < roster.length ? roster[slot].canonical : -1;
-    if (canonical < 0 || !mesh.occupants[canonical]) {
+    const occupied = canonical >= 0 && !!mesh.occupants[canonical];
+    const active = (e.getValue(Combatant, 'active') ?? 0) === 1;
+    if (occupied === active) continue; // already reconciled
+    if (occupied) {
+      // A live peer that never lit up (or was wrongly eliminated): bring it in.
+      e.setValue(Combatant, 'active', 1);
+      e.setValue(Combatant, 'team', roster[slot].team);
+      e.setValue(Health, 'current', e.getValue(Health, 'max') ?? COMBAT.playerHealth);
+    } else {
+      // Its seat emptied or its peer was dropped: eliminate it.
       e.setValue(Combatant, 'active', 0);
       e.setValue(Health, 'current', 0);
-      changed = true;
     }
+    changed = true;
   }
   return changed;
 }
