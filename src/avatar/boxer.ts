@@ -787,67 +787,88 @@ function buildKnightHead(accent: number): Group {
   return g;
 }
 
-/** KNIGHT cuirass: a tall riveted gorget, big rounded pauldrons with studded
- *  rims + lower lames, and a studded chest yoke ending in a pointed plate. */
+/** KNIGHT cuirass — GOTHIC plate: a layered lame gorget, compact angular
+ *  spaulders (overlapping faceted plates stepping down the arm, neon-edged),
+ *  and a keeled breastplate whose raised central ridge IS a glowing Templar
+ *  cross — echoing the great helm — over a fluted plackart. */
 function buildKnightChest(accent: number): Group {
   const g = taggedHead('knight');
 
-  // Tall riveted gorget collar.
-  const gorget = new Mesh(new CylinderGeometry(0.12, 0.16, 0.17, 16), chassisMat(accent, 0.05));
-  gorget.position.y = 0.12;
-  g.add(gorget);
-  const neck = new Mesh(new CylinderGeometry(0.07, 0.085, 0.08, 8), darkMat());
+  // Layered lame gorget: two stacked collar plates with a neon seam under the
+  // lower one, instead of the old single riveted ring.
+  const neck = new Mesh(new CylinderGeometry(0.07, 0.085, 0.09, 8), darkMat());
   neck.position.y = 0.2;
   g.add(neck);
-  for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * Math.PI * 2;
-    const stud = new Mesh(new SphereGeometry(0.011, 6, 5), chassisMat(accent, 0.07));
-    stud.position.set(Math.sin(a) * 0.135, 0.18, -Math.cos(a) * 0.135);
-    g.add(stud);
+  for (let i = 0; i < 2; i++) {
+    const lame = new Mesh(
+      new CylinderGeometry(0.1 + i * 0.03, 0.12 + i * 0.03, 0.05, 12),
+      chassisMat(accent, 0.05),
+    );
+    lame.position.y = 0.17 - i * 0.05;
+    g.add(lame);
   }
+  const gorgetTrim = new Mesh(new CylinderGeometry(0.148, 0.152, 0.012, 12), glowMat(accent, 0.5));
+  gorgetTrim.position.y = 0.092;
+  g.add(gorgetTrim);
 
-  // Big rounded pauldrons + a studded rim + two lower lames per shoulder.
+  // Compact Gothic spaulders: three overlapping faceted plates stepping down
+  // and out along the arm — smaller and sharper than the old rounded pauldron
+  // domes — crowned by a short ridge fin, with a neon rim under the top plate.
   for (const side of [-1, 1]) {
-    const pauldron = new Mesh(new SphereGeometry(0.17, 16, 12), chassisMat(accent, 0.05));
-    pauldron.scale.set(1, 0.72, 1.12);
-    pauldron.position.set(side * 0.27, 0.1, 0);
-    g.add(pauldron);
-    for (let i = 0; i < 4; i++) {
-      const stud = new Mesh(new SphereGeometry(0.012, 6, 5), chassisMat(accent, 0.07));
-      stud.position.set(side * (0.2 + i * 0.02), 0.16, -0.12 + i * 0.05);
-      g.add(stud);
+    for (let i = 0; i < 3; i++) {
+      const plate = new Mesh(
+        new BoxGeometry(0.15 - i * 0.025, 0.05, 0.2 - i * 0.03),
+        chassisMat(accent, 0.05),
+      );
+      plate.position.set(side * (0.22 + i * 0.05), 0.14 - i * 0.055, 0);
+      plate.rotation.z = side * -(0.35 + i * 0.18);
+      g.add(plate);
     }
-    for (let j = 0; j < 2; j++) {
-      const lame = new Mesh(new BoxGeometry(0.2, 0.055, 0.18), chassisMat(accent, 0.04));
-      lame.position.set(side * 0.28, -j * 0.06, 0);
-      lame.rotation.z = side * 0.12;
-      g.add(lame);
-    }
+    const fin = new Mesh(new BoxGeometry(0.1, 0.05, 0.03), chassisMat(accent, 0.06));
+    fin.position.set(side * 0.23, 0.19, 0);
+    fin.rotation.z = side * -0.35;
+    g.add(fin);
+    const rim = new Mesh(new BoxGeometry(0.15, 0.012, 0.19), glowMat(accent, 0.55));
+    rim.position.set(side * 0.225, 0.168, 0);
+    rim.rotation.z = side * -0.35;
+    g.add(rim);
   }
 
-  // Studded chest yoke ending in a pointed (V) plate.
-  const yoke = new Mesh(new BoxGeometry(0.36, 0.17, 0.07), chassisMat(accent, 0.05));
-  yoke.position.set(0, 0.01, -0.13);
-  g.add(yoke);
-  const point = new Mesh(new ConeGeometry(0.13, 0.18, 4), chassisMat(accent, 0.05));
-  point.scale.set(1, 1, 0.5);
-  point.rotation.set(Math.PI, Math.PI / 4, 0); // 4-sided plate, apex pointing DOWN
-  point.position.set(0, -0.14, -0.12);
-  g.add(point);
-  for (let i = 0; i < 6; i++) {
-    const stud = new Mesh(new SphereGeometry(0.012, 6, 5), chassisMat(accent, 0.07));
-    stud.position.set(-0.14 + i * 0.056, 0.07, -0.165);
-    g.add(stud);
-  }
+  // Keeled breastplate: two angled pectoral facets meeting at the centre line,
+  // the medieval arrow-shedding ridge.
   for (const side of [-1, 1]) {
-    for (let j = 0; j < 2; j++) {
-      const stud = new Mesh(new SphereGeometry(0.012, 6, 5), chassisMat(accent, 0.07));
-      stud.position.set(side * 0.16, 0.02 - j * 0.06, -0.165);
-      g.add(stud);
+    const facet = new Mesh(new BoxGeometry(0.17, 0.21, 0.06), chassisMat(accent, 0.05));
+    facet.position.set(side * 0.08, 0.01, -0.11);
+    facet.rotation.set(0.06, side * 0.32, 0);
+    g.add(facet);
+  }
+
+  // The keel itself is the glowing TEMPLAR CROSS, proud of the facets — the
+  // same sigil the great helm wears, so the suit reads as one heraldry.
+  const vbar = new Mesh(new BoxGeometry(0.04, 0.3, 0.03), glowMat(accent, 0.85));
+  vbar.position.set(0, -0.02, -0.155);
+  vbar.rotation.x = 0.06;
+  g.add(vbar);
+  const hbar = new Mesh(new BoxGeometry(0.15, 0.038, 0.03), glowMat(accent, 0.85));
+  hbar.position.set(0, 0.05, -0.158);
+  hbar.rotation.x = 0.06;
+  g.add(hbar);
+
+  // Plackart: a lower belly band with fluted ridges fanning out from the keel.
+  const plackart = new Mesh(new BoxGeometry(0.26, 0.1, 0.06), chassisMat(accent, 0.04));
+  plackart.position.set(0, -0.15, -0.1);
+  plackart.rotation.x = -0.06;
+  g.add(plackart);
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 2; i++) {
+      const flute = new Mesh(new BoxGeometry(0.015, 0.1, 0.014), chassisMat(accent, 0.07));
+      flute.position.set(side * (0.05 + i * 0.06), -0.15, -0.128);
+      flute.rotation.z = side * (0.3 + i * 0.16);
+      g.add(flute);
     }
   }
 
-  // Lower body trunk + side flanks under the yoke.
+  // Lower body trunk + side flanks under the plate.
   const trunk = new Mesh(new CylinderGeometry(0.16, 0.09, 0.4, 10), darkMat());
   trunk.scale.z = 0.7;
   trunk.position.y = -0.16;
