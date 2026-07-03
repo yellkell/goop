@@ -1904,18 +1904,24 @@ export class CampaignSystem extends createSystem({
       .setHex(0x0c0d11)
       .lerp(_eyeAccent, clamp(rig.visorMat.emissiveIntensity / 3.2, 0.06, 1));
     rig.visorMat.color.copy(_eyeShade);
+    // The eye lamps SCALE with the blink too, like the core's pulse — colour
+    // alone still hides on small lamps (PISTONKAISER's flat face especially).
+    const headLit = lit.includes('head');
+    for (const eye of rig.eyes) eye.scale.setScalar(headLit ? 1 + wink * 0.3 : 1);
 
-    // Beam charge: a flare orb WELLS UP over the eye while the laser cooks,
-    // throbbing faster as it nears firing — you can tell it's happening from
-    // anywhere on the platform, unlike the old eye-only superheat.
+    // Beam charge: a flare orb WELLS UP around the whole head while the laser
+    // cooks — swelling past the skull, throbbing harder near firing — and the
+    // arena key light surges with it, so the wind-up reads from anywhere.
     const eyeFx = rig.eyeFx;
     if (beamCharging > 0) {
       eyeFx.visible = true;
-      const throb = 1 + Math.sin(this.time * 26) * (0.08 + 0.2 * beamCharging);
-      eyeFx.scale.setScalar((0.35 + beamCharging * 1.6) * throb);
-      (eyeFx.material as MeshStandardMaterial).opacity = 0.3 + beamCharging * 0.5;
+      const throb = 1 + Math.sin(this.time * 26) * (0.1 + 0.22 * beamCharging);
+      eyeFx.scale.setScalar((0.5 + beamCharging * 2.6) * throb);
+      (eyeFx.material as MeshStandardMaterial).opacity = 0.35 + beamCharging * 0.5;
+      if (fighting) this.light.intensity = 5 + beamCharging * 8 * throb;
     } else {
       eyeFx.visible = false;
+      if (fighting) this.light.intensity = 5; // settle after the surge
     }
     const coreLit = lit.includes('core');
     rig.coreMat.emissiveIntensity = coreLit ? 0.5 + wink * 2.8 : 0.25;

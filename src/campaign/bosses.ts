@@ -253,6 +253,9 @@ export interface TitanRig {
   head: Group;
   /** The eye/visor glow — blinks while the HEAD is a live weak point. */
   visorMat: MeshStandardMaterial;
+  /** The eye lamp meshes themselves — they SCALE-pulse with the head blink
+   *  (like the core does) so the tell reads even where colour alone won't. */
+  eyes: Mesh[];
   /** Beam charge flare: a glow orb over the eye, hidden until a laser cooks;
    *  CampaignSystem swells it with the charge so the wind-up reads. */
   eyeFx: Mesh;
@@ -336,6 +339,8 @@ export function buildTitan(def: BossDef): TitanRig {
   const head = new Group();
   const headR = 0.16 * s;
   const visorMat = glowMat(accent, 1.8);
+  // Every eye lamp lands here so the head tell can SCALE-pulse them.
+  const eyes: Mesh[] = [];
 
   switch (def.style) {
     case 'hook': {
@@ -358,6 +363,7 @@ export function buildTitan(def: BossDef): TitanRig {
         eye.rotation.x = Math.PI / 2;
         eye.position.set(ex * headR * 0.44, headR * 0.12 * ex * 0.5, -headR * 1.03);
         head.add(eye);
+        eyes.push(eye);
       }
       break;
     }
@@ -380,6 +386,7 @@ export function buildTitan(def: BossDef): TitanRig {
         const eye = new Mesh(new BoxGeometry(headR * 0.64, headR * 0.34, 0.06 * s), visorMat);
         eye.position.set(ex * headR * 0.62, headR * 0.02, -headR * 0.99);
         head.add(eye);
+        eyes.push(eye);
       }
       break;
     }
@@ -396,6 +403,7 @@ export function buildTitan(def: BossDef): TitanRig {
       eye.rotation.x = Math.PI / 2 + 0.28; // faces out along the craned hood
       eye.position.set(0, headR * 0.14, -headR * 1.12);
       head.add(eye);
+      eyes.push(eye);
       const crest = new Mesh(new BoxGeometry(0.015 * s, headR * 0.9, headR * 1.4), dark());
       crest.position.y = headR * 1.0;
       crest.rotation.x = 0.28;
@@ -412,6 +420,7 @@ export function buildTitan(def: BossDef): TitanRig {
       const slot = new Mesh(new BoxGeometry(headR * 1.7, 0.03 * s, 0.03 * s), visorMat);
       slot.position.set(0, headR * 0.1, -headR * 1.05);
       head.add(slot);
+      eyes.push(slot);
       // Bolt studs ringing the dome.
       for (let i = 0; i < 6; i++) {
         const a = (i / 6) * Math.PI * 2;
@@ -437,6 +446,7 @@ export function buildTitan(def: BossDef): TitanRig {
       const visor = new Mesh(new BoxGeometry(headR * 1.5, 0.035 * s, 0.03 * s), visorMat);
       visor.position.set(0, 0.01 * s, -headR * 0.95);
       head.add(visor);
+      eyes.push(visor);
       const jaw = new Mesh(new BoxGeometry(headR * 1.1, 0.05 * s, 0.06 * s), dark());
       jaw.position.set(0, -headR * 0.62, -headR * 0.72);
       head.add(jaw);
@@ -733,6 +743,7 @@ export function buildTitan(def: BossDef): TitanRig {
     root,
     head,
     visorMat,
+    eyes,
     eyeFx,
     core,
     coreMat,

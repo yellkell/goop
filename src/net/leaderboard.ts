@@ -387,9 +387,20 @@ export async function refreshLeaderboard(force = false): Promise<void> {
       try {
         const col = fs.collection(db, RUN_COLLECTION[tab]);
         const snap = await fs.getDocs(fs.query(col, fs.orderBy('seconds', 'asc'), fs.limit(LEADERBOARD_FETCH_LIMIT)));
-        return snap.docs.map((d) => {
+        const rows = snap.docs.map((d) => {
           const names = Array.isArray(d.data().names) ? (d.data().names as unknown[]).map(String) : [];
           return { names, seconds: (d.data().seconds as number) ?? 0, me: names.includes(profile.name) };
+        });
+        // Every finished run is stored, but only a squad's BEST time RANKS —
+        // the board celebrates personal bests, not attempt counts. Rows
+        // arrive fastest-first, so the first row per squad (same names in
+        // any order) is its best; later repeats drop.
+        const seen = new Set<string>();
+        return rows.filter((r) => {
+          const key = r.names.map((n) => n.toLowerCase()).sort().join('|');
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
         });
       } catch {
         return leaderboard[tab]; // keep whatever we last had

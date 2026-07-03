@@ -2373,7 +2373,14 @@ function drawTabs(ctx: CanvasRenderingContext2D, tabs: TabDef[], hoverAction: Me
     });
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = '800 19px system-ui, sans-serif';
+    // Shrink-to-fit with breathing room: four locker tabs leave PLATFORMS a
+    // ~112px plate, which 19px caps filled edge-to-edge (the squeezed look).
+    let px = 19;
+    ctx.font = `800 ${px}px system-ui, sans-serif`;
+    while (px > 12 && ctx.measureText(t.label).width > w - 24) {
+      px -= 1;
+      ctx.font = `800 ${px}px system-ui, sans-serif`;
+    }
     ctx.fillStyle = t.active ? UI.amber : UI.textDim;
     ctx.fillText(t.label, x + w / 2, TAB_Y + TAB_H / 2);
   });
