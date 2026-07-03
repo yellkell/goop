@@ -30,6 +30,7 @@ import {
   Group,
   Mesh,
   MeshStandardMaterial,
+  SphereGeometry,
 } from 'three';
 import { PALETTE, RAID } from '../config.js';
 
@@ -252,6 +253,9 @@ export interface TitanRig {
   head: Group;
   /** The eye/visor glow — blinks while the HEAD is a live weak point. */
   visorMat: MeshStandardMaterial;
+  /** Beam charge flare: a glow orb over the eye, hidden until a laser cooks;
+   *  CampaignSystem swells it with the charge so the wind-up reads. */
+  eyeFx: Mesh;
   core: Mesh;
   /** The chest core glow — blinks while the CORE is a live weak point. */
   coreMat: MeshStandardMaterial;
@@ -439,6 +443,28 @@ export function buildTitan(def: BossDef): TitanRig {
       break;
     }
   }
+  // The beam CHARGE FLARE: a translucent glow orb mounted over the eye,
+  // hidden until a laser cooks — CampaignSystem swells and throbs it with
+  // the charge so the wind-up reads across the arena (the superheated eye
+  // material alone never did).
+  const eyeFxMat = glowMat(accent, 2.4);
+  eyeFxMat.transparent = true;
+  eyeFxMat.opacity = 0.5;
+  eyeFxMat.depthWrite = false;
+  const eyeFx = new Mesh(new SphereGeometry(headR * 0.55, 14, 10), eyeFxMat);
+  eyeFx.visible = false;
+  // Where each chassis mounts its eye/visor (head-local, in headR units).
+  const EYE_ANCHOR: Record<TitanStyle, [number, number, number]> = {
+    hook: [0, 0.06, -1.0],
+    piston: [0, 0.02, -0.99],
+    vulture: [0, 0.14, -1.12],
+    fortress: [0, 0.1, -1.05],
+    king: [0, 0.06, -0.95],
+  };
+  const [ax, ay, az] = EYE_ANCHOR[def.style];
+  eyeFx.position.set(ax * headR, ay * headR, az * headR);
+  head.add(eyeFx);
+
   head.position.set(0, headY, 0);
   root.add(head);
 
@@ -707,6 +733,7 @@ export function buildTitan(def: BossDef): TitanRig {
     root,
     head,
     visorMat,
+    eyeFx,
     core,
     coreMat,
     low,

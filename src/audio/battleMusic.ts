@@ -10,7 +10,7 @@
  * lobby music (it's background). Plain HTMLAudioElements.
  */
 
-import { fadeInMenuMusic, isMusicMuted } from './menuMusic.js';
+import { fadeInMenuMusic, isMusicMuted, noteInLobby } from './menuMusic.js';
 import victoryUrl from '../assets/music/victory.mp3?url';
 import brainEaterUrl from '../assets/music/brain-eater.mp3?url';
 
@@ -130,6 +130,10 @@ export function handoffToLobby(): void {
   clearHandoff();
   battle?.pause();
   finale?.pause();
+  // We're in the lobby NOW — recorded so the delayed fade-in below can tell if
+  // the player is still there when it finally fires (they may have launched
+  // another bout during the sting's airtime; the fade must stay silent then).
+  noteInLobby();
 
   const v = victory;
   if (!v || v.paused || v.ended) {

@@ -69,11 +69,20 @@ function sync(): void {
   }
 }
 
-/** Bring the lobby music up with a gentle fade — used after the victory sting
- *  hands off. Stays silent if muted, not entered, or out of the lobby. */
-export function fadeInMenuMusic(): void {
+/** Mark that we're in the lobby WITHOUT starting playback — the victory-sting
+ *  handoff calls this the moment we land back in the menu, so that when its
+ *  delayed fadeInMenuMusic fires it can tell whether we're STILL there. */
+export function noteInLobby(): void {
   lobbyActive = true;
-  if (!(entered && !isMusicMuted())) {
+}
+
+/** Bring the lobby music up with a gentle fade — used after the victory sting
+ *  hands off. Stays silent if muted, not entered, or out of the lobby. The
+ *  lobby check matters: this often fires seconds after the bout ended, and if
+ *  the player has already launched ANOTHER bout by then, forcing the lobby
+ *  track up would stack it under the new battle score. */
+export function fadeInMenuMusic(): void {
+  if (!lobbyActive || !(entered && !isMusicMuted())) {
     stopFade();
     audio?.pause();
     return;

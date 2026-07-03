@@ -27,10 +27,12 @@ import { createSystem, InputComponent, Vector3, type Entity } from '@iwsdk/core'
 import {
   AdditiveBlending,
   BoxGeometry,
+  Color,
   CylinderGeometry,
   Group,
   Mesh,
   MeshBasicMaterial,
+  type MeshStandardMaterial,
   Object3D,
   PointLight,
 } from 'three';
@@ -163,6 +165,8 @@ interface Strike {
 const _v = new Vector3();
 const _p = new Vector3();
 const _head = new Vector3();
+const _eyeShade = new Color();
+const _eyeAccent = new Color();
 
 const rand = (lo: number, hi: number): number => lo + Math.random() * (hi - lo);
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
@@ -221,6 +225,10 @@ export class CampaignSystem extends createSystem({
   // jerks, the king's stalls) — they gate the one-shot sfx per beat.
   private introStep = 0;
   private outroStep = 0;
+  /** Where the titan STOOD when the killing blow landed (it sways in the
+   *  fight) — the collapse anchors here so it falls from where it stands
+   *  instead of teleporting back to centre. */
+  private fellX = 0;
 
   // --- RAID state ---------------------------------------------------------
   /** The titan's OWN Health pool (used in every mode — in a raid slot 1 is a
@@ -1886,6 +1894,29 @@ export class CampaignSystem extends createSystem({
       (lit.includes('head') ? 0.25 + wink * 4.6 : 0.7) +
       beamCharging * 3.2 +
       (this.enraged ? 1.6 + Math.sin(this.time * 10) * 0.6 : 0);
+    // Emissive intensity alone can't blacken a PAINTED lamp: the eye's base
+    // colour keeps it lit by the room whatever the glow does (PISTONKAISER's
+    // amber read as "the same shade of yellow" on and off beat). Shade the
+    // paint WITH the glow — near-black on the off beat, full accent on the
+    // flare — so the blink is unmissable on every chassis.
+    _eyeAccent.setHex(this.def.accent);
+    _eyeShade
+      .setHex(0x0c0d11)
+      .lerp(_eyeAccent, clamp(rig.visorMat.emissiveIntensity / 3.2, 0.06, 1));
+    rig.visorMat.color.copy(_eyeShade);
+
+    // Beam charge: a flare orb WELLS UP over the eye while the laser cooks,
+    // throbbing faster as it nears firing — you can tell it's happening from
+    // anywhere on the platform, unlike the old eye-only superheat.
+    const eyeFx = rig.eyeFx;
+    if (beamCharging > 0) {
+      eyeFx.visible = true;
+      const throb = 1 + Math.sin(this.time * 26) * (0.08 + 0.2 * beamCharging);
+      eyeFx.scale.setScalar((0.35 + beamCharging * 1.6) * throb);
+      (eyeFx.material as MeshStandardMaterial).opacity = 0.3 + beamCharging * 0.5;
+    } else {
+      eyeFx.visible = false;
+    }
     const coreLit = lit.includes('core');
     rig.coreMat.emissiveIntensity = coreLit ? 0.5 + wink * 2.8 : 0.25;
     rig.core.scale.setScalar(coreLit ? 1 + wink * 0.16 : 1);
@@ -2067,6 +2098,7 @@ export class CampaignSystem extends createSystem({
     this.phase = 'victory';
     this.t = 0;
     this.outroStep = 0;
+    this.fellX = this.rig?.root.position.x ?? 0; // die where it stood, mid-sway included
     match.phase = 'matchOver';
     this.disposeAttack();
     this.disposeShots();
@@ -2190,6 +2222,7 @@ export class CampaignSystem extends createSystem({
     this.phase = 'resurrect';
     this.t = 0;
     this.outroStep = 0;
+    this.fellX = this.rig?.root.position.x ?? 0; // the false kill also falls in place
     match.phase = 'roundOver'; // collisions + rim drain off while he's down
     this.disposeAttack();
     this.disposeShots();
@@ -2324,11 +2357,14 @@ export class CampaignSystem extends createSystem({
    * The fall, per chassis — k runs 0 (killing blow) → 1 (down). Owns the
    * full root transform for the collapse; sign conventions under the π yaw:
    * +X pitch tips the face DOWN toward the player, −X tips it backward.
+   * Laterally everything hangs off `fellX` — the sway position the killing
+   * blow caught it at — so the wreck drops where it STOOD, no centre snap.
    */
   private deathPose(k: number): void {
     const rig = this.rig!;
     const h = rig.height;
     const z = this.bossZ();
+    const fx = this.fellX;
     const root = rig.root;
     switch (this.def.style) {
       case 'hook': {
@@ -2336,7 +2372,7 @@ export class CampaignSystem extends createSystem({
         // return, then the crash.
         const lean = k < 0.45 ? (k / 0.45) * 0.3 : 0.3 + ((k - 0.45) / 0.55) ** 2 * 1.15;
         root.rotation.z = lean;
-        root.position.set(lean * 0.5, -h * 0.3 * k * k, z);
+        root.position.set(fx + lean * 0.5, -h * 0.3 * k * k, z);
         if (k >= 0.95 && this.outroStep === 0) {
           this.outroStep = 1;
           sfx.slamImpact();
@@ -2351,7 +2387,7 @@ export class CampaignSystem extends createSystem({
         const jolt = Math.min(1, (k * steps - seg) / 0.35);
         const e = Math.min(1, (seg + jolt) / steps);
         root.scale.y = 1 - 0.55 * e;
-        root.position.set(0, 0, z);
+        root.position.set(fx, 0, z);
         if (seg > this.outroStep && k < 1) {
           this.outroStep = seg;
           sfx.slamImpact();
@@ -2362,7 +2398,7 @@ export class CampaignSystem extends createSystem({
         // Shot out of its hover: topples BACKWARD, rolling off one wing.
         root.rotation.x = -0.85 * k * k;
         root.rotation.z = 0.7 * k * k;
-        root.position.set(-0.4 * k, -h * 0.45 * k * k, z - 0.5 * k);
+        root.position.set(fx - 0.4 * k, -h * 0.45 * k * k, z - 0.5 * k);
         break;
       }
       case 'fortress': {
@@ -2370,7 +2406,7 @@ export class CampaignSystem extends createSystem({
         // as the magazine cooks off.
         const e = k * k;
         root.rotation.z = -0.3 * e;
-        root.position.set(Math.sin(this.time * 26) * 0.02 * (1 - k), -(h + 0.5) * e, z);
+        root.position.set(fx + Math.sin(this.time * 26) * 0.02 * (1 - k), -(h + 0.5) * e, z);
         break;
       }
       default: {
@@ -2379,14 +2415,14 @@ export class CampaignSystem extends createSystem({
         if (k < 0.35) {
           const e = k / 0.35;
           root.rotation.x = 0.12 * e;
-          root.position.set(0, -h * 0.16 * e, z);
+          root.position.set(fx, -h * 0.16 * e, z);
         } else if (k < 0.6) {
           root.rotation.x = 0.12;
-          root.position.set(0, -h * 0.16, z);
+          root.position.set(fx, -h * 0.16, z);
         } else {
           const e = ((k - 0.6) / 0.4) ** 2;
           root.rotation.x = 0.12 + 0.75 * e;
-          root.position.set(0, -h * (0.16 + 0.38 * e), z);
+          root.position.set(fx, -h * (0.16 + 0.38 * e), z);
           if (this.outroStep === 0) {
             this.outroStep = 1;
             sfx.bossRoar(this.def.scale * 0.9); // the last breath as he goes
