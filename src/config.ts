@@ -342,6 +342,12 @@ export const RAID = {
   sweepCascade: 0.12,
   /** The titan's full-turn lash while a squad sweep detonates (rad/s). */
   sweepSpinRate: 11,
+  /** A SQUAD volley is a BARRAGE: this many rounds of fire, one shot per
+   *  marked raider each round — so a four-strong squad eats ~this×4 balls. */
+  volleySquadRounds: 6,
+  /** Rounds hammer out this fast in a squad barrage (shorter than the solo
+   *  volley interval — it's a storm, not a metronome). */
+  volleySquadInterval: 0.34,
   /** GOLIATH's crown ring stops take this many hits each in a raid (a squad
    *  shreds single-hit stops too fast). */
   crownPerStop: 2,

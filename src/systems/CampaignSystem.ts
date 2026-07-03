@@ -1314,18 +1314,27 @@ export class CampaignSystem extends createSystem({
     } else {
       // The VOLLEY: no floor marks at all — the shoulder pods spool up
       // (watch the muzzle glows swell through the windup) and then hurl
-      // blockable fireballs, alternating pods. A group volley CYCLES the
-      // targets shot by shot, at least one each. Every shot is aimed where
-      // its raider's head is at ITS launch: keep moving, or catch it on a
-      // fist.
-      const shots = Math.max(this.def.volleyCount, seats.length);
-      for (let i = 0; i < shots; i++) {
-        const side = (i % 2 === 0 ? -1 : 1) as -1 | 1;
-        zones.push({ kind: 'shot', side });
-        zoneSeats.push(seats[i % seats.length]);
-        telegraphs.push(null);
-        staggers.push(i * CAMPAIGN.volleyInterval);
-        markers.push(this.makeMuzzleGlow(side));
+      // blockable fireballs, alternating pods. Every shot is aimed where its
+      // raider's head is at ITS launch: keep moving, or catch it on a fist.
+      // A SQUAD volley is a BARRAGE — many rounds of fire, one shot at every
+      // marked raider each round, the pods hammering shot after shot across
+      // the whole arc.
+      const squad = seats.length > 1;
+      const rounds = squad ? RAID.volleySquadRounds : this.def.volleyCount;
+      const roundGap = squad ? RAID.volleySquadInterval : CAMPAIGN.volleyInterval;
+      let s = 0;
+      for (let r = 0; r < rounds; r++) {
+        for (let j = 0; j < seats.length; j++) {
+          const side = (s % 2 === 0 ? -1 : 1) as -1 | 1;
+          zones.push({ kind: 'shot', side });
+          zoneSeats.push(seats[j]);
+          telegraphs.push(null);
+          // Rounds are spaced by the interval; within a round the shots fan
+          // out fast across the arc, so each round reads as one salvo.
+          staggers.push(r * roundGap + j * (roundGap / (seats.length + 1)));
+          markers.push(this.makeMuzzleGlow(side));
+          s++;
+        }
       }
     }
 

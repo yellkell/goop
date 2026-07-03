@@ -79,8 +79,8 @@ in-your-face boxing feel.
   RUSTHOOK hunts one raider at a time (the chassis visibly squares up to its
   mark), PISTONKAISER marks TWO at once with a two-fisted hoist, and from
   VULTURE on every swing marks the WHOLE squad — hammer ghosts on every
-  platform, a fan of beams, volleys cycling raider to raider, novas with
-  per-raider wedges. **Sweeps always catch everyone**: the titan winds both
+  platform, a fan of beams, a **fireball barrage** raining rounds across
+  every raider at once, novas with per-raider wedges. **Sweeps always catch everyone**: the titan winds both
   arms out wide and whips a full-turn spinning lash, the blade cascading
   around the arc platform by platform. It always runs gauntlet-style — all
   five in a row, no lobby between, until it's beaten or the whole squad is
