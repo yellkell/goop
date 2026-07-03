@@ -2485,10 +2485,10 @@ function drawColourTab(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | 
  *  bare AR (your real room), the papercraft desert, or the old factory. The
  *  quick passthrough disc above the BATTLE panel flips between AR and whatever
  *  you last chose here. */
-const ARENA_OPTS: Array<{ env: AppEnvironment; label: string; desc: string; action: MenuAction }> = [
-  { env: 'ar', label: 'PASSTHROUGH', desc: 'your real room — nothing painted over it', action: 'env-ar' },
-  { env: 'desert', label: 'DESERT', desc: 'papercraft dunes under an open sky', action: 'env-desert' },
-  { env: 'factory', label: 'OLD FACTORY', desc: 'a grimy ironworks pit', action: 'env-factory' },
+const ARENA_OPTS: Array<{ env: AppEnvironment; label: string; action: MenuAction }> = [
+  { env: 'ar', label: 'PASSTHROUGH', action: 'env-ar' },
+  { env: 'desert', label: 'DESERT', action: 'env-desert' },
+  { env: 'factory', label: 'OLD FACTORY', action: 'env-factory' },
 ];
 const ARENA_ROW = { x: 40, y0: 168, w: PAN_W - 80, h: 96, step: 112 };
 
@@ -2511,18 +2511,15 @@ function drawArenaTab(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | n
     ctx.fillStyle = on ? UI.coolBright : UI.steelDim;
     ctx.fillRect(r.x + 14, r.y + r.h / 2 - 16, 6, 32);
     ctx.textAlign = 'left';
-    ctx.textBaseline = 'alphabetic';
+    ctx.textBaseline = 'middle';
     ctx.font = stencilFont(30);
     ctx.fillStyle = on ? UI.coolBright : hot ? UI.amber : UI.text;
-    ctx.fillText(opt.label, r.x + 36, r.y + 44);
-    ctx.font = '600 19px system-ui, sans-serif';
-    ctx.fillStyle = UI.textDim;
-    ctx.fillText(opt.desc, r.x + 36, r.y + 74);
+    ctx.fillText(opt.label, r.x + 36, r.y + r.h / 2);
     if (on) {
       ctx.font = '800 17px system-ui, sans-serif';
       ctx.fillStyle = UI.coolBright;
       ctx.textAlign = 'right';
-      ctx.fillText('EQUIPPED', r.x + r.w - 24, r.y + 44);
+      ctx.fillText('EQUIPPED', r.x + r.w - 24, r.y + r.h / 2);
     }
   });
   ctx.textAlign = 'center';
