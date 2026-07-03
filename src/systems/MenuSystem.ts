@@ -598,12 +598,28 @@ export class MenuSystem extends createSystem({}) {
       case 'lb-xp':
         setLeaderboardTab('xp');
         break;
-      case 'lb-arcade':
-        // ARCADE is just the AIM board now (the brawls live under BATTLE).
-        setLeaderboardTab('training');
+      case 'lb-arcade': {
+        // ARCADE opens onto its currently-showing sub-board, else AIM.
+        const arcadeSubs = ['training', 'gauntlet', 'hardcore', 'raid', 'raidHardcore'] as const;
+        setLeaderboardTab(
+          (arcadeSubs as readonly string[]).includes(leaderboard.tab) ? leaderboard.tab : 'training',
+        );
         break;
+      }
       case 'lb-training':
         setLeaderboardTab('training');
+        break;
+      case 'lb-gauntlet':
+        setLeaderboardTab('gauntlet');
+        break;
+      case 'lb-hardcore':
+        setLeaderboardTab('hardcore');
+        break;
+      case 'lb-raid':
+        setLeaderboardTab('raid');
+        break;
+      case 'lb-raidhc':
+        setLeaderboardTab('raidHardcore');
         break;
       case 'lb-duo':
         setLeaderboardTab('duo');

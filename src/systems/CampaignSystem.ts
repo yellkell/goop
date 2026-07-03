@@ -64,7 +64,7 @@ import { app, saveStats } from '../menu/appState.js';
 import { ownPlatform, platformOwned, setPlatformSkin } from '../menu/customization.js';
 import { mesh } from '../net/mesh.js';
 import type { PeerMessage } from '../net/protocol.js';
-import { reportCampaign } from '../net/leaderboard.js';
+import { myName, reportCampaign, reportRun } from '../net/leaderboard.js';
 import { announce } from '../audio/announcer.js';
 import { playCash } from '../audio/cash.js';
 import { BOSS_BATTLE_VOLUME, playVictory, startBattleMusic, startFinaleTrack, stopBattleTrack } from '../audio/battleMusic.js';
@@ -342,6 +342,12 @@ export class CampaignSystem extends createSystem({
     const seats: number[] = [];
     for (let s = 0; s < mesh.occupants.length; s++) if (mesh.occupants[s]) seats.push(s);
     return seats.length ? seats : [mesh.mySeat];
+  }
+
+  /** Every raider's callsign for the run board (mine + the mesh names). */
+  private squadNames(): string[] {
+    if (!this.raid()) return [myName()];
+    return this.occupiedSeats().map((s) => (s === mesh.mySeat ? myName() : mesh.names[s] || `RAIDER ${s + 1}`));
   }
 
   /** Seats with a living fighter on them (hp > 0). */
@@ -2112,16 +2118,23 @@ export class CampaignSystem extends createSystem({
     }
 
     if (this.raid() && lastStage) {
-      // Both of GOLIATH's lives spent: the raid is BEATEN.
+      // Both of GOLIATH's lives spent: the raid is BEATEN. The HOST posts the
+      // ONE run record for the whole squad — every raider's callsign on it,
+      // the group ranked together on their collective fight time.
+      if (this.isAuthority()) {
+        reportRun(app.raidHardcore ? 'raidHardcore' : 'raid', this.runClock, this.squadNames());
+      }
       this.hud.title(
         'RAID CLEARED',
-        app.raidHardcore ? 'HARDCORE' : crowned ? 'CHAMPION PLATFORM UNLOCKED' : '',
+        app.raidHardcore ? `HARDCORE · ${fmtRunTime(this.runClock)}` : fmtRunTime(this.runClock),
         '#d9a832',
       );
     } else if (run && lastStage) {
-      // The run is complete: the clock goes on the board.
+      // The run is complete: the clock goes on the boards — the local best on
+      // the line-up buttons AND the online run-time board.
       const hardcore = app.campaignMode === 'hardcore';
       const record = recordRunTime(hardcore, this.runClock);
+      reportRun(hardcore ? 'hardcore' : 'gauntlet', this.runClock, [myName()]);
       if (!hardcore && !campaignProgress.hardcoreUnlocked) {
         campaignProgress.hardcoreUnlocked = true;
         saveCampaignProgress();

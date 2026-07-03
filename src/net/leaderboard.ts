@@ -35,10 +35,42 @@ export interface LbRow {
   note: string;
 }
 
-/** The score boards (RANKED / XP / the three ARCADE boards), plus a synthetic
- *  PROFILE face (no rows). The ARCADE tab fronts AIM (training) / 2v2 / FFA. */
-export type LeaderboardTab = 'ranked' | 'xp' | 'training' | 'duo' | 'ffa' | 'profile';
+/** The score boards (BATTLE's 1v1 / 2v2 / ffa, XP), the ARCADE boards (AIM
+ *  training plus the four PvE RUN-TIME boards) and a synthetic PROFILE face. */
+export type LeaderboardTab =
+  | 'ranked'
+  | 'xp'
+  | 'training'
+  | 'duo'
+  | 'ffa'
+  | 'gauntlet'
+  | 'hardcore'
+  | 'raid'
+  | 'raidHardcore'
+  | 'profile';
+/** Score/count boards (one numeric value per PLAYER doc). */
 type DataTab = 'ranked' | 'xp' | 'training' | 'duo' | 'ffa';
+/** RUN-TIME boards — each row is one completed RUN (a squad + a clock), not a
+ *  player. Ranked by lowest cumulative fight time. */
+export type RunTab = 'gauntlet' | 'hardcore' | 'raid' | 'raidHardcore';
+const RUN_TABS: RunTab[] = ['gauntlet', 'hardcore', 'raid', 'raidHardcore'];
+/** Firestore collection per run board (separate collections keep the query a
+ *  plain single-field orderBy — no composite index needed). */
+const RUN_COLLECTION: Record<RunTab, string> = {
+  gauntlet: 'runGauntlet',
+  hardcore: 'runHardcore',
+  raid: 'runRaid',
+  raidHardcore: 'runRaidHardcore',
+};
+
+/** One entry on a run board: the whole squad (one name for a solo gauntlet,
+ *  up to four for a raid) and the run's cumulative fight-time clock. */
+export interface RunRow {
+  names: string[];
+  seconds: number;
+  /** My callsign is on this run — the UI highlights it. */
+  me: boolean;
+}
 
 const LEADERBOARD_FETCH_LIMIT = 50;
 /** Rows the lobby board shows at once — the full top 10, no scrolling needed
@@ -54,7 +86,21 @@ export const leaderboard = {
   training: [] as LbRow[],
   duo: [] as LbRow[],
   ffa: [] as LbRow[],
-  scroll: { ranked: 0, xp: 0, training: 0, duo: 0, ffa: 0 } as Record<DataTab, number>,
+  gauntlet: [] as RunRow[],
+  hardcore: [] as RunRow[],
+  raid: [] as RunRow[],
+  raidHardcore: [] as RunRow[],
+  scroll: {
+    ranked: 0,
+    xp: 0,
+    training: 0,
+    duo: 0,
+    ffa: 0,
+    gauntlet: 0,
+    hardcore: 0,
+    raid: 0,
+    raidHardcore: 0,
+  } as Record<DataTab | RunTab, number>,
   status: FIREBASE_ENABLED ? 'loading…' : 'leaderboard offline',
   /** Whose profile the PROFILE face shows; null = your own. */
   viewRow: null as LbRow | null,
@@ -107,23 +153,40 @@ function isDataTab(tab: LeaderboardTab): tab is DataTab {
   return tab === 'ranked' || tab === 'xp' || tab === 'training' || tab === 'duo' || tab === 'ffa';
 }
 
+export function isRunTab(tab: LeaderboardTab): tab is RunTab {
+  return tab === 'gauntlet' || tab === 'hardcore' || tab === 'raid' || tab === 'raidHardcore';
+}
+
 export function leaderboardRows(tab: LeaderboardTab = leaderboard.tab): LbRow[] {
   return isDataTab(tab) ? leaderboard[tab] : [];
 }
 
-/** Current scroll offset for the active board (0 on the profile face). */
-export function boardScroll(): number {
-  return isDataTab(leaderboard.tab) ? leaderboard.scroll[leaderboard.tab] : 0;
+/** The rows of a run board (empty for any non-run tab). */
+export function runRows(tab: LeaderboardTab = leaderboard.tab): RunRow[] {
+  return isRunTab(tab) ? leaderboard[tab] : [];
 }
 
-export function clampLeaderboardScroll(tab: DataTab): void {
-  const max = Math.max(0, leaderboardRows(tab).length - LEADERBOARD_VISIBLE_ROWS);
+/** Rows currently on the active board — either shape, for scroll clamping. */
+function activeRowCount(tab: LeaderboardTab): number {
+  if (isDataTab(tab)) return leaderboard[tab].length;
+  if (isRunTab(tab)) return leaderboard[tab].length;
+  return 0;
+}
+
+/** Current scroll offset for the active board (0 on the profile face). */
+export function boardScroll(): number {
+  const t = leaderboard.tab;
+  return isDataTab(t) || isRunTab(t) ? leaderboard.scroll[t] : 0;
+}
+
+export function clampLeaderboardScroll(tab: DataTab | RunTab): void {
+  const max = Math.max(0, activeRowCount(tab) - LEADERBOARD_VISIBLE_ROWS);
   leaderboard.scroll[tab] = Math.max(0, Math.min(max, leaderboard.scroll[tab]));
 }
 
 export function setLeaderboardTab(tab: LeaderboardTab): void {
   leaderboard.tab = tab;
-  if (isDataTab(tab)) clampLeaderboardScroll(tab);
+  if (isDataTab(tab) || isRunTab(tab)) clampLeaderboardScroll(tab);
 }
 
 /** Open a player's profile face (null = your own). */
@@ -134,7 +197,7 @@ export function setProfileView(row: LbRow | null): void {
 
 export function scrollLeaderboard(delta: number): boolean {
   const tab = leaderboard.tab;
-  if (!isDataTab(tab)) return false;
+  if (!isDataTab(tab) && !isRunTab(tab)) return false;
   const before = leaderboard.scroll[tab];
   leaderboard.scroll[tab] += delta;
   clampLeaderboardScroll(tab);
@@ -314,18 +377,74 @@ export async function refreshLeaderboard(force = false): Promise<void> {
         // real bout); XP/training boards show anyone who's earned anything.
         .filter((r) => (field === 'elo' ? r.value !== 1000 : r.value > 0));
     };
-    [leaderboard.ranked, leaderboard.xp, leaderboard.training, leaderboard.duo, leaderboard.ffa] = await Promise.all([
+    // RUN boards: each is its own collection of finished runs, ranked by the
+    // lowest cumulative fight time. A row is a whole squad, so "me" is my
+    // callsign appearing anywhere in the run's name list.
+    // Each run board is pulled in its OWN try so a missing collection or a
+    // rules gap on the run boards degrades THEM alone — the score boards
+    // (which hit the known-open `players` collection) keep working.
+    const pullRuns = async (tab: RunTab): Promise<RunRow[]> => {
+      try {
+        const col = fs.collection(db, RUN_COLLECTION[tab]);
+        const snap = await fs.getDocs(fs.query(col, fs.orderBy('seconds', 'asc'), fs.limit(LEADERBOARD_FETCH_LIMIT)));
+        return snap.docs.map((d) => {
+          const names = Array.isArray(d.data().names) ? (d.data().names as unknown[]).map(String) : [];
+          return { names, seconds: (d.data().seconds as number) ?? 0, me: names.includes(profile.name) };
+        });
+      } catch {
+        return leaderboard[tab]; // keep whatever we last had
+      }
+    };
+    const [rk, xp, tr, du, ff, gt, hc, rd, rh] = await Promise.all([
       pull('elo'),
       pull('xp'),
       pull('training'),
       pull('duo'),
       pull('ffa'),
+      pullRuns('gauntlet'),
+      pullRuns('hardcore'),
+      pullRuns('raid'),
+      pullRuns('raidHardcore'),
     ]);
-    (['ranked', 'xp', 'training', 'duo', 'ffa'] as const).forEach(clampLeaderboardScroll);
+    leaderboard.ranked = rk;
+    leaderboard.xp = xp;
+    leaderboard.training = tr;
+    leaderboard.duo = du;
+    leaderboard.ffa = ff;
+    leaderboard.gauntlet = gt;
+    leaderboard.hardcore = hc;
+    leaderboard.raid = rd;
+    leaderboard.raidHardcore = rh;
+    (['ranked', 'xp', 'training', 'duo', 'ffa', ...RUN_TABS] as const).forEach(clampLeaderboardScroll);
     leaderboard.status = '';
   } catch {
     leaderboard.status = 'leaderboard unreachable';
   }
+}
+
+/**
+ * Post a finished RUN to its board: one entry per completed run, ranked by the
+ * lowest cumulative fight-time clock. `names` is the whole squad (one name for
+ * a solo gauntlet/hardcore, up to four for a raid — the raid HOST posts it once
+ * for the group so the squad ranks together on their run). No-op offline.
+ */
+export function reportRun(tab: RunTab, seconds: number, names: string[]): void {
+  const clean = names.map((n) => String(n).slice(0, 12)).filter(Boolean).slice(0, 4);
+  if (!clean.length) return;
+  void (async () => {
+    const h = await firestore();
+    if (!h) return;
+    try {
+      await h.fs.addDoc(h.fs.collection(h.db, RUN_COLLECTION[tab]), {
+        names: clean,
+        seconds: Math.max(0, Math.round(seconds * 10) / 10),
+        at: h.fs.serverTimestamp(),
+      });
+      await refreshLeaderboard(true);
+    } catch {
+      /* unreachable — the board just won't carry this run */
+    }
+  })();
 }
 
 function writeMine(fields: Record<string, unknown>): void {

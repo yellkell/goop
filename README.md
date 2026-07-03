@@ -66,7 +66,11 @@ in-your-face boxing feel.
   RUN** — all five back to back on a fight-time-only clock, best times on
   the line-up's boards — and finishing it unlocks **HARDCORE** (no healing,
   its own board). The in-fight HUD is floating text and bare bars — no
-  boards, no lectures.
+  boards, no lectures. The lobby **leaderboard's ARCADE tab** carries the
+  online PvE run-time boards — **GAUNTLET / HARDCORE / RAID / RAID HC**,
+  each ranking whole runs by the shortest cumulative fight time (raids show
+  the whole squad on one row, the group ranked together on their run) —
+  alongside the AIM board.
 - **RAID** — the four-player group campaign, right under CAMPAIGN in the
   ARCADE panel. Matchmaking works like RANKED: hosting raises a **visible
   lobby** other boxers join from a browser; the host holds a **HARDCORE**

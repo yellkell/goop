@@ -38,9 +38,11 @@ import { ATTACH, GAME_TITLE, hueToColor } from '../config.js';
 import {
   LEADERBOARD_VISIBLE_ROWS,
   boardScroll,
+  isRunTab,
   leaderboard,
   leaderboardRows,
   myProfileRow,
+  runRows,
   type LeaderboardTab,
 } from '../net/leaderboard.js';
 import { gazette, type GazetteArticle } from '../net/gazette.js';
@@ -131,6 +133,11 @@ export type MenuAction =
   | 'lb-training'
   | 'lb-duo'
   | 'lb-ffa'
+  /** ARCADE PvE run-time sub-boards. */
+  | 'lb-gauntlet'
+  | 'lb-hardcore'
+  | 'lb-raid'
+  | 'lb-raidhc'
   | 'lb-profile'
   | `lb-row-${number}`
   | 'edit-note'
@@ -754,12 +761,12 @@ const BOARD_ROW_Y0 = 164;
 const BOARD_ROW_STEP = 30;
 
 /** Top row: BATTLE / XP / ARCADE / PROFILE. BATTLE fronts the three live-fight
- *  boards (1v1 / 2v2 / ffa), so it lights for any of ranked/duo/ffa. ARCADE is
- *  just AIM TRAINING now (the brawls moved under BATTLE). */
+ *  boards (1v1 / 2v2 / ffa); ARCADE fronts AIM plus the four PvE run-time
+ *  boards. Each lights for any of its own sub-tabs. */
 const BOARD_TABS: Array<[string, MenuAction, (t: LeaderboardTab) => boolean]> = [
   ['BATTLE', 'lb-battle', (t) => t === 'ranked' || t === 'duo' || t === 'ffa'],
   ['XP', 'lb-xp', (t) => t === 'xp'],
-  ['ARCADE', 'lb-arcade', (t) => t === 'training'],
+  ['ARCADE', 'lb-arcade', (t) => ARCADE_SUB_TABS.includes(t as LeaderboardTab)],
   ['PROFILE', 'lb-profile', (t) => t === 'profile'],
 ];
 const BOARD_TAB_W = (BW - 96 - 48) / 4;
@@ -770,12 +777,24 @@ const BATTLE_SUBS: Array<[LeaderboardTab, string, MenuAction]> = [
   ['duo', '2V2', 'lb-duo'],
   ['ffa', 'FFA', 'lb-ffa'],
 ];
-const BATTLE_SUB_Y = 140;
-const BATTLE_SUB_H = 38;
-const BATTLE_SUB_W = (BW - 96 - 32) / 3;
+/** ARCADE sub-tabs: AIM plus the four PvE run-time boards. */
+const ARCADE_SUBS: Array<[LeaderboardTab, string, MenuAction]> = [
+  ['training', 'AIM', 'lb-training'],
+  ['gauntlet', 'GAUNTLET', 'lb-gauntlet'],
+  ['hardcore', 'HARDCORE', 'lb-hardcore'],
+  ['raid', 'RAID', 'lb-raid'],
+  ['raidHardcore', 'RAID HC', 'lb-raidhc'],
+];
+const ARCADE_SUB_TABS = ARCADE_SUBS.map(([id]) => id);
+const SUB_Y = 140;
+const SUB_H = 38;
 
-function battleActive(): boolean {
-  return leaderboard.tab === 'ranked' || leaderboard.tab === 'duo' || leaderboard.tab === 'ffa';
+/** The sub-tab set for the active top tab (BATTLE or ARCADE), or null. */
+function activeSubs(): Array<[LeaderboardTab, string, MenuAction]> | null {
+  const t = leaderboard.tab;
+  if (t === 'ranked' || t === 'duo' || t === 'ffa') return BATTLE_SUBS;
+  if (ARCADE_SUB_TABS.includes(t)) return ARCADE_SUBS;
+  return null;
 }
 
 /** Behind — the Firebase leaderboard: BATTLE / XP / ARCADE boards + PROFILE. */
@@ -798,33 +817,88 @@ function drawBoard(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null
     x += BOARD_TAB_W + 16;
   }
 
-  // BATTLE sub-tabs (1V1 / 2V2 / FFA) appear only under the BATTLE tab.
-  if (battleActive()) {
+  // Sub-tab row (BATTLE's three or ARCADE's five) under the active top tab.
+  const subs = activeSubs();
+  if (subs) {
+    const gap = 12;
+    const subW = (BW - 96 - (subs.length - 1) * gap) / subs.length;
     let sx = 48;
-    for (const [id, label, action] of BATTLE_SUBS) {
+    for (const [id, label, action] of subs) {
       const active = leaderboard.tab === id;
       const hot = hoverAction === action;
-      plate(ctx, sx, BATTLE_SUB_Y, BATTLE_SUB_W, BATTLE_SUB_H, {
+      plate(ctx, sx, SUB_Y, subW, SUB_H, {
         cut: 8,
         fill: active ? 'rgba(79,183,255,0.18)' : hot ? 'rgba(255,176,0,0.12)' : 'rgba(150,150,170,0.08)',
         stroke: active ? UI.cool : hot ? UI.amber : UI.steelDim,
         rivets: false,
       });
-      ctx.font = '700 17px system-ui, sans-serif';
+      // Shrink the label to fit its plate (RAID HC / HARDCORE are wide).
+      let px = 17;
+      ctx.font = `700 ${px}px system-ui, sans-serif`;
+      while (px > 10 && ctx.measureText(label).width > subW - 12) {
+        px -= 1;
+        ctx.font = `700 ${px}px system-ui, sans-serif`;
+      }
       ctx.textAlign = 'center';
       ctx.fillStyle = active ? UI.cool : hot ? UI.amber : UI.textDim;
-      ctx.fillText(label, sx + BATTLE_SUB_W / 2, BATTLE_SUB_Y + BATTLE_SUB_H / 2 + 6);
-      sx += BATTLE_SUB_W + 16;
+      ctx.fillText(label, sx + subW / 2, SUB_Y + SUB_H / 2 + 6);
+      sx += subW + gap;
     }
   }
 
   if (leaderboard.tab === 'profile') drawProfile(ctx, hoverAction);
+  else if (isRunTab(leaderboard.tab)) drawRunRows(ctx);
   else drawBoardRows(ctx, hoverAction);
 }
 
-/** Row column origin — pushed down when the BATTLE sub-tab row is showing. */
+/** Row column origin — pushed down when a sub-tab row is showing. */
 function boardRowY0(): number {
-  return battleActive() ? BOARD_ROW_Y0 + BATTLE_SUB_H + 8 : BOARD_ROW_Y0;
+  return activeSubs() ? BOARD_ROW_Y0 + SUB_H + 8 : BOARD_ROW_Y0;
+}
+
+/** A run board — one row per completed run: rank, the whole squad, the clock
+ *  (lowest time on top). Names are dimmed small; the time is the headline. */
+function drawRunRows(ctx: CanvasRenderingContext2D): void {
+  const rows = runRows();
+  const offset = boardScroll();
+  const rowY0 = boardRowY0();
+  rows.slice(offset, offset + LEADERBOARD_VISIBLE_ROWS).forEach((r, i) => {
+    const y = rowY0 + i * BOARD_ROW_STEP;
+    if (r.me) {
+      ctx.fillStyle = 'rgba(255,176,0,0.10)';
+      ctx.fillRect(38, y - 16, BW - 76, BOARD_ROW_STEP - 3);
+    }
+    ctx.textAlign = 'left';
+    ctx.font = '600 22px system-ui, sans-serif';
+    ctx.fillStyle = r.me ? UI.emberBright : UI.textDim;
+    ctx.fillText(`${offset + i + 1}.`, 48, y);
+    // The squad — every runner on the row, shrunk to share the middle.
+    const names = r.names.join('  ·  ') || '—';
+    let px = 20;
+    ctx.font = `600 ${px}px system-ui, sans-serif`;
+    const nameMax = BW - 96 - 150;
+    while (px > 11 && ctx.measureText(names).width > nameMax) {
+      px -= 1;
+      ctx.font = `600 ${px}px system-ui, sans-serif`;
+    }
+    ctx.fillStyle = r.me ? UI.text : 'rgba(232,236,242,0.82)';
+    ctx.fillText(names, 90, y);
+    // The clock — the headline, right-aligned.
+    ctx.textAlign = 'right';
+    ctx.font = '700 22px system-ui, sans-serif';
+    ctx.fillStyle = r.me ? UI.emberBright : UI.amber;
+    ctx.fillText(fmtRunTime(r.seconds), BW - 56, y);
+  });
+  ctx.textAlign = 'center';
+  if (!rows.length) {
+    ctx.fillStyle = UI.textDim;
+    ctx.font = '600 22px system-ui, sans-serif';
+    ctx.fillText(leaderboard.status || 'no runs yet — set the pace', BW / 2, rowY0 + 4 * BOARD_ROW_STEP);
+  } else {
+    ctx.fillStyle = UI.steelDim;
+    ctx.font = '600 18px system-ui, sans-serif';
+    ctx.fillText('ranked by the whole run’s fight time', BW / 2, 514);
+  }
 }
 
 function drawBoardRows(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
@@ -950,10 +1024,13 @@ function hitBoard(u: number, v: number): MenuAction | null {
     const i = Math.max(0, Math.min(3, Math.floor((x - 48) / (BOARD_TAB_W + 16))));
     return BOARD_TABS[i][1];
   }
-  // BATTLE sub-tabs.
-  if (battleActive() && y >= BATTLE_SUB_Y - 4 && y <= BATTLE_SUB_Y + BATTLE_SUB_H + 4) {
-    const i = Math.max(0, Math.min(2, Math.floor((x - 48) / (BATTLE_SUB_W + 16))));
-    return BATTLE_SUBS[i][2];
+  // Sub-tabs (BATTLE's three or ARCADE's five).
+  const subs = activeSubs();
+  if (subs && y >= SUB_Y - 4 && y <= SUB_Y + SUB_H + 4) {
+    const gap = 12;
+    const subW = (BW - 96 - (subs.length - 1) * gap) / subs.length;
+    const i = Math.max(0, Math.min(subs.length - 1, Math.floor((x - 48) / (subW + gap))));
+    return subs[i][2];
   }
   if (leaderboard.tab === 'profile') {
     if (y >= 482 && y <= 536) {
@@ -962,6 +1039,8 @@ function hitBoard(u: number, v: number): MenuAction | null {
     }
     return null;
   }
+  // Run boards aren't players — no profile to open on a row tap.
+  if (isRunTab(leaderboard.tab)) return null;
   const rowY0 = boardRowY0();
   if (y >= rowY0 - 15 && y <= rowY0 + LEADERBOARD_VISIBLE_ROWS * BOARD_ROW_STEP) {
     const n = Math.floor((y - (rowY0 - 15)) / BOARD_ROW_STEP);
@@ -1925,10 +2004,6 @@ function drawCampaign(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | n
     hoverAction === 'campaign-hardcore',
   );
 
-  ctx.textAlign = 'left';
-  ctx.font = '600 22px system-ui, sans-serif';
-  ctx.fillStyle = UI.textDim;
-  ctx.fillText('first fell pays ×2', 48, CAMP_CLOSE.y + CAMP_CLOSE.h / 2 + 1);
   ctx.textAlign = 'center';
   buttonPlate(ctx, CAMP_CLOSE.x, CAMP_CLOSE.y, CAMP_CLOSE.w, CAMP_CLOSE.h, 'CLOSE', UI.amber, hoverAction === 'campaign-close');
 }
