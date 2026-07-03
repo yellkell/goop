@@ -20,6 +20,10 @@ import {
 } from 'three';
 import { stencilFont } from '../ui/industrial.js';
 
+/** The Iron Sharpens Iron sign art (public/signs/); exported so callers name it
+ *  once. buildSign letterbox-fits it, so its box just caps the size. */
+export const IRON_SHARPENS_SIGN = 'signs/iron-sharpens-iron.png';
+
 /** A neon IRON BALLS plate drawn on canvas — the stand-in until the PNG lands. */
 function fallbackTexture(): CanvasTexture {
   const w = 1024;
@@ -77,9 +81,50 @@ function fallbackTexture(): CanvasTexture {
   return tex;
 }
 
-/** A sign plane: neon fallback now, real PNG swapped in once it loads. */
-export function buildSign(url: string, wMeters: number, hMeters: number): Mesh {
-  const mat = new MeshBasicMaterial({ map: fallbackTexture(), transparent: true });
+/**
+ * A neon "Iron Sharpens Iron" script plate — the stand-in until its PNG lands.
+ * Three cursive lines, blue / red / blue with an outer glow, on transparent.
+ */
+export function ironSharpensFallback(): CanvasTexture {
+  const w = 900;
+  const h = 900;
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d')!;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const line = (text: string, y: number, px: number, tube: string, core: string): void => {
+    ctx.font = `italic 700 ${px}px "Brush Script MT", "Segoe Script", "Snell Roundhand", cursive`;
+    ctx.fillStyle = tube;
+    ctx.shadowColor = tube;
+    ctx.shadowBlur = 44;
+    ctx.fillText(text, w / 2, y);
+    ctx.shadowBlur = 16;
+    ctx.fillText(text, w / 2, y); // a second pass deepens the glow
+    ctx.fillStyle = core; // bright inner tube
+    ctx.shadowBlur = 6;
+    ctx.fillText(text, w / 2, y);
+    ctx.shadowBlur = 0;
+  };
+  line('Iron', 210, 200, '#2b7bff', '#dfeaff');
+  line('Sharpens', 450, 176, '#ff2f2f', '#ffe0cf');
+  line('Iron', 690, 200, '#2b7bff', '#dfeaff');
+  const tex = new CanvasTexture(canvas);
+  tex.colorSpace = SRGBColorSpace;
+  tex.minFilter = LinearFilter;
+  return tex;
+}
+
+/** A sign plane: neon fallback now, real PNG swapped in once it loads. `fallback`
+ *  overrides the default IRON BALLS stand-in (e.g. the Iron Sharpens Iron sign). */
+export function buildSign(
+  url: string,
+  wMeters: number,
+  hMeters: number,
+  fallback: () => CanvasTexture = fallbackTexture,
+): Mesh {
+  const mat = new MeshBasicMaterial({ map: fallback(), transparent: true });
   const mesh = new Mesh(new PlaneGeometry(wMeters, hMeters), mat);
   mesh.name = 'pub-sign';
   new TextureLoader().load(

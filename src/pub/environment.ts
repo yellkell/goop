@@ -37,7 +37,7 @@ import { diamondPlateTextures } from '../materials/diamondPlate.js';
 import { octagonSlab } from '../arena/octagon.js';
 import { BOOTH_CENTRES, FIGHT, JUKEBOX, PUB } from './config.js';
 import { Panel } from './panel.js';
-import { buildPoster, buildSign } from './signs.js';
+import { buildPoster, buildSign, ironSharpensFallback, IRON_SHARPENS_SIGN } from './signs.js';
 import type { PubRefs } from './state.js';
 import { corkTexture, dartboardTexture, fabricTexture, steelWallTexture, woodTexture } from './textures.js';
 
@@ -331,6 +331,13 @@ export function buildPub(world: World): PubRefs {
   const sign = buildSign('signs/nixiepng.png', 1.5, 1.0);
   sign.position.set(0, 1.9, -D + 0.03);
   root.add(sign);
+
+  // The neon "IRON SHARPENS IRON" motto, high on the EAST wall (long + clear),
+  // facing back across the pub room — the house creed over the drinks.
+  const creed = buildSign(IRON_SHARPENS_SIGN, 1.7, 1.7, ironSharpensFallback);
+  creed.position.set(W - 0.04, 2.75, 0);
+  creed.rotation.y = -Math.PI / 2; // faces −x, into the room
+  root.add(creed);
 
   // Flat-screen TV hung over the bar (off to the bar's west end so it clears the
   // central pub sign), facing into the room. TvSystem paints the live Discord
@@ -1019,6 +1026,14 @@ function buildFightHall(root: Group): {
   fightDisplay.mesh.position.set(hall.minX + 0.14, 1.95, 0);
   fightDisplay.mesh.rotation.y = Math.PI / 2;
   root.add(fightDisplay.mesh);
+
+  // The same "IRON SHARPENS IRON" creed watches the pit too — high on the
+  // NORTH wall of the fight hall, centred over the cage, facing the crowd.
+  const hallCx = (hall.minX + hall.maxX) / 2;
+  const hallCreed = buildSign(IRON_SHARPENS_SIGN, 2.6, 2.6, ironSharpensFallback);
+  hallCreed.position.set(hallCx, 3.15, hall.minZ + 0.05);
+  hallCreed.rotation.y = 0; // north wall faces +z, into the hall
+  root.add(hallCreed);
 
   // East: above the door you came in by, facing into the hall (−x).
   const doorMidZ = (FIGHT.door.z0 + FIGHT.door.z1) / 2;
