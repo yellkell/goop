@@ -332,11 +332,11 @@ export function buildPub(world: World): PubRefs {
   sign.position.set(0, 1.9, -D + 0.03);
   root.add(sign);
 
-  // The neon "IRON SHARPENS IRON" motto, high on the EAST wall (long + clear),
-  // facing back across the pub room — the house creed over the drinks.
+  // The neon "IRON SHARPENS IRON" motto — on the SOUTH wall, above and behind
+  // the booth seating (centred over the tables), hung low over the diners.
   const creed = buildSign(IRON_SHARPENS_SIGN, 1.7, 1.7, ironSharpensFallback);
-  creed.position.set(W - 0.04, 2.75, 0);
-  creed.rotation.y = -Math.PI / 2; // faces −x, into the room
+  creed.position.set(1.75, 2.05, D - 0.04);
+  creed.rotation.y = Math.PI; // faces −z, back across the room
   root.add(creed);
 
   // Flat-screen TV hung over the bar (off to the bar's west end so it clears the
@@ -1030,8 +1030,8 @@ function buildFightHall(root: Group): {
   // The same "IRON SHARPENS IRON" creed watches the pit too — high on the
   // NORTH wall of the fight hall, centred over the cage, facing the crowd.
   const hallCx = (hall.minX + hall.maxX) / 2;
-  const hallCreed = buildSign(IRON_SHARPENS_SIGN, 2.6, 2.6, ironSharpensFallback);
-  hallCreed.position.set(hallCx, 3.15, hall.minZ + 0.05);
+  const hallCreed = buildSign(IRON_SHARPENS_SIGN, 5.4, 3.7, ironSharpensFallback);
+  hallCreed.position.set(hallCx, 2.55, hall.minZ + 0.05);
   hallCreed.rotation.y = 0; // north wall faces +z, into the hall
   root.add(hallCreed);
 
