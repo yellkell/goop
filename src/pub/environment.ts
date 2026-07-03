@@ -972,15 +972,20 @@ function buildFightHall(root: Group): {
     const pedestal = new Mesh(new CylinderGeometry(0.08, 0.15, 1.16, 8), gunmetal(0.3));
     pedestal.position.set(px, 0.58, pz);
     root.add(pedestal);
-    // A short collar where the plate meets the post, so it reads as one unit.
-    const collar = new Mesh(new BoxGeometry(0.34, 0.1, 0.22), darkSteel());
-    collar.position.set(px, 1.12, pz);
+    // A collar bridging the post to the plate — reads as one unit. Sits a touch
+    // higher so the plate rides ABOVE it: the console's bottom text line used to
+    // fall into the band the collar/post occlude for a standing reader.
+    const collar = new Mesh(new BoxGeometry(0.34, 0.14, 0.22), darkSteel());
+    collar.position.set(px, 1.21, pz);
     root.add(collar);
     const panel = new Panel(0.76, 0.52);
-    panel.mesh.position.set(px, 1.34, pz);
+    // Lifted vs. the base (was 1.34) so the reclined plate's bottom edge — and
+    // its final line of text — clears the collar/pedestal in the sightline.
+    panel.mesh.position.set(px, 1.48, pz);
     // Face the approach from the door (east), reclined gently back toward a
-    // standing reader — lookAt keeps the plate square (no roll).
-    panel.mesh.lookAt(px + 2.4, 1.66, pz);
+    // standing reader — lookAt keeps the plate square (no roll). Same recline
+    // (+0.32 rise over 2.4 reach) as before, just raised with the plate.
+    panel.mesh.lookAt(px + 2.4, 1.8, pz);
     root.add(panel.mesh);
     // Give the screen real depth: a chunky steel slab behind it, matching the
     // panel's recline, so the tablet reads as a thick unit instead of a flat
