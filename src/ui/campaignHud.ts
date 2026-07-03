@@ -42,6 +42,8 @@ export interface CampaignHud {
   setBoss(name: string, accent: string, clock: string): void;
   /** The two bare bars (fractions 0..1). Boss bar wears the accent. */
   setBars(bossFrac: number, playerFrac: number, accent: string): void;
+  /** RAID: the other raiders' names + bars (empty array hides the readout). */
+  setSquad(rows: Array<{ name: string; frac: number }>): void;
   /** Big centre beat: title + one optional sub-line. Empty title clears. */
   title(text: string, sub: string, accent?: string): void;
 }
@@ -89,13 +91,20 @@ export function createCampaignHud(scene: Scene): CampaignHud {
   playerBar.mesh.position.set(0, 0.98, -1.1);
   playerBar.mesh.rotation.x = -0.55;
 
+  // The RAID squad readout: the other raiders' names + slim bars, floating
+  // off to your left where a glance takes them in without leaving the fight.
+  const squad = makeText(scene, 384, 224, 0.5);
+  squad.mesh.position.set(-0.72, 1.22, -1.05);
+  squad.mesh.rotation.y = 0.42;
+  squad.mesh.visible = false;
+
   // The centre beat text, big and unmissable, mid-gap at eye height.
   const centre = makeText(scene, 1024, 300, 2.1);
   centre.mesh.position.set(0, 1.9, -ARENA_GAP * 0.6);
 
   // makeText parents to the scene; re-parent under the group so one
   // visibility flag rules them all.
-  for (const t of [name, bossBar, playerBar, centre]) group.add(t.mesh);
+  for (const t of [name, bossBar, playerBar, squad, centre]) group.add(t.mesh);
   group.visible = false;
   scene.add(group);
 
@@ -142,6 +151,32 @@ export function createCampaignHud(scene: Scene): CampaignHud {
         segmentBar(ctx, 2, 6, w - 4, h - 12, playerFrac, UI.emberBright);
         playerBar.tex.needsUpdate = true;
       }
+    },
+
+    setSquad(rows) {
+      squad.mesh.visible = rows.length > 0;
+      if (!rows.length) {
+        squad.key = '';
+        return;
+      }
+      const key = rows.map((r) => `${r.name}|${Math.round(r.frac * 100)}`).join(';');
+      if (key === squad.key) return;
+      squad.key = key;
+      const { ctx, w } = squad;
+      ctx.clearRect(0, 0, w, squad.h);
+      rows.slice(0, 3).forEach((r, i) => {
+        const y = 18 + i * 72;
+        const down = r.frac <= 0;
+        ctx.textAlign = 'left';
+        ctx.font = '700 26px system-ui, sans-serif';
+        ctx.fillStyle = down ? 'rgba(232,53,42,0.9)' : UI.text;
+        ctx.shadowColor = 'rgba(0,0,0,0.8)';
+        ctx.shadowBlur = 8;
+        ctx.fillText(down ? `${r.name} · DOWN` : r.name, 8, y);
+        ctx.shadowBlur = 0;
+        segmentBar(ctx, 8, y + 14, w - 16, 20, Math.max(0, r.frac), down ? UI.danger : UI.emberBright);
+      });
+      squad.tex.needsUpdate = true;
     },
 
     title(text, sub, accent = UI.emberBright) {

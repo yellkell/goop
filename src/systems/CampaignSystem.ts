@@ -34,11 +34,12 @@ import {
   Object3D,
   PointLight,
 } from 'three';
-import { BOSSES, buildTitan, type AttackKind, type BossDef, type TitanRig } from '../campaign/bosses.js';
+import { BOSSES, buildTitan, raidBoss, type AttackKind, type BossDef, type TitanRig } from '../campaign/bosses.js';
 import {
   campaign,
   campaignProgress,
   fmtRunTime,
+  raidInbox,
   recordRunTime,
   saveCampaignProgress,
 } from '../campaign/campaignState.js';
@@ -56,13 +57,17 @@ import { Hitbox } from '../components/Hitbox.js';
 import { PlayerBodyPart } from '../components/PlayerBodyPart.js';
 import { match } from '../combat/matchState.js';
 import { applyRoster, fighterAt } from '../combat/setup.js';
+import { localIndexOf, peerPos, worldToPeer } from '../combat/layout.js';
+import { opponents } from '../combat/opponentBus.js';
 import { applyArenaLayout } from '../arena/arena.js';
 import { app, saveStats } from '../menu/appState.js';
 import { ownPlatform, platformOwned, setPlatformSkin } from '../menu/customization.js';
+import { mesh } from '../net/mesh.js';
+import type { PeerMessage } from '../net/protocol.js';
 import { reportCampaign } from '../net/leaderboard.js';
 import { announce } from '../audio/announcer.js';
 import { playCash } from '../audio/cash.js';
-import { BOSS_BATTLE_VOLUME, playVictory, startBattleMusic, stopBattleTrack } from '../audio/battleMusic.js';
+import { BOSS_BATTLE_VOLUME, playVictory, startBattleMusic, startFinaleTrack, stopBattleTrack } from '../audio/battleMusic.js';
 import { emberBurst } from '../fx/fire.js';
 import { spawnFireImpact } from '../fx/effects.js';
 import { feedback } from '../fx/feedback.js';
@@ -74,12 +79,18 @@ import {
   ARENA_GAP,
   CAMPAIGN,
   COMBAT,
+  MODE_LAYOUT,
   OCTAGON_HALF_DEPTH,
   OCTAGON_HALF_WIDTH,
+  RAID,
 } from '../config.js';
 
 
-type Phase = 'idle' | 'intro' | 'fight' | 'victory' | 'defeat';
+/** 'resurrect' is raid GOLIATH's second wind — fall, shake, rise, phase 2. */
+type Phase = 'idle' | 'intro' | 'fight' | 'victory' | 'defeat' | 'resurrect';
+
+/** rst wire codes for Phase (guests follow the host's machine). */
+const PHASE_CODE: Record<Phase, number> = { idle: 0, intro: 1, fight: 2, victory: 3, defeat: 4, resurrect: 5 };
 
 type Zone =
   | { kind: 'circle'; x: number; z: number; r: number }
@@ -97,6 +108,9 @@ type WeakSpot = 'head' | 'core' | 'low' | 'shoulderL' | 'shoulderR';
  *  KING's left (the lamp on YOUR right as you face him), so the circuit
  *  reads head → his left shoulder → core → his right shoulder → low. */
 const CROWN_RING: WeakSpot[] = ['head', 'shoulderL', 'core', 'shoulderR', 'low'];
+/** His second life walks it BACKWARD — low → right shoulder → core → left
+ *  shoulder → head. Raid only. */
+const REVERSE_RING: WeakSpot[] = [...CROWN_RING].reverse();
 
 interface ActiveAttack {
   kind: AttackKind;
@@ -118,6 +132,12 @@ interface ActiveAttack {
    * "THIS spot gets hit". Disposed at that zone's detonation.
    */
   markers: (Group | null)[];
+  /** RAID: which canonical seat this attack is aimed at (0 in solo). Zone
+   *  coordinates are in the TARGET's local frame; only the target judges
+   *  damage — everyone else renders. The DECREE hits every seat at once. */
+  seat: number;
+  /** Extra per-zone seats for the DECREE (one nova per platform). */
+  zoneSeats: number[];
 }
 
 /** One volley fireball in flight — dodge it, or put a fist in its path. */
@@ -127,6 +147,8 @@ interface VolleyShot {
   age: number;
   group: Group;
   trail: number;
+  /** The canonical seat this shot chases — only that client judges it. */
+  seat: number;
 }
 
 /** A short-lived strike visual driven by a closure. */
@@ -199,6 +221,21 @@ export class CampaignSystem extends createSystem({
   private introStep = 0;
   private outroStep = 0;
 
+  // --- RAID state ---------------------------------------------------------
+  /** The titan's OWN Health pool (used in every mode — in a raid slot 1 is a
+   *  real raider, so the boss can't borrow a fighter's pool any more). */
+  private bossEnt?: Entity;
+  /** GOLIATH's second life is live (raid finale — reverse crown, max enrage). */
+  private p2 = false;
+  /** Host: rst echo cadence + change detector for immediate re-sends. */
+  private stateTimer = 0;
+  private lastRstKey = '';
+  /** Guest: the last authoritative boss hp (local sims snap back to it). */
+  private syncedHp = 0;
+  /** Whose platform the titan squares up to (raid: the current target). */
+  private faceSeat = 0;
+  private lastTarget = -1;
+
   init(): void {
     this.hud = createCampaignHud(this.scene);
     this.light = new PointLight(0xffffff, 0, 16);
@@ -217,6 +254,7 @@ export class CampaignSystem extends createSystem({
     if (this.phase === 'idle') this.begin();
 
     this.t += delta;
+    if (this.raid()) this.raidNet(delta);
     this.updateStrikes(delta);
 
     switch (this.phase) {
@@ -229,6 +267,9 @@ export class CampaignSystem extends createSystem({
       case 'victory':
       case 'defeat':
         this.outro(delta);
+        break;
+      case 'resurrect':
+        this.resurrect(delta);
         break;
     }
 
@@ -243,10 +284,185 @@ export class CampaignSystem extends createSystem({
     return app.campaignMode !== 'single';
   }
 
+  // --- RAID plumbing -----------------------------------------------------------
+
+  private raid(): boolean {
+    return app.campaignMode === 'raid';
+  }
+
+  /** Solo campaigns are always their own authority; raids follow the mesh
+   *  host (which MIGRATES if the host's headset dies — see mesh.isHost). */
+  private isAuthority(): boolean {
+    return !this.raid() || mesh.isHost();
+  }
+
+  private mySeatId(): number {
+    return this.raid() ? mesh.mySeat : 0;
+  }
+
+  /** The titan's own Health pool — hitbox owner and the HUD's boss bar. */
+  private ensureBoss(): Entity {
+    if (!this.bossEnt) {
+      this.bossEnt = this.world.createTransformEntity(new Object3D(), { persistent: true });
+      this.bossEnt.addComponent(Health, { current: 100, max: 100 });
+    }
+    return this.bossEnt;
+  }
+
+  /** A TARGET-local point → my world (identity for my own seat). */
+  private seatPoint(seat: number, x: number, y: number, z: number, out: Vector3): Vector3 {
+    if (!this.raid() || seat === mesh.mySeat) return out.set(x, y, z);
+    return peerPos(out, seat, x, y, z);
+  }
+
+  /** How much a seat's local frame is yawed relative to mine (decal spin). */
+  private seatYawDelta(seat: number): number {
+    if (!this.raid() || seat === mesh.mySeat) return 0;
+    const canonical = MODE_LAYOUT[app.arcade];
+    return (canonical[seat]?.yaw ?? 0) - (canonical[mesh.mySeat]?.yaw ?? 0);
+  }
+
+  /** A seat's head position in MY world (mine tracked, theirs off the bus). */
+  private playerHeadOf(seat: number, out: Vector3): void {
+    if (!this.raid() || seat === mesh.mySeat) {
+      this.playerHead(out);
+      return;
+    }
+    const li = localIndexOf(seat);
+    if (li > 0) out.copy(opponents[li - 1].headPos);
+    else this.seatPoint(seat, 0, 1.6, 0, out);
+  }
+
+  /** Occupied raid seats (mine included in solo terms: [0]). */
+  private occupiedSeats(): number[] {
+    if (!this.raid()) return [0];
+    const seats: number[] = [];
+    for (let s = 0; s < mesh.occupants.length; s++) if (mesh.occupants[s]) seats.push(s);
+    return seats.length ? seats : [mesh.mySeat];
+  }
+
+  /** Seats with a living fighter on them (hp > 0). */
+  private aliveSeats(): number[] {
+    return this.occupiedSeats().filter((s) => {
+      const li = this.raid() ? localIndexOf(s) : 0;
+      const e = fighterAt(li < 0 ? 0 : li);
+      return (e?.getValue(Health, 'current') ?? 0) > 0;
+    });
+  }
+
+  /** GOLIATH crown tuning, phase- and mode-aware. */
+  private crownPerStop(): number {
+    return this.raid() ? RAID.crownPerStop : 1;
+  }
+
+  private crownLoopsNow(): number {
+    return this.p2 ? RAID.phase2Loops : CAMPAIGN.crownLoops;
+  }
+
+  private crownTargetHits(): number {
+    return CROWN_RING.length * this.crownLoopsNow() * this.crownPerStop();
+  }
+
+  /** Drain the raid wire; host echoes state; host watches for the squad wipe. */
+  private raidNet(delta: number): void {
+    for (const { seat, msg } of raidInbox.splice(0)) {
+      if (msg.k === 'rdmg' && this.isAuthority()) {
+        this.applyBossDamage(msg.spot, msg.pts);
+      } else if (msg.k === 'ratk' && seat !== mesh.mySeat) {
+        this.buildAttack(msg.kind, msg.seat, { x: msg.x, z: msg.z, y: msg.y, a: msg.a });
+      } else if (msg.k === 'rst' && !this.isAuthority()) {
+        this.applyRaidState(msg);
+      }
+    }
+
+    if (!this.isAuthority()) return;
+    // Host: echo the authoritative boss state on a cadence and on any change.
+    this.stateTimer -= delta;
+    const rst = this.buildRst();
+    const key = `${rst.ph}|${rst.stage}|${rst.hp}|${rst.cyc}|${rst.hits}|${rst.enr}|${rst.p2}`;
+    if (this.stateTimer <= 0 || key !== this.lastRstKey) {
+      this.stateTimer = RAID.stateEcho;
+      this.lastRstKey = key;
+      mesh.send(rst);
+    }
+    // The wipe: every raider down mid-fight ends the run for everyone.
+    if (this.phase === 'fight' && this.aliveSeats().length === 0) this.toDefeat();
+  }
+
+  private buildRst(): Extract<PeerMessage, { k: 'rst' }> {
+    const boss = this.ensureBoss();
+    return {
+      k: 'rst',
+      ph: PHASE_CODE[this.phase],
+      t: this.t,
+      stage: app.campaignStage,
+      hp: boss.getValue(Health, 'current') ?? 0,
+      max: boss.getValue(Health, 'max') ?? 1,
+      cyc: this.cycleIdx,
+      hits: this.hitsOnPoint,
+      enr: this.enraged ? 1 : 0,
+      p2: this.p2 ? 1 : 0,
+    };
+  }
+
+  /** Guest: adopt the host's authoritative boss state (pattern, hp, phase). */
+  private applyRaidState(msg: Extract<PeerMessage, { k: 'rst' }>): void {
+    // A stage change first — the host advanced to the next titan.
+    if (msg.stage !== app.campaignStage && msg.stage < BOSSES.length) {
+      app.campaignStage = msg.stage;
+      this.stageSetup(!app.raidHardcore, 'the next titan approaches');
+    }
+    this.p2 = msg.p2 === 1;
+    this.cycleIdx = msg.cyc;
+    this.hitsOnPoint = msg.hits;
+    this.enraged = msg.enr === 1;
+    this.syncedHp = msg.hp;
+    const boss = this.ensureBoss();
+    boss.setValue(Health, 'max', msg.max);
+    // During the resurrection the bar refill is driven by the local rise
+    // clock (so it tracks the music beat), not by echo quantisation.
+    if (msg.ph !== PHASE_CODE.resurrect) boss.setValue(Health, 'current', msg.hp);
+    this.lastBossHp = boss.getValue(Health, 'current') ?? 0;
+
+    if (msg.ph !== PHASE_CODE[this.phase]) {
+      switch (msg.ph) {
+        case PHASE_CODE.fight:
+          if (this.phase === 'intro') this.startFight();
+          else if (this.phase === 'resurrect') this.startFight(true);
+          break;
+        case PHASE_CODE.victory:
+          if (this.phase === 'fight' || this.phase === 'intro') this.toVictory();
+          break;
+        case PHASE_CODE.defeat:
+          if (this.phase !== 'defeat') this.toDefeat();
+          break;
+        case PHASE_CODE.resurrect:
+          if (this.phase !== 'resurrect') this.toResurrect();
+          break;
+      }
+      this.t = msg.t;
+    } else if (Math.abs(this.t - msg.t) > 0.75) {
+      this.t = msg.t; // drift correction within a phase
+    }
+  }
+
   private begin(): void {
     this.runClock = 0;
+    this.p2 = false;
+    this.lastTarget = -1;
     this.hud.setVisible(true);
     this.light.visible = true;
+    if (this.raid()) {
+      // RAID: the arc layout is already selected (app.arcade === 'raid') and
+      // the squad roster comes from the mesh seats. The titan stands in the
+      // pit at the arc's focus — dead ahead of every raider.
+      app.campaignStage = 0;
+      this.faceSeat = mesh.mySeat;
+      applyRoster();
+      applyArenaLayout(this.scene);
+      this.stageSetup(true, 'the raid begins');
+      return;
+    }
     // Stamp the classic 1v1 platforms/roster (the last bout may have been an
     // FFA cross), then stand the slot-1 humanoid down — the titan replaces it.
     app.arcade = '1v1';
@@ -258,13 +474,17 @@ export class CampaignSystem extends createSystem({
   /** Chain to the next titan mid-run — no lobby, straight into its intro. */
   private advanceRun(): void {
     app.campaignStage += 1;
-    // GAUNTLET refits you between titans; HARDCORE sends you in as you are.
-    this.stageSetup(app.campaignMode === 'gauntlet', 'the next titan approaches');
+    // GAUNTLET (and a non-hardcore raid) refits you between titans; HARDCORE
+    // sends you in as you are — dead raiders only rise again on a refit.
+    const heal = this.raid() ? !app.raidHardcore : app.campaignMode === 'gauntlet';
+    this.stageSetup(heal, 'the next titan approaches');
   }
 
   /** Everything one titan bout needs: rig, pools, weak points, intro cue. */
   private stageSetup(healPlayer: boolean, warning: string): void {
-    this.def = BOSSES[clamp(app.campaignStage, 0, BOSSES.length - 1)];
+    const base = BOSSES[clamp(app.campaignStage, 0, BOSSES.length - 1)];
+    this.def = this.raid() ? raidBoss(base) : base;
+    this.p2 = false;
     this.rig?.dispose();
     this.rig = buildTitan(this.def);
     // The rig's face (visor/core) sits on local −Z, same as the duel boxer —
@@ -276,13 +496,15 @@ export class CampaignSystem extends createSystem({
     this.introStep = 0;
     this.entrancePose(0);
 
-    // Health pools: the titan borrows the slot-1 fighter's Health — while its
-    // HUMANOID stands down (Combatant.active 0 parks OpponentSystem's rig and
-    // hitboxes; our own titan hitboxes point at the same Health owner).
-    const boss = fighterAt(1);
-    boss?.setValue(Combatant, 'active', 0);
-    boss?.setValue(Health, 'max', this.def.health);
-    boss?.setValue(Health, 'current', this.def.health);
+    // Health pools: the titan carries its OWN pool (bossEnt — every weak-point
+    // hitbox's owner). In a SOLO campaign the slot-1 humanoid also stands down
+    // (Combatant.active 0 parks OpponentSystem's rig and hitboxes); in a RAID
+    // slot 1 is a real raider, so the roster is left alone.
+    const boss = this.ensureBoss();
+    boss.setValue(Health, 'max', this.def.health);
+    boss.setValue(Health, 'current', this.def.health);
+    this.syncedHp = this.def.health;
+    if (!this.raid()) fighterAt(1)?.setValue(Combatant, 'active', 0);
     if (healPlayer) {
       const me = fighterAt(0);
       me?.setValue(Health, 'current', me.getValue(Health, 'max') ?? COMBAT.playerHealth);
@@ -352,12 +574,12 @@ export class CampaignSystem extends createSystem({
     campaign.aimPoint.set(0, 1.25, -ARENA_GAP);
     this.parkHitboxes();
     stopBattleTrack(); // a forfeit mid-bout leaves the score running otherwise
-    // Hand the slot-1 fighter back to human-sized bouts: restore its pool,
-    // then re-stamp the roster (reactivates it for the current layout).
-    const boss = fighterAt(1);
-    boss?.setValue(Health, 'max', COMBAT.playerHealth);
-    boss?.setValue(Health, 'current', COMBAT.playerHealth);
+    // A raid leaves the arc layout behind; everything returns to the classic
+    // lobby footing. (The titan's own Health pool needs no restoring — no
+    // fighter ever lent it one.)
+    if (app.arcade === 'raid') app.arcade = '1v1';
     applyRoster();
+    applyArenaLayout(this.scene);
   }
 
   // --- intro ceremony ---------------------------------------------------------
@@ -457,7 +679,9 @@ export class CampaignSystem extends createSystem({
       this.hud.title('FIGHT', '', '#ffc04d');
     }
 
-    const skip = this.triggerDown();
+    // Trigger-skip is a SOLO courtesy — a raid squad shares the host's clock,
+    // so everyone sits the (condensed) ceremony out together.
+    const skip = !this.raid() && this.triggerDown();
     if (this.t >= fightStart + fightCardTime || skip) {
       this.startFight();
     }
@@ -538,7 +762,9 @@ export class CampaignSystem extends createSystem({
     return false;
   }
 
-  private startFight(): void {
+  /** The bell. `finale` keeps the resurrection anthem rolling instead of
+   *  restarting the regular battle loop (raid GOLIATH's second life). */
+  private startFight(finale = false): void {
     this.phase = 'fight';
     this.t = 0;
     // Snap to the rest pose — a trigger-skip can land mid-swoop/mid-stroke.
@@ -548,29 +774,28 @@ export class CampaignSystem extends createSystem({
     root.scale.setScalar(1);
     match.phase = 'playing';
     this.hud.title('', '');
+    this.cardTimer = 0;
     this.light.intensity = 5; // steady key light (a skip can leave a strobe)
-    startBattleMusic(BOSS_BATTLE_VOLUME); // a score loud enough to carry over the titan's SFX
+    if (!finale) startBattleMusic(BOSS_BATTLE_VOLUME); // loud enough to carry over the titan's SFX
     announce('fight');
     sfx.roundBell();
   }
 
-  /** Which points blink live right now, per the boss's weak pattern. */
+  /** Which points blink live right now, per the boss's weak pattern. The
+   *  second-life crown (raid GOLIATH) walks the ring in REVERSE. */
   private litPoints(): WeakSpot[] {
     switch (this.def.weakPattern) {
       case 'both':
         return ['head', 'core']; // any order, all fight
       case 'triple':
         return [(['head', 'core', 'low'] as const)[this.cycleIdx % 3]];
-      case 'crown':
-        return [CROWN_RING[this.cycleIdx % CROWN_RING.length]];
+      case 'crown': {
+        const ring = this.p2 ? REVERSE_RING : CROWN_RING;
+        return [ring[this.cycleIdx % ring.length]];
+      }
       default: // 'alternate' and 'double' walk head↔core
         return [this.cycleIdx % 2 === 0 ? 'head' : 'core'];
     }
-  }
-
-  /** GOLIATH's kill condition: total ring hits to fell the crown. */
-  private crownTarget(): number {
-    return CROWN_RING.length * CAMPAIGN.crownLoops;
   }
 
   // --- the fight --------------------------------------------------------------
@@ -587,33 +812,120 @@ export class CampaignSystem extends createSystem({
 
     this.updateShots(delta);
 
-    // Watch the health pools.
-    const boss = fighterAt(1);
-    let bossHp = boss?.getValue(Health, 'current') ?? 0;
-    const bossMax = boss?.getValue(Health, 'max') ?? 1;
+    // Watch the health pools. LOCAL hp drops are MY landed hits (only my
+    // balls collide on my sim): route them through the ONE authoritative
+    // damage path — directly when I'm the authority, over the wire when a
+    // raid host owns the boss (my local pool then snaps back to the echo).
+    const boss = this.ensureBoss();
+    let bossHp = boss.getValue(Health, 'current') ?? 0;
+    const bossMax = boss.getValue(Health, 'max') ?? 1;
     const meHp = fighterAt(0)?.getValue(Health, 'current') ?? 0;
     if (bossHp < this.lastBossHp) {
+      const pts = this.lastBossHp - bossHp;
+      const spot: string = this.litPoints()[0] ?? 'pod';
       this.flinch = 0.35;
       this.hudTimer = 0; // instant bar update on damage
-      // Walk the weak-point pattern: RUSTHOOK's stays put (both open),
-      // VULTURE needs two hits per stop, the others advance every hit. The
-      // servo cue + the blink say where — no words.
-      if (this.def.weakPattern === 'crown') {
-        // GOLIATH: the ring hit is the unit of damage. The bar steps down
-        // one notch per stop, so the kill is EXACTLY three full loops no
-        // matter what the ball would have dealt.
+      if (this.isAuthority()) {
+        boss.setValue(Health, 'current', this.lastBossHp); // the path re-applies
+        this.applyBossDamage(spot, pts);
+        bossHp = boss.getValue(Health, 'current') ?? 0;
+      } else {
+        mesh.send({ k: 'rdmg', spot, pts });
+        boss.setValue(Health, 'current', this.syncedHp); // host owns the pool
+        bossHp = this.syncedHp;
+      }
+    }
+    this.lastBossHp = bossHp;
+
+    // GOLIATH's law: wound it deep enough and it stops playing fair. (The
+    // second life is BORN enraged; guests take both flags from the echo.)
+    if (
+      this.isAuthority() &&
+      !this.enraged &&
+      !this.p2 &&
+      this.def.enrageAt > 0 &&
+      bossHp > 0 &&
+      bossHp / bossMax <= this.def.enrageAt
+    ) {
+      this.enraged = true;
+      this.flinch = 0.35;
+      this.hud.title('ENRAGED', '', this.accentCss());
+      this.cardTimer = 1.3;
+      sfx.bossRoar(this.def.scale * 1.1);
+    }
+
+    // Endings are the AUTHORITY's call (guests follow the echo): the kill —
+    // or, for a raid GOLIATH not yet on his second life, the false kill.
+    if (this.isAuthority() && bossHp <= 0) {
+      if (this.raid() && app.campaignStage === BOSSES.length - 1 && !this.p2) this.toResurrect();
+      else this.toVictory();
+      return;
+    }
+    // Your own death: solo, it's the end. In a raid you're DOWN — the squad
+    // fights on, you spectate, and a refit between titans stands you back up.
+    // The wipe (everyone down) is declared by the host in raidNet.
+    if (meHp <= 0) {
+      if (!this.raid()) {
+        this.toDefeat();
+        return;
+      }
+      if (this.cardTimer <= 0) {
+        this.hud.title('DOWN', 'the squad fights on', '#e8352a');
+        this.cardTimer = 2.4;
+      }
+    }
+
+    // Attack scheduling is the authority's; everyone advances the live copy.
+    if (!this.attack) {
+      if (this.isAuthority()) {
+        this.cooldown -= delta;
+        if (this.cooldown <= 0) this.startAttack();
+      }
+    } else {
+      this.advanceAttack(delta);
+    }
+  }
+
+  /**
+   * THE one authoritative boss-damage path — solo self and raid host alike,
+   * fed by local hits and rdmg reports. Validates the spot against the LIVE
+   * pattern (a stale report clanks off), applies the damage — the crown steps
+   * its bar in exact ring-hit notches — and walks the weak-point pattern.
+   */
+  private applyBossDamage(spot: string, pts: number): void {
+    if (this.phase !== 'fight') return;
+    const boss = this.ensureBoss();
+    const max = boss.getValue(Health, 'max') ?? 1;
+    let hp = boss.getValue(Health, 'current') ?? 0;
+    const lit = this.litPoints() as string[];
+    const podShot = spot === 'pod' && this.attack?.kind === 'volley';
+    if (!lit.includes(spot) && !podShot) return;
+
+    this.flinch = 0.35;
+    this.hudTimer = 0;
+    if (this.def.weakPattern === 'crown') {
+      if (podShot) return; // the crown circuit ignores pod bonuses outright
+      this.hitsOnPoint += 1;
+      if (this.hitsOnPoint >= this.crownPerStop()) {
+        this.hitsOnPoint = 0;
         this.cycleIdx += 1;
-        bossHp = bossMax * Math.max(0, 1 - this.cycleIdx / this.crownTarget());
-        boss?.setValue(Health, 'current', bossHp);
-        if (bossHp > 0) {
+        if (this.cycleIdx % CROWN_RING.length === 0) {
+          // A full loop closed: the king roars and quickens.
+          this.flinch = 0.5;
+          sfx.bossRoar(this.def.scale * 1.1);
+        } else {
           sfx.coreExposed();
-          if (this.cycleIdx % CROWN_RING.length === 0) {
-            // A full loop closed: the king roars and quickens.
-            this.flinch = 0.5;
-            sfx.bossRoar(this.def.scale * 1.1);
-          }
         }
-      } else if (bossHp > 0 && this.def.weakPattern !== 'both') {
+      }
+      // The bar steps down one notch per ring hit — the kill is EXACTLY the
+      // loop count, whatever the ball would have dealt.
+      const done = this.cycleIdx * this.crownPerStop() + this.hitsOnPoint;
+      hp = max * Math.max(0, 1 - done / this.crownTargetHits());
+      boss.setValue(Health, 'current', hp);
+    } else {
+      hp = Math.max(0, hp - pts);
+      boss.setValue(Health, 'current', hp);
+      if (hp > 0 && !podShot && this.def.weakPattern !== 'both') {
         this.hitsOnPoint += 1;
         const perStop = this.def.weakPattern === 'double' ? 2 : 1;
         if (this.hitsOnPoint >= perStop) {
@@ -623,33 +935,7 @@ export class CampaignSystem extends createSystem({
         }
       }
     }
-    this.lastBossHp = bossHp;
-
-    // GOLIATH's law: wound it deep enough and it stops playing fair.
-    if (!this.enraged && this.def.enrageAt > 0 && bossHp > 0 && bossHp / bossMax <= this.def.enrageAt) {
-      this.enraged = true;
-      this.flinch = 0.35;
-      this.hud.title('ENRAGED', '', this.accentCss());
-      this.cardTimer = 1.3;
-      sfx.bossRoar(this.def.scale * 1.1);
-    }
-
-    if (bossHp <= 0) {
-      this.toVictory();
-      return;
-    }
-    if (meHp <= 0) {
-      this.toDefeat();
-      return;
-    }
-
-    // Attack scheduling.
-    if (!this.attack) {
-      this.cooldown -= delta;
-      if (this.cooldown <= 0) this.startAttack();
-    } else {
-      this.advanceAttack(delta);
-    }
+    this.lastBossHp = hp;
   }
 
   // --- the volley: blockable fireballs -----------------------------------------
@@ -661,11 +947,12 @@ export class CampaignSystem extends createSystem({
     out.set(root.x + side * 0.37 * s, root.y + 1.44 * s, root.z);
   }
 
-  /** Hurl one fireball from the pod on `side`, aimed at your head RIGHT NOW
-   *  — after launch it flies straight: step off the line, or block it. */
-  private launchShot(side: -1 | 1): void {
+  /** Hurl one fireball from the pod on `side`, aimed at the TARGET's head
+   *  RIGHT NOW — after launch it flies straight: step off the line, or (if
+   *  it's chasing you) block it. */
+  private launchShot(side: -1 | 1, seat: number): void {
     this.podPos(side, _v);
-    this.playerHead(_head);
+    this.playerHeadOf(seat, _head);
     const group = new Group();
     group.add(glowSprite(this.def.accent, 0.55));
     const core = glowSprite(0xffe9c2, 0.26);
@@ -673,7 +960,7 @@ export class CampaignSystem extends createSystem({
     group.position.copy(_v);
     this.scene.add(group);
     const vel = new Vector3().copy(_head).sub(_v).normalize().multiplyScalar(CAMPAIGN.volleySpeed);
-    this.shots.push({ pos: _v.clone(), vel, age: 0, group, trail: 0 });
+    this.shots.push({ pos: _v.clone(), vel, age: 0, group, trail: 0, seat });
     sfx.mortarThump();
   }
 
@@ -687,6 +974,13 @@ export class CampaignSystem extends createSystem({
       if (shot.trail <= 0) {
         shot.trail = 0.07;
         emberBurst(shot.pos, 2, true);
+      }
+
+      // Shots chasing SOMEONE ELSE are pure theatre on my sim — their own
+      // client judges the block/hit; mine just flies the visual and expires.
+      if (shot.seat !== this.mySeatId()) {
+        if (shot.age > 3.5 || shot.pos.y < -0.4) this.disposeShot(i);
+        continue;
       }
 
       // BLOCKED: a fist in the path detonates the shot harmlessly — but ONLY
@@ -769,8 +1063,36 @@ export class CampaignSystem extends createSystem({
     return false;
   }
 
-  /** Pick a weighted attack (avoiding an immediate repeat) and telegraph it. */
+  /**
+   * AUTHORITY: pick a weighted attack (avoiding an immediate repeat), pick a
+   * TARGET (raid: a living raider, never the same one twice while others
+   * stand), broadcast it (raid), then build the live copy locally. Guests
+   * build theirs from the ratk message.
+   */
   private startAttack(): void {
+    // The target seat first — the aim parameters live in ITS frame.
+    let seat = 0;
+    if (this.raid()) {
+      const alive = this.aliveSeats();
+      const pickFrom = alive.length > 1 ? alive.filter((s) => s !== this.lastTarget) : alive;
+      seat = pickFrom[Math.floor(Math.random() * pickFrom.length)] ?? mesh.mySeat;
+      this.lastTarget = seat;
+    }
+
+    // The DECREE: GOLIATH's raid-only group attack, once he's angry (either
+    // life). Rolls ahead of the normal pool — everyone gets marked at once.
+    if (
+      this.raid() &&
+      app.campaignStage === BOSSES.length - 1 &&
+      (this.enraged || this.p2) &&
+      Math.random() * (RAID.decreeWeight + 10) < RAID.decreeWeight
+    ) {
+      const a = rand(-Math.PI, Math.PI); // one CANONICAL safe bearing for all
+      mesh.send({ k: 'ratk', kind: 'decree', seat, a });
+      this.buildAttack('decree', seat, { a });
+      return;
+    }
+
     const kinds: AttackKind[] = ['slam', 'sweep', 'beam', 'volley', 'nova'];
     let total = 0;
     const pool: Array<[AttackKind, number]> = [];
@@ -792,21 +1114,79 @@ export class CampaignSystem extends createSystem({
     }
     this.lastKind = kind;
 
-    this.playerHead(_head);
-    const chargeTime = this.def.charge[kind] * (this.enraged ? CAMPAIGN.enrageChargeMult : 1);
+    // Aim parameters, in the TARGET's local frame (their platform at their
+    // origin). For a remote target the head comes off the pose bus in MY
+    // world and gets pulled back into their frame.
+    if (seat === this.mySeatId()) this.playerHead(_head);
+    else {
+      this.playerHeadOf(seat, _p);
+      worldToPeer(_head, seat, _p.x, _p.y, _p.z);
+    }
+    const params: { x?: number; z?: number; y?: number; a?: number } = {};
+    if (kind === 'slam') {
+      params.x = clamp(_head.x, -OCTAGON_HALF_WIDTH + 0.15, OCTAGON_HALF_WIDTH - 0.15);
+      params.z = clamp(_head.z, -OCTAGON_HALF_DEPTH + 0.1, OCTAGON_HALF_DEPTH - 0.1);
+    } else if (kind === 'sweep') {
+      params.y = clamp(_head.y - 0.12, 1.3, 1.55);
+    } else if (kind === 'nova') {
+      const playerAng = Math.hypot(_head.x, _head.z) > 0.15 ? Math.atan2(_head.x, _head.z) : rand(-Math.PI, Math.PI);
+      params.a = playerAng + Math.PI + rand(-0.5, 0.5);
+    }
+
+    if (this.raid()) mesh.send({ k: 'ratk', kind, seat, ...params });
+    this.buildAttack(kind, seat, params);
+  }
+
+  /**
+   * Build the LIVE attack — shared by the authority (its own pick) and every
+   * guest (from the ratk message). Zone coordinates are TARGET-local; the
+   * telegraphs/markers are placed through seatPoint so they land on the right
+   * platform in every player's frame. Only the target judges damage.
+   */
+  private buildAttack(
+    kind: AttackKind | 'decree',
+    seat: number,
+    params: { x?: number; z?: number; y?: number; a?: number },
+  ): void {
+    this.disposeAttack(); // a straggling ratk never stacks two live attacks
+    this.faceSeat = seat;
+    const chargeTime =
+      kind === 'decree'
+        ? RAID.decreeCharge
+        : this.def.charge[kind] * (this.enraged ? CAMPAIGN.enrageChargeMult : 1);
     const zones: Zone[] = [];
+    const zoneSeats: number[] = [];
     const telegraphs: (Telegraph | null)[] = [];
     const staggers: number[] = [];
     const beamOffsets: number[] = [];
     const markers: (Group | null)[] = [];
-    // Strike with the nearer arm. The root carries a π yaw, so arm 0
-    // (local −X) hangs on the world +X side.
-    const arm: 0 | 1 = _head.x < 0 ? 1 : 0;
+    // Strike with the arm nearer the target (world side of their platform).
+    this.seatPoint(seat, 0, 0, 0, _p);
+    const arm: 0 | 1 = _p.x + (seat === this.mySeatId() ? this.headX() : 0) < 0 ? 1 : 0;
 
-    if (kind === 'slam') {
+    if (kind === 'decree') {
+      // Novas bloom on EVERY standing platform around ONE canonical bearing —
+      // the whole squad rotates to the same compass point together, or burns.
+      const canonicalA = params.a ?? 0;
+      const canonical = MODE_LAYOUT[app.arcade];
+      const halfAngle = CAMPAIGN.novaEnragedHalfAngle;
+      for (const s of this.aliveSeats()) {
+        const localA = canonicalA - (canonical[s]?.yaw ?? 0);
+        zones.push({ kind: 'nova', angle: localA, halfAngle });
+        zoneSeats.push(s);
+        const tg = novaTelegraph(CAMPAIGN.novaRadius, localA, halfAngle);
+        this.seatPoint(s, 0, CAMPAIGN.decalY, 0, _v);
+        tg.group.position.copy(_v);
+        tg.group.rotation.y = this.seatYawDelta(s);
+        this.scene.add(tg.group);
+        telegraphs.push(tg);
+        staggers.push(0);
+        markers.push(null);
+      }
+    } else if (kind === 'slam') {
       const r = CAMPAIGN.slamRadius + this.def.scale * 0.02;
-      const x0 = clamp(_head.x, -OCTAGON_HALF_WIDTH + 0.15, OCTAGON_HALF_WIDTH - 0.15);
-      const z0 = clamp(_head.z, -OCTAGON_HALF_DEPTH + 0.1, OCTAGON_HALF_DEPTH - 0.1);
+      const x0 = params.x ?? 0;
+      const z0 = params.z ?? 0;
       const count = this.def.slamStyle === 'single' ? 1 : Math.max(1, this.def.slamCount);
       // A marching drumline steps toward the open side of the platform.
       const marchDir = x0 > 0 ? -1 : 1;
@@ -816,8 +1196,10 @@ export class CampaignSystem extends createSystem({
             ? clamp(x0 + marchDir * CAMPAIGN.marchStep * i, -OCTAGON_HALF_WIDTH + 0.15, OCTAGON_HALF_WIDTH - 0.15)
             : x0; // 'rehit' re-marks the SAME crater
         zones.push({ kind: 'circle', x, z: z0, r });
+        zoneSeats.push(seat);
         const tg = circleTelegraph(r);
-        tg.group.position.set(x, CAMPAIGN.decalY, z0);
+        this.seatPoint(seat, x, CAMPAIGN.decalY, z0, _v);
+        tg.group.position.copy(_v);
         this.scene.add(tg.group);
         telegraphs.push(tg);
         // A breath of extra hang on top of the charge, so the fist lands a
@@ -825,55 +1207,63 @@ export class CampaignSystem extends createSystem({
         staggers.push(CAMPAIGN.slamImpactDelay + i * (this.def.slamStyle === 'rehit' ? CAMPAIGN.rehitDelay : CAMPAIGN.marchDelay));
         // The ghost hammer: hangs over the disc and descends with the
         // countdown, so the raised arm connects to THIS spot on the floor.
-        markers.push(this.makeHammerMarker(x, z0));
+        markers.push(this.makeHammerMarker(x, z0, seat));
       }
     } else if (kind === 'sweep') {
       // A horizontal blade slice just under head height: duck it. Never
       // below 1.3 m — the pelvis is pinned near 0.95 m, so lower slices
       // would clip a standing body no matter what; 1.3 keeps "deep duck"
       // as the honest answer.
-      const y = clamp(_head.y - 0.12, 1.3, 1.55);
+      const y = params.y ?? 1.4;
       zones.push({ kind: 'sweep', y });
+      zoneSeats.push(seat);
       const tg = sweepTelegraph(OCTAGON_HALF_WIDTH * 2 + 0.5, OCTAGON_HALF_DEPTH * 2 + 0.3, y, CAMPAIGN.sweepThickness);
-      tg.group.position.set(0, 0, 0);
+      this.seatPoint(seat, 0, 0, 0, _v);
+      tg.group.position.copy(_v);
+      tg.group.rotation.y = this.seatYawDelta(seat);
       this.scene.add(tg.group);
       telegraphs.push(tg);
       staggers.push(0);
     } else if (kind === 'beam') {
       for (let i = 0; i < this.def.beams; i++) {
-        // A strip through (or beside) the player, raked from the titan.
+        // A strip through (or beside) the target, raked from the titan.
+        // Beam zones live in MY world (they're rays, not platform decals).
         const offset = i === 0 ? 0 : (Math.random() < 0.5 ? -1 : 1) * rand(0.5, 0.8);
         const zone: Zone = { kind: 'beam', x: 0, z: 0, dx: 0, dz: 1, halfW: CAMPAIGN.beamHalfWidth };
         const tg = beamTelegraph(CAMPAIGN.beamHalfWidth, 3.2);
         this.scene.add(tg.group);
         zones.push(zone);
+        zoneSeats.push(seat);
         telegraphs.push(tg);
         beamOffsets.push(offset);
         staggers.push(i * 0.35);
-        this.aimBeam(zone, tg, offset); // initial aim (tracking re-aims later)
+        this.aimBeam(zone, tg, offset, seat); // initial aim (tracking re-aims)
       }
     } else if (kind === 'nova') {
       // GOLIATH's nova: everything burns EXCEPT one safe wedge — and the
-      // wedge opens roughly OPPOSITE where you stand, so you must cross the
-      // platform while the flood charges. Run to the marked ground.
-      const playerAng = Math.hypot(_head.x, _head.z) > 0.15 ? Math.atan2(_head.x, _head.z) : rand(-Math.PI, Math.PI);
-      const angle = playerAng + Math.PI + rand(-0.5, 0.5);
+      // wedge opens roughly OPPOSITE where the target stands, so they must
+      // cross their platform while the flood charges. Run to the marked ground.
+      const angle = params.a ?? 0;
       const halfAngle = this.enraged ? CAMPAIGN.novaEnragedHalfAngle : CAMPAIGN.novaHalfAngle;
       zones.push({ kind: 'nova', angle, halfAngle });
+      zoneSeats.push(seat);
       const tg = novaTelegraph(CAMPAIGN.novaRadius, angle, halfAngle);
-      tg.group.position.set(0, CAMPAIGN.decalY, 0);
+      this.seatPoint(seat, 0, CAMPAIGN.decalY, 0, _v);
+      tg.group.position.copy(_v);
+      tg.group.rotation.y = this.seatYawDelta(seat);
       this.scene.add(tg.group);
       telegraphs.push(tg);
       staggers.push(0);
     } else {
       // The VOLLEY: no floor marks at all — the shoulder pods spool up
       // (watch the muzzle glows swell through the windup) and then hurl
-      // blockable fireballs straight at you, alternating pods. Each shot is
-      // aimed where your head is at ITS launch: keep moving, or catch it
-      // on a fist.
+      // blockable fireballs straight at the target, alternating pods. Each
+      // shot is aimed where their head is at ITS launch: keep moving, or
+      // catch it on a fist.
       for (let i = 0; i < this.def.volleyCount; i++) {
         const side = (i % 2 === 0 ? -1 : 1) as -1 | 1;
         zones.push({ kind: 'shot', side });
+        zoneSeats.push(seat);
         telegraphs.push(null);
         staggers.push(i * CAMPAIGN.volleyInterval);
         markers.push(this.makeMuzzleGlow(side));
@@ -881,7 +1271,7 @@ export class CampaignSystem extends createSystem({
     }
 
     this.attack = {
-      kind,
+      kind: kind === 'decree' ? 'nova' : kind,
       zones,
       telegraphs,
       staggers,
@@ -892,15 +1282,25 @@ export class CampaignSystem extends createSystem({
       tracks: kind === 'beam' && this.def.beamTracks,
       beamOffsets,
       markers,
+      seat,
+      zoneSeats,
     };
     sfx.chargeWhine(chargeTime);
+  }
+
+  /** My head's local X (for arm choice when I'm the one being hunted). */
+  private headX(): number {
+    this.playerHead(_head);
+    return _head.x;
   }
 
   /**
    * The ghost hammer: a translucent accent block + glow hanging over a slam
    * disc. advanceAttack lowers it with the countdown; the crash replaces it.
+   * `seat` places it over the TARGET's platform (raid) — y is world-safe
+   * because every seat stands at floor height.
    */
-  private makeHammerMarker(x: number, z: number): Group {
+  private makeHammerMarker(x: number, z: number, seat: number): Group {
     const s = this.def.scale;
     const g = new Group();
     const block = new Mesh(
@@ -917,7 +1317,8 @@ export class CampaignSystem extends createSystem({
     const halo = glowSprite(this.def.accent, 0.5 * s);
     halo.position.y = -0.05 * s;
     g.add(halo);
-    g.position.set(x, this.markerStartY(), z);
+    this.seatPoint(seat, x, 0, z, _v);
+    g.position.set(_v.x, this.markerStartY(), _v.z);
     this.scene.add(g);
     return g;
   }
@@ -939,13 +1340,18 @@ export class CampaignSystem extends createSystem({
     return g;
   }
 
-  /** Aim one beam zone (and its telegraph) at the player, offset sideways. */
-  private aimBeam(zone: Zone & { kind: 'beam' }, tg: Telegraph, offset: number): void {
-    this.playerHead(_head);
-    const px = clamp(_head.x + offset, -OCTAGON_HALF_WIDTH, OCTAGON_HALF_WIDTH);
-    const pz = clamp(_head.z, -OCTAGON_HALF_DEPTH + 0.1, OCTAGON_HALF_DEPTH - 0.1);
+  /** Aim one beam zone (and its telegraph) at the TARGET, offset sideways.
+   *  Beam zones live in MY world — a remote target's head comes off the pose
+   *  bus, so every client rakes the strip through the same fighter. */
+  private aimBeam(zone: Zone & { kind: 'beam' }, tg: Telegraph, offset: number, seat: number): void {
+    this.playerHeadOf(seat, _head);
+    // Offsets are lateral in the target's platform frame; approximate with my
+    // world X for my own platform, and with the raw head point for a remote
+    // one (their strip still lands beside them — the exact axis is cosmetic).
+    const px = seat === this.mySeatId() ? clamp(_head.x + offset, -OCTAGON_HALF_WIDTH, OCTAGON_HALF_WIDTH) : _head.x + offset;
+    const pz = seat === this.mySeatId() ? clamp(_head.z, -OCTAGON_HALF_DEPTH + 0.1, OCTAGON_HALF_DEPTH - 0.1) : _head.z;
     // Direction from the titan through that point, flattened to XZ.
-    _v.set(px - this.rig!.root.position.x, 0, pz - this.bossZ()).normalize();
+    _v.set(px - this.rig!.root.position.x, 0, pz - this.rig!.root.position.z).normalize();
     zone.x = px;
     zone.z = pz;
     zone.dx = _v.x;
@@ -966,7 +1372,7 @@ export class CampaignSystem extends createSystem({
       for (let i = 0; i < a.zones.length; i++) {
         const zone = a.zones[i];
         const tg = a.telegraphs[i];
-        if (zone.kind === 'beam' && tg) this.aimBeam(zone, tg, a.beamOffsets[i] ?? 0);
+        if (zone.kind === 'beam' && tg) this.aimBeam(zone, tg, a.beamOffsets[i] ?? 0, a.seat);
       }
     }
 
@@ -984,7 +1390,7 @@ export class CampaignSystem extends createSystem({
         const m = a.markers[i] ?? null;
         this.disposeMarker(m);
         a.markers[i] = null;
-        this.detonate(a.kind, a.zones[i]);
+        this.detonate(a.kind, a.zones[i], a.zoneSeats[i] ?? a.seat);
       } else {
         const fill = clamp(a.time / dueAt, 0, 1);
         a.telegraphs[i]?.update(fill, this.time);
@@ -1020,19 +1426,20 @@ export class CampaignSystem extends createSystem({
     return rand(this.def.cooldownMin, this.def.cooldownMax) * mult;
   }
 
-  /** A zone goes off: strike visual + sound, and damage if you're in it.
-   *  (A volley zone "detonating" is its LAUNCH — the shot itself judges
-   *  blocks and hits in flight, in updateShots.) */
-  private detonate(kind: AttackKind, zone: Zone): void {
-    const hit = this.zoneTouchesPlayer(zone);
+  /** A zone goes off: strike visual + sound on the TARGET's platform, and
+   *  damage only if the zone is MINE and I'm in it. (A volley zone
+   *  "detonating" is its LAUNCH — the shot judges itself in updateShots.) */
+  private detonate(kind: AttackKind, zone: Zone, seat: number): void {
+    const mine = seat === this.mySeatId();
+    const hit = mine && this.zoneTouchesPlayer(zone);
 
     if (kind === 'slam') {
       sfx.slamImpact();
-      if (zone.kind === 'circle') this.spawnFistCrash(zone.x, zone.z);
+      if (zone.kind === 'circle') this.spawnFistCrash(zone.x, zone.z, seat);
       this.strikeSwing[this.attack!.arm] = 0.6;
     } else if (kind === 'sweep') {
       sfx.sweepWhoosh();
-      if (zone.kind === 'sweep') this.spawnBladeSweep(zone.y, this.attack!.arm);
+      if (zone.kind === 'sweep') this.spawnBladeSweep(zone.y, this.attack!.arm, seat);
       this.strikeSwing[this.attack!.arm] = 0.6;
     } else if (kind === 'beam') {
       sfx.beamBlast();
@@ -1040,9 +1447,9 @@ export class CampaignSystem extends createSystem({
     } else if (kind === 'nova') {
       sfx.beamBlast();
       sfx.slamImpact();
-      if (zone.kind === 'nova') this.spawnNovaWave(zone.angle, zone.halfAngle);
+      if (zone.kind === 'nova') this.spawnNovaWave(zone.angle, zone.halfAngle, seat);
     } else {
-      if (zone.kind === 'shot') this.launchShot(zone.side);
+      if (zone.kind === 'shot') this.launchShot(zone.side, seat);
     }
 
     if (hit && this.invuln <= 0) {
@@ -1102,10 +1509,14 @@ export class CampaignSystem extends createSystem({
 
   // --- strike visuals ----------------------------------------------------------
 
-  private spawnFistCrash(x: number, z: number): void {
+  private spawnFistCrash(x: number, z: number, seat: number): void {
     // The hammer LANDS: a solid accent block crashes the last half-metre in
     // a few frames, buries itself in the disc, and erupts — a floor flash,
     // a double burst and a spray of sparks. You SEE the platform get hit.
+    // (x, z) are TARGET-local; transform once onto their platform.
+    this.seatPoint(seat, x, 0, z, _v);
+    const wx = _v.x;
+    const wz = _v.z;
     const s = this.def.scale;
     const fist = new Mesh(
       new BoxGeometry(0.26 * s, 0.22 * s, 0.26 * s),
@@ -1113,7 +1524,7 @@ export class CampaignSystem extends createSystem({
     );
     this.scene.add(fist);
     const flash = glowSprite(0xfff3cf, 1.5 * s, 0.95);
-    flash.position.set(x, 0.12, z);
+    flash.position.set(wx, 0.12, wz);
     flash.visible = false;
     this.scene.add(flash);
     const startY = this.markerStartY() * 0.35 + 0.55; // pick up where the ghost left off
@@ -1124,10 +1535,10 @@ export class CampaignSystem extends createSystem({
       life: 0.7,
       update(age) {
         const drop = Math.min(1, age / 0.08); // near-instant, brutal
-        fist.position.set(x, startY * (1 - drop) + 0.11 * s, z);
+        fist.position.set(wx, startY * (1 - drop) + 0.11 * s, wz);
         if (drop >= 1 && !burst) {
           burst = true;
-          _v.set(x, 0.12, z);
+          _v.set(wx, 0.12, wz);
           spawnFireImpact(world, _v, 1, 2.0);
           emberBurst(_v, 34, true);
           flash.visible = true;
@@ -1149,11 +1560,18 @@ export class CampaignSystem extends createSystem({
     });
   }
 
-  private spawnBladeSweep(y: number, arm: 0 | 1): void {
-    // The SLICE: a tall glowing blade wall scythes across the whole platform
-    // at the marked height, shedding sparks as it goes — a cut you can watch
-    // travel, not a flicker.
+  private spawnBladeSweep(y: number, arm: 0 | 1, seat: number): void {
+    // The SLICE: a tall glowing blade wall scythes across the whole TARGET
+    // platform at the marked height, shedding sparks as it goes — a cut you
+    // can watch travel, not a flicker. The travel runs along the target's
+    // local X; a remote platform gets the same cut, transformed.
     const s = this.def.scale;
+    this.seatPoint(seat, 0, 0, 0, _v);
+    const cx = _v.x;
+    const cz = _v.z;
+    const yd = this.seatYawDelta(seat);
+    const cos = Math.cos(yd);
+    const sin = Math.sin(yd);
     const blade = new Mesh(
       new BoxGeometry(0.09, 0.4, OCTAGON_HALF_DEPTH * 2 + 0.7),
       new MeshBasicMaterial({
@@ -1164,10 +1582,11 @@ export class CampaignSystem extends createSystem({
         depthWrite: false,
       }),
     );
+    blade.rotation.y = yd;
     this.scene.add(blade);
     const edge = glowSprite(this.def.accent, 0.5 * s);
     this.scene.add(edge);
-    const from = arm === 0 ? 1 : -1; // the striking arm's world side (see yaw)
+    const from = arm === 0 ? 1 : -1; // the striking arm's side (see yaw)
     const span = OCTAGON_HALF_WIDTH + 0.7;
     let emberClock = 0;
     this.strikes.push({
@@ -1176,13 +1595,17 @@ export class CampaignSystem extends createSystem({
       update(age) {
         const k = Math.min(1, age / 0.34); // slow enough to watch it travel
         const bx = from * span * (1 - 2 * k);
-        blade.position.set(bx, y, 0);
-        edge.position.set(bx, y, 0);
+        // Target-local (bx, 0) → my world (rotY then translate).
+        const wx = cx + bx * cos;
+        const wz = cz - bx * sin;
+        blade.position.set(wx, y, wz);
+        edge.position.set(wx, y, wz);
         (blade.material as MeshBasicMaterial).opacity = 0.9 * (1 - k * k * k);
         // Sparks shed along the cut.
         if (age > emberClock) {
           emberClock = age + 0.045;
-          _v.set(bx, y - 0.1, rand(-OCTAGON_HALF_DEPTH, OCTAGON_HALF_DEPTH));
+          const zr = rand(-OCTAGON_HALF_DEPTH, OCTAGON_HALF_DEPTH);
+          _v.set(cx + bx * cos + zr * sin, y - 0.1, cz - bx * sin + zr * cos);
           emberBurst(_v, 4, true);
         }
       },
@@ -1239,8 +1662,16 @@ export class CampaignSystem extends createSystem({
     });
   }
 
-  /** The nova lands: fire sweeps the platform, sparing only the wedge. */
-  private spawnNovaWave(angle: number, halfAngle: number): void {
+  /** The nova lands: fire sweeps the TARGET's platform, sparing only the
+   *  wedge. `angle` is target-local; the whole show is transformed onto
+   *  their platform (the DECREE fires one of these per raider at once). */
+  private spawnNovaWave(angle: number, halfAngle: number, seat: number): void {
+    this.seatPoint(seat, 0, 0, 0, _v);
+    const cx = _v.x;
+    const cz = _v.z;
+    const yd = this.seatYawDelta(seat);
+    const cos = Math.cos(yd);
+    const sin = Math.sin(yd);
     const ring = new Mesh(
       new CylinderGeometry(1, 1, 0.06, 32, 1, true),
       new MeshBasicMaterial({
@@ -1252,7 +1683,7 @@ export class CampaignSystem extends createSystem({
         side: 2, // DoubleSide — the open tube must show both faces
       }),
     );
-    ring.position.set(0, 0.1, 0);
+    ring.position.set(cx, 0.1, cz);
     this.scene.add(ring);
     const world = this.world;
     let burstClock = 0;
@@ -1271,7 +1702,9 @@ export class CampaignSystem extends createSystem({
             const d = Math.abs(((a - angle + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
             if (d <= halfAngle) continue; // the safe ground stays safe
             const rr = 0.15 + k * CAMPAIGN.novaRadius * 0.85;
-            _v.set(Math.sin(a) * rr, 0.12, Math.cos(a) * rr);
+            const lx = Math.sin(a) * rr;
+            const lz = Math.cos(a) * rr;
+            _v.set(cx + lx * cos + lz * sin, 0.12, cz - lx * sin + lz * cos);
             emberBurst(_v, 6, true);
             if (i === 0 && k > 0.4) spawnFireImpact(world, _v, 1, 0.8);
           }
@@ -1321,8 +1754,20 @@ export class CampaignSystem extends createSystem({
       rig.root.position.z = this.bossZ() + (this.flinch > 0 ? -0.18 * (this.flinch / 0.35) : 0);
     }
 
-    // The head tracks you (lookAt aims +Z; the visor lives on −Z, so flip).
-    this.playerHead(_head);
+    // RAID: the whole machine squares up to whoever it's hunting — the body
+    // yaw eases toward the current target's platform, so the squad can READ
+    // who's about to eat the next strike. Solo keeps the fixed π yaw.
+    if (fighting && this.raid()) {
+      this.seatPoint(this.faceSeat, 0, 0, 0, _p);
+      const targetYaw = Math.atan2(-(_p.x - rig.root.position.x), -(_p.z - rig.root.position.z));
+      let dy = targetYaw - rig.root.rotation.y;
+      while (dy > Math.PI) dy -= Math.PI * 2;
+      while (dy < -Math.PI) dy += Math.PI * 2;
+      rig.root.rotation.y += dy * Math.min(1, delta * 3.2);
+    }
+
+    // The head tracks its prey (lookAt aims +Z; the visor lives on −Z, flip).
+    this.playerHeadOf(fighting ? this.faceSeat : this.mySeatId(), _head);
     rig.head.lookAt(_head.x, _head.y, _head.z);
     rig.head.rotateY(Math.PI);
 
@@ -1402,8 +1847,11 @@ export class CampaignSystem extends createSystem({
   // --- weak-point hitboxes -------------------------------------------------------
 
   private ensureHitboxes(): void {
-    const owner = fighterAt(1);
-    if (!owner || this.boxes.body) {
+    // Every weak-point sphere drains the titan's OWN pool — in a raid slot 1
+    // is a living raider, and CollisionSystem must never route boss damage
+    // through a fighter's Health.
+    const owner = this.ensureBoss();
+    if (this.boxes.body) {
       this.sizeHitboxes();
       return;
     }
@@ -1525,10 +1973,21 @@ export class CampaignSystem extends createSystem({
     const run = this.runMode();
 
     // Coins + XP at the flat per-game rate — DOUBLE on a titan's first fell.
-    const firstClear = campaignProgress.cleared[app.campaignStage] !== true;
-    if (firstClear) {
-      campaignProgress.cleared[app.campaignStage] = true;
-      saveCampaignProgress();
+    // Raid fells don't touch the SOLO stage unlocks; a full raid clear has
+    // its own first-time double instead.
+    let firstClear = false;
+    if (this.raid()) {
+      firstClear = lastStage && !campaignProgress.raidCleared;
+      if (firstClear) {
+        campaignProgress.raidCleared = true;
+        saveCampaignProgress();
+      }
+    } else {
+      firstClear = campaignProgress.cleared[app.campaignStage] !== true;
+      if (firstClear) {
+        campaignProgress.cleared[app.campaignStage] = true;
+        saveCampaignProgress();
+      }
     }
     reportCampaign(true, firstClear);
 
@@ -1552,7 +2011,14 @@ export class CampaignSystem extends createSystem({
       return;
     }
 
-    if (run && lastStage) {
+    if (this.raid() && lastStage) {
+      // Both of GOLIATH's lives spent: the raid is BEATEN.
+      this.hud.title(
+        'RAID CLEARED',
+        app.raidHardcore ? 'HARDCORE' : crowned ? 'CHAMPION PLATFORM UNLOCKED' : '',
+        '#d9a832',
+      );
+    } else if (run && lastStage) {
       // The run is complete: the clock goes on the board.
       const hardcore = app.campaignMode === 'hardcore';
       const record = recordRunTime(hardcore, this.runClock);
@@ -1586,7 +2052,10 @@ export class CampaignSystem extends createSystem({
     app.stats.losses += 1;
     saveStats();
     reportCampaign(false, false); // the consolation rate, same as a bot loss
-    if (this.runMode()) {
+    if (this.raid()) {
+      // The WIPE: every raider down. The titan stands over the squad.
+      this.hud.title('RAID OVER', `${app.campaignStage} of ${BOSSES.length}`, '#e8352a');
+    } else if (this.runMode()) {
       // A run dies where you do — no continues, back to the line-up.
       this.hud.title('RUN OVER', `${app.campaignStage} of ${BOSSES.length}`, '#e8352a');
     } else {
@@ -1595,6 +2064,112 @@ export class CampaignSystem extends createSystem({
     playVictory(); // stops the battle score and rings the end sting
     sfx.matchEnd(false);
     sfx.bossRoar(this.def.scale * 1.2); // it laughs, kind of
+  }
+
+  /**
+   * RAID GOLIATH's false death — the set piece. The king falls exactly like
+   * a kill... then, after a beat of stillness, he SHAKES, the bespoke anthem
+   * kicks in, and he rises over six seconds while his health bar refills —
+   * timed so the second fight lands ON the drop. Phase 2: the crown walked
+   * in REVERSE, enrage locked on for the duration.
+   */
+  private toResurrect(): void {
+    this.phase = 'resurrect';
+    this.t = 0;
+    this.outroStep = 0;
+    match.phase = 'roundOver'; // collisions + rim drain off while he's down
+    this.disposeAttack();
+    this.disposeShots();
+    campaign.coreOpen = false;
+    this.parkHitboxes();
+    stopBattleTrack();
+    this.hud.title('GOLIATH FALLS', '', this.accentCss());
+    sfx.matchEnd(true); // it SOUNDS like the win it isn't
+    sfx.bossRoar(this.def.scale * 1.0);
+  }
+
+  /** The resurrection timeline (every client, clock-synced via rst):
+   *  fall (3.2 s) → still → shake → the anthem + a 6 s rise with the bar. */
+  private resurrect(delta: number): void {
+    const rig = this.rig!;
+    const boss = this.ensureBoss();
+    const max = boss.getValue(Health, 'max') ?? 1;
+    const fallEnd = 3.2;
+    const stillEnd = fallEnd + RAID.resStillTime;
+    const shakeEnd = stillEnd + RAID.resShakeTime;
+    const riseEnd = shakeEnd + RAID.resRiseTime;
+
+    if (this.t < fallEnd) {
+      // The kill everyone believes: the king's own kneel-hold-fall.
+      this.deathPose(clamp(this.t / fallEnd, 0, 1));
+      this.light.intensity = Math.max(0, 5 * (1 - this.t / fallEnd));
+      return;
+    }
+    if (this.t < stillEnd) {
+      this.deathPose(1); // face-down iron. Silence.
+      if (this.t - delta < fallEnd) this.hud.title('', '');
+      return;
+    }
+    if (this.t < shakeEnd) {
+      // ...a tremor runs through the wreck.
+      this.deathPose(1);
+      const k = (this.t - stillEnd) / RAID.resShakeTime;
+      rig.root.position.x += Math.sin(this.time * 34) * 0.02 * (0.4 + k);
+      rig.root.position.y += Math.abs(Math.sin(this.time * 27)) * 0.012 * k;
+      if (this.t - delta < stillEnd) sfx.armorClank();
+      this.emberTimer -= delta;
+      if (this.emberTimer <= 0) {
+        this.emberTimer = 0.3;
+        _v.set(rig.root.position.x + rand(-0.5, 0.5) * this.def.scale, 0.15, this.bossZ() + rand(-0.4, 0.4));
+        emberBurst(_v, 6, true);
+      }
+      return;
+    }
+    if (this.t < riseEnd) {
+      // THE ANTHEM. He gets back up over six seconds, health refilling in
+      // step — the fight resumes on the drop.
+      if (this.t - delta < shakeEnd) {
+        startFinaleTrack();
+        this.hud.title('HE RISES', '', '#d9a832');
+        sfx.titanRise();
+        sfx.bossRoar(this.def.scale * 1.2);
+      }
+      const k = clamp((this.t - shakeEnd) / RAID.resRiseTime, 0, 1);
+      this.deathPose(1 - k); // the fall, run backward — up off the deck
+      boss.setValue(Health, 'current', max * k); // the bar climbs with him
+      this.lastBossHp = max * k;
+      this.light.intensity = 5 * k;
+      this.light.color.setHex(0xd9a832); // the second life burns gold
+      this.emberTimer -= delta;
+      if (this.emberTimer <= 0) {
+        this.emberTimer = 0.1;
+        _v.set(
+          rig.root.position.x + rand(-0.8, 0.8) * this.def.scale,
+          rand(0.1, 0.5),
+          this.bossZ() + rand(-0.5, 0.5),
+        );
+        emberBurst(_v, 10, true);
+      }
+      return;
+    }
+
+    // ON THE DROP: second life. Reverse crown, enrage locked, full pool.
+    if (this.isAuthority()) {
+      this.p2 = true;
+      this.enraged = true;
+      this.cycleIdx = 0;
+      this.hitsOnPoint = 0;
+      boss.setValue(Health, 'current', max);
+      this.lastBossHp = max;
+      this.syncedHp = max;
+      this.cooldown = 1.2; // he opens SWINGING
+      this.lastKind = null;
+      this.startFight(true); // keep the anthem rolling — no battle-loop reset
+      this.hud.title('FIGHT', '', '#d9a832');
+      this.cardTimer = 0.9;
+    }
+    // Guests hold the risen pose one echo longer — the host's rst (ph 2,
+    // p2 1) lands within ~0.3 s and flips them into the second fight.
   }
 
   private outro(delta: number): void {
@@ -1616,8 +2191,14 @@ export class CampaignSystem extends createSystem({
       }
       this.light.intensity = Math.max(0, 5 * (1 - k));
       if (this.t >= this.victoryDelay) {
-        if (this.advanceAfterVictory) this.advanceRun();
-        else this.finish();
+        if (this.advanceAfterVictory) {
+          // Raid guests hold the collapse until the HOST's stage-change echo
+          // flips them (applyRaidState → stageSetup) — advancing on two
+          // clocks would let a fast guest hop stages and get yanked back.
+          if (this.isAuthority()) this.advanceRun();
+        } else {
+          this.finish();
+        }
       }
     } else {
       // Defeat: it looms and powers down the show.
@@ -1704,6 +2285,16 @@ export class CampaignSystem extends createSystem({
   }
 
   private finish(): void {
+    if (this.raid()) {
+      // The raid room is spent (locked + started) — leave the mesh and land
+      // back at the raid browser, win or wipe.
+      mesh.cancel();
+      app.raidOpen = true;
+      app.raidView = 'browser';
+      app.state = 'menu';
+      this.teardown();
+      return;
+    }
     // Back to the titan line-up, not the main arc — win or lose, the
     // gauntlet is where you pick your next fight (or your rematch).
     app.campaignOpen = true;
@@ -1717,14 +2308,32 @@ export class CampaignSystem extends createSystem({
     this.hudTimer -= delta;
     if (this.hudTimer > 0) return;
     this.hudTimer = 0.15;
-    const boss = fighterAt(1);
+    const boss = this.ensureBoss();
     const me = fighterAt(0);
-    this.hud.setBoss(this.def.name, this.accentCss(), this.runMode() ? fmtRunTime(this.runClock) : '');
+    // The gauntlet clock is a speedrun readout; a raid shows no timer.
+    const clock = this.runMode() && !this.raid() ? fmtRunTime(this.runClock) : '';
+    this.hud.setBoss(this.def.name, this.accentCss(), clock);
     this.hud.setBars(
-      (boss?.getValue(Health, 'current') ?? 0) / (boss?.getValue(Health, 'max') ?? 1),
+      (boss.getValue(Health, 'current') ?? 0) / (boss.getValue(Health, 'max') ?? 1),
       (me?.getValue(Health, 'current') ?? 0) / (me?.getValue(Health, 'max') ?? 1),
-      this.accentCss(),
+      this.p2 ? '#d9a832' : this.accentCss(),
     );
+    // The squad readout: every OTHER raider's name + bar, dimmed when down.
+    if (this.raid()) {
+      const rows: Array<{ name: string; frac: number }> = [];
+      for (const seat of this.occupiedSeats()) {
+        if (seat === mesh.mySeat) continue;
+        const li = localIndexOf(seat);
+        const e = li > 0 ? fighterAt(li) : undefined;
+        rows.push({
+          name: mesh.names[seat] || `RAIDER ${seat + 1}`,
+          frac: (e?.getValue(Health, 'current') ?? 0) / (e?.getValue(Health, 'max') ?? 1),
+        });
+      }
+      this.hud.setSquad(rows);
+    } else {
+      this.hud.setSquad([]);
+    }
   }
 
   private accentCss(): string {

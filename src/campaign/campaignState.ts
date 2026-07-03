@@ -14,6 +14,7 @@
 
 import { Vector3 } from 'three';
 import { ARENA_GAP, CAMPAIGN } from '../config.js';
+import type { PeerMessage } from '../net/protocol.js';
 
 export const campaign = {
   /** World point player throws are aim-assisted toward during a titan bout. */
@@ -21,6 +22,10 @@ export const campaign = {
   /** True while the titan's core is vented open (the punish window). */
   coreOpen: false,
 };
+
+/** RAID wire traffic (ratk / rdmg / rst), routed here by MeshSystem so
+ *  CampaignSystem can drain it without owning the mesh plumbing. */
+export const raidInbox: Array<{ seat: number; msg: PeerMessage }> = [];
 
 /** Gauntlet-run clock formatting: m:ss.t — shared by the HUD and the boards. */
 export function fmtRunTime(seconds: number): string {
@@ -42,6 +47,8 @@ export interface CampaignProgress {
   runTimesHardcore: number[];
   /** Set by finishing your first gauntlet run: hardcore opens. */
   hardcoreUnlocked: boolean;
+  /** True once a RAID has been fully beaten (GOLIATH's second life included). */
+  raidCleared: boolean;
 }
 
 const KEY = 'ff-campaign';
@@ -52,6 +59,7 @@ function fresh(): CampaignProgress {
     runTimesGauntlet: [],
     runTimesHardcore: [],
     hardcoreUnlocked: false,
+    raidCleared: false,
   };
 }
 

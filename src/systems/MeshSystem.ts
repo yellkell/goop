@@ -24,6 +24,8 @@ import { Health } from '../components/Health.js';
 import { BallState, Fireball } from '../components/Fireball.js';
 import { ballCommands, opponents, MAX_OPPONENTS } from '../combat/opponentBus.js';
 import { localIndexOf, localLayout, peerPos, peerQuat, peerVel } from '../combat/layout.js';
+import { syncNetRoster } from '../combat/setup.js';
+import { raidInbox } from '../campaign/campaignState.js';
 import { match } from '../combat/matchState.js';
 import { app, saveStats } from '../menu/appState.js';
 import { mesh } from '../net/mesh.js';
@@ -92,6 +94,25 @@ export class MeshSystem extends createSystem({
     // The duel is NetworkSystem's job; the mesh only ever runs the brawls.
     if (app.arcade === '1v1') {
       this.clearVoice();
+      return;
+    }
+
+    // RAID: campaign-mode combat, but the squad still rides the mesh — poses,
+    // voice, callsigns and the raid wire (ratk/rdmg/rst → the campaign bus).
+    // CampaignSystem owns the bout; there is no astate/authority machinery.
+    if (app.arcade === 'raid') {
+      if (app.state !== 'playing' || app.mode !== 'campaign' || !mesh.joined) {
+        if (mesh.inbox.length) mesh.inbox.length = 0;
+        this.clearVoice();
+        return;
+      }
+      this.receive();
+      this.checkStalePeers();
+      syncNetRoster(); // dropped raiders eliminate; late-seen ones activate
+      this.broadcastIam(delta);
+      this.smooth(delta);
+      this.sendPose(delta);
+      this.updateVoice();
       return;
     }
 
@@ -305,6 +326,13 @@ export class MeshSystem extends createSystem({
     if (msg.k === 'astate') {
       this.lastAstate = performance.now(); // the host is alive and echoing
       if (!mesh.isHost()) this.applyHostState(msg);
+      return;
+    }
+    // RAID wire (boss attacks / damage reports / authoritative boss state):
+    // hand it straight to the campaign bus — CampaignSystem drains it. Seat-
+    // agnostic, so it rides ahead of the local-index gate below.
+    if (msg.k === 'ratk' || msg.k === 'rdmg' || msg.k === 'rst') {
+      if (app.arcade === 'raid') raidInbox.push({ seat, msg });
       return;
     }
     // A peer's callsign — store it by their canonical seat so the HUD can show

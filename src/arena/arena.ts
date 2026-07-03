@@ -34,6 +34,7 @@ import type { World } from '@iwsdk/core';
 import { ARENA_GAP, OCTAGON_VERTICES, PALETTE, PLATFORM, teamColor } from '../config.js';
 import { MAX_OPPONENTS } from '../combat/opponentBus.js';
 import { localLayout } from '../combat/layout.js';
+import { app } from '../menu/appState.js';
 import { hazardTexture } from '../materials/hazard.js';
 import { diamondPlateTextures, type DiamondPlateMaps } from '../materials/diamondPlate.js';
 import { octagonSlab } from './octagon.js';
@@ -270,6 +271,11 @@ export function applyArenaLayout(scene: Object3D): void {
       pad.visible = false;
     }
   }
+  // The RAID pit: a fifth, boss-tinted pedestal at the arc's focus. Every raid
+  // seat faces the anchor from ARENA_GAP away, so it lands at (0,0,-ARENA_GAP)
+  // in EVERY player's frame — dead ahead, exactly like the duel pad.
+  const pit = scene.getObjectByName('raid-boss-platform');
+  if (pit) pit.visible = app.arcade === 'raid';
 }
 
 export function buildArena(world: World): Object3D {
@@ -292,6 +298,14 @@ export function buildArena(world: World): Object3D {
     pad.visible = false;
     arena.add(pad);
   }
+
+  // The RAID pit pedestal — the titan's own ground at the arc's focus, worn in
+  // danger red. Hidden outside raids (applyArenaLayout owns its visibility).
+  const pit = makePlatform(PALETTE.danger);
+  pit.name = 'raid-boss-platform';
+  pit.position.set(0, 0, -ARENA_GAP);
+  pit.visible = false;
+  arena.add(pit);
 
   // "FIRE FIGHT" signage hung high behind the opponent.
   createTitleBanner(scene);

@@ -61,6 +61,7 @@ import { canAfford, spendCoins } from '../menu/wallet.js';
 import { playCash, preloadCash } from '../audio/cash.js';
 import { setMenuMusicActive, toggleMusicMuted } from '../audio/menuMusic.js';
 import { handoffToLobby } from '../audio/battleMusic.js';
+import { startRaidWatch, stopRaidWatch } from '../net/raidWatch.js';
 import { setVoiceEnabled, voiceEnabled } from '../audio/voicePref.js';
 import { buildBoxer, setAvatarAccent, solveTorso, type BoxerRig } from '../avatar/boxer.js';
 import {
@@ -177,6 +178,22 @@ export class MenuSystem extends createSystem({}) {
       return;
     }
 
+    // RAID lobby lifecycle: the room list is only watched while the browser
+    // face is up (and we're not already seated); the fight launches for
+    // EVERYONE — host and guests alike — off the room doc's `started` flag,
+    // so the whole squad enters together.
+    if (app.raidOpen && app.raidView === 'browser' && !mesh.joined) {
+      startRaidWatch((rooms) => {
+        app.raidRooms = rooms;
+      });
+    } else {
+      stopRaidWatch();
+    }
+    if (app.raidOpen && mesh.joined && mesh.raidStarted) {
+      this.launchRaid();
+      return;
+    }
+
     // Customisation and the gazette are both modal: the lobby arc swaps out for
     // the open panel. The leaderboard ('board') hangs behind you — always up.
     // The shop is a sub-modal of customisation: while it's up the customise
@@ -185,6 +202,7 @@ export class MenuSystem extends createSystem({}) {
     const modalCustom = customization.open && !shopOpen;
     const modalNews = app.gazetteOpen;
     const modalCampaign = app.campaignOpen;
+    const modalRaid = app.raidOpen;
     for (const p of this.menu.panels) {
       switch (p.id) {
         case 'board':
@@ -202,10 +220,13 @@ export class MenuSystem extends createSystem({}) {
         case 'campaign':
           p.mesh.visible = modalCampaign;
           break;
+        case 'raid':
+          p.mesh.visible = modalRaid;
+          break;
         default:
           // The arc (train/duel/info), the paper button AND the coin readout:
           // the lobby's face, gone while any modal is open.
-          p.mesh.visible = !customization.open && !modalNews && !modalCampaign;
+          p.mesh.visible = !customization.open && !modalNews && !modalCampaign && !modalRaid;
           break;
       }
     }
@@ -371,6 +392,8 @@ export class MenuSystem extends createSystem({}) {
         action === 'quick-match' ||
         action === 'ranked-host' ||
         action.startsWith('ranked-join-') ||
+        action === 'raid-host' ||
+        action.startsWith('raid-join-') ||
         action === 'arcade-2v2' ||
         action === 'arcade-ffa') &&
       !hasCustomName()
@@ -398,6 +421,36 @@ export class MenuSystem extends createSystem({}) {
         break;
       case 'campaign-close':
         app.campaignOpen = false;
+        break;
+      case 'open-raid':
+        // Rejoining the modal mid-lobby (e.g. after a look around) lands you
+        // back in your squad room, not the browser.
+        app.raidOpen = true;
+        app.raidView = mesh.joined ? 'lobby' : 'browser';
+        break;
+      case 'raid-close':
+        // Closing the modal is leaving the queue outright — no ghost seats
+        // holding lobbies open for squads that wandered off.
+        app.raidOpen = false;
+        app.raidView = 'browser';
+        mesh.cancel();
+        break;
+      case 'raid-host':
+        if (app.onlyBots) break; // raids are online affairs
+        app.raidView = 'lobby';
+        void mesh.hostRaid(myStats().name, (s) => (app.netStatus = s));
+        break;
+      case 'raid-hardcore':
+        if (mesh.isHost()) mesh.setRaidHardcore(!mesh.raidHardcore);
+        break;
+      case 'raid-start':
+        // The doc flips `started`; every member (host included) launches off
+        // the same signal in update(), so the whole squad enters together.
+        if (mesh.isHost()) mesh.startRaid();
+        break;
+      case 'raid-leave':
+        mesh.cancel();
+        app.raidView = 'browser';
         break;
       case 'campaign-speedrun':
       case 'campaign-hardcore':
@@ -689,6 +742,17 @@ export class MenuSystem extends createSystem({}) {
           app.fromRanked = true;
           app.state = 'queueing';
           net.joinRanked(action.slice('ranked-join-'.length));
+        } else if (action.startsWith('raid-join-')) {
+          // Claim a seat in a listed raid lobby; a race with a fourth joiner
+          // drops you back on the (fresh) list.
+          if (!app.onlyBots) {
+            app.raidView = 'lobby';
+            void mesh
+              .joinRaid(action.slice('raid-join-'.length), myStats().name, (s) => (app.netStatus = s))
+              .then((ok) => {
+                if (!ok) app.raidView = 'browser';
+              });
+          }
         }
         break;
     }
@@ -921,6 +985,22 @@ export class MenuSystem extends createSystem({}) {
     }
   }
 
+  /** The whole squad drops into the arc together — the host flipped
+   *  `started` on the room doc and every member launches off that signal. */
+  private launchRaid(): void {
+    stopRaidWatch();
+    app.raidOpen = false;
+    app.raidRooms = [];
+    app.arcade = 'raid';
+    app.mySlot = mesh.mySeat;
+    app.mode = 'campaign';
+    app.campaignMode = 'raid';
+    app.raidHardcore = mesh.raidHardcore;
+    app.campaignStage = 0;
+    app.state = 'playing';
+    this.applyState();
+  }
+
   private runPanelAction(id: string): void {
     sfx.uiClick();
     switch (id) {
@@ -929,8 +1009,15 @@ export class MenuSystem extends createSystem({}) {
         this.panel.mesh.visible = false;
         // Ends a live net bout OR stops the bot-bout background search.
         if (app.state === 'playing') net.cancel();
-        // A conceded/finished titan bout returns to the line-up, not the arc.
-        if (app.mode === 'campaign') app.campaignOpen = true;
+        // A conceded raid leaves the squad (the room is spent) and lands at
+        // the raid browser; a solo titan bout returns to the line-up.
+        if (app.mode === 'campaign' && app.campaignMode === 'raid') {
+          mesh.cancel();
+          app.raidOpen = true;
+          app.raidView = 'browser';
+        } else if (app.mode === 'campaign') {
+          app.campaignOpen = true;
+        }
         app.state = 'menu'; // training tears down unsaved; bouts end here
         this.applyState();
         break;
@@ -1087,8 +1174,10 @@ export class MenuSystem extends createSystem({}) {
     if (banner) banner.visible = inLobby;
     // Outside a live bout, fall back to the classic duel layout so the lobby
     // and Aim Training show one opponent pad, not a leftover arcade cross,
-    // and leave any arcade mesh room we were in.
-    if (app.state !== 'playing') {
+    // and leave any arcade mesh room we were in. EXCEPT while the raid modal
+    // is up: the raid LOBBY is a live mesh room parked in the menu state —
+    // cancelling here would tear down the squad you just hosted or joined.
+    if (app.state !== 'playing' && !app.raidOpen) {
       mesh.cancel();
       app.arcade = '1v1';
       app.mySlot = 0;

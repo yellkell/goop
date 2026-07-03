@@ -31,7 +31,7 @@ import {
   Mesh,
   MeshStandardMaterial,
 } from 'three';
-import { PALETTE } from '../config.js';
+import { PALETTE, RAID } from '../config.js';
 
 /**
  * 'volley' is the one attack aimed at YOU instead of the floor: the shoulder
@@ -214,6 +214,25 @@ export const BOSSES: BossDef[] = [
     weakPattern: 'crown',
   },
 ];
+
+/**
+ * The RAID cut of a titan: grown past the solo version, a health pool sized
+ * for FOUR fists (well over 4x), and a cadence tuned for a squad — it swings
+ * sooner and telegraphs snap a touch faster, because on any given strike
+ * three of you are safe and one of you is not.
+ */
+export function raidBoss(def: BossDef): BossDef {
+  const charge = { ...def.charge };
+  for (const k of Object.keys(charge) as AttackKind[]) charge[k] *= RAID.chargeMult;
+  return {
+    ...def,
+    scale: def.scale * RAID.scaleMult,
+    health: Math.round(def.health * RAID.healthMult),
+    cooldownMin: def.cooldownMin * RAID.cooldownMult,
+    cooldownMax: def.cooldownMax * RAID.cooldownMult,
+    charge,
+  };
+}
 
 // --- rig ---------------------------------------------------------------------
 

@@ -12,6 +12,7 @@
 
 import { fadeInMenuMusic, isMusicMuted } from './menuMusic.js';
 import victoryUrl from '../assets/music/victory.mp3?url';
+import brainEaterUrl from '../assets/music/brain-eater.mp3?url';
 
 // Auto-discovered battle tracks — drop more .mp3s in assets/music/battle.
 const battleUrls = Object.values(
@@ -35,6 +36,8 @@ const VICTORY_PAUSE_MS = 1000; // silence between the sting and the lobby music
 
 let battle: HTMLAudioElement | null = null;
 let victory: HTMLAudioElement | null = null;
+/** The bespoke final-section track (raid GOLIATH's second life). */
+let finale: HTMLAudioElement | null = null;
 let timers: number[] = [];
 let handoffActive = false;
 
@@ -79,11 +82,33 @@ export function startBattleMusic(volume: number = BATTLE_VOLUME): void {
  *  separately, so leaving a bout doesn't cut it short. */
 export function stopBattleTrack(): void {
   battle?.pause();
+  finale?.pause();
+}
+
+/**
+ * The FINALE: raid GOLIATH's resurrection anthem ("BrAîN 3AtęŘ"). Kills the
+ * regular battle loop and starts the bespoke track from the top — its intro
+ * scores the shake + six-second rise, and the fight resumes on the drop. Loops
+ * for the whole second life; stopBattleTrack / playVictory end it.
+ */
+export function startFinaleTrack(): void {
+  battle?.pause();
+  if (isMusicMuted()) return;
+  if (!finale) {
+    finale = new Audio(brainEaterUrl);
+    finale.loop = true;
+  }
+  finale.volume = BOSS_BATTLE_VOLUME;
+  finale.currentTime = 0;
+  void finale.play().catch(() => {
+    /* autoplay blocked or decode failed — stay silent */
+  });
 }
 
 /** Match over: duck the battle track and ring the victory sting once. */
 export function playVictory(): void {
   battle?.pause();
+  finale?.pause();
   if (isMusicMuted()) return;
   if (!victory) victory = new Audio(victoryUrl);
   victory.onended = null;
@@ -103,6 +128,7 @@ export function playVictory(): void {
 export function handoffToLobby(): void {
   clearHandoff();
   battle?.pause();
+  finale?.pause();
 
   const v = victory;
   if (!v || v.paused || v.ended) {

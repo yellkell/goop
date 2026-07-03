@@ -44,6 +44,7 @@ import {
   type LeaderboardTab,
 } from '../net/leaderboard.js';
 import { gazette, type GazetteArticle } from '../net/gazette.js';
+import { mesh } from '../net/mesh.js';
 import { isMusicMuted } from '../audio/menuMusic.js';
 import { voiceEnabled } from '../audio/voicePref.js';
 import { PUB_MAX_PLAYERS } from '../pub/protocol.js';
@@ -71,7 +72,9 @@ export type PanelId =
   /** The Gasket Gazette front page itself (opens modal over the lobby). */
   | 'news'
   /** The ARCADE campaign line-up — the titan gauntlet (modal over the lobby). */
-  | 'campaign';
+  | 'campaign'
+  /** The RAID lobby (room browser / squad room) — modal over the lobby. */
+  | 'raid';
 
 export type MenuAction =
   | 'start-tutorial'
@@ -84,6 +87,14 @@ export type MenuAction =
   | 'campaign-speedrun'
   | 'campaign-hardcore'
   | `campaign-${number}`
+  /** The RAID lobby: browse rooms, host one, join one, host controls. */
+  | 'open-raid'
+  | 'raid-close'
+  | 'raid-host'
+  | 'raid-hardcore'
+  | 'raid-start'
+  | 'raid-leave'
+  | `raid-join-${string}`
   | 'toggle-shootback'
   | 'toggle-onlybots'
   | 'toggle-voice'
@@ -160,10 +171,10 @@ export type MenuAction =
 
 const PW = 512;
 const PH = 400;
-// The ARCADE panel holds TUTORIAL / CAMPAIGN / AIM TRAINING plus its three
-// breaker toggles (shoot-back, only-play-bots, voice-chat) — the 2V2 / FFA
-// brawls moved to the BATTLE panel, so it's shorter now.
-const TRAIN_H = PH + 20;
+// The ARCADE panel holds TUTORIAL / CAMPAIGN / RAID / AIM TRAINING plus its
+// three breaker toggles (shoot-back, only-play-bots, voice-chat) — the
+// 2V2 / FFA brawls live on the BATTLE panel.
+const TRAIN_H = PH + 80;
 // The 1V1 panel grows a little downward so the "searching for an opponent…"
 // line sits inside the frame instead of hanging off the bottom edge.
 const DUEL_H = PH + 48;
@@ -287,7 +298,9 @@ function drawTrain(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null
   buttonPlate(ctx, 70, 80, PW - 140, 54, 'TUTORIAL', UI.emberBright, hoverAction === 'start-tutorial');
   // The single-player CAMPAIGN — the titan gauntlet — right below it.
   buttonPlate(ctx, 70, 140, PW - 140, 54, 'CAMPAIGN', UI.danger, hoverAction === 'open-campaign');
-  buttonPlate(ctx, 70, 200, PW - 140, 54, 'AIM TRAINING', UI.ember, hoverAction === 'start-training');
+  // The RAID — four raiders, five titans, one lobby.
+  buttonPlate(ctx, 70, 200, PW - 140, 54, 'RAID', '#b26bff', hoverAction === 'open-raid');
+  buttonPlate(ctx, 70, 260, PW - 140, 54, 'AIM TRAINING', UI.ember, hoverAction === 'start-training');
 
   // Two industrial breaker switches: targets-shoot-back, then only-play-bots.
   const breaker = (text: string, on: boolean, hot: boolean, py: number, onFill: string, onStroke: string): void => {
@@ -306,9 +319,9 @@ function drawTrain(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null
     const kw = pw / 2 - 10;
     ctx.fillRect(on ? px + pw - kw - 6 : px + 6, py + 6, kw, ph - 12);
   };
-  breaker('targets shoot back', app.shootBack, hoverAction === 'toggle-shootback', 268, 'rgba(79,183,255,0.25)', UI.cool);
-  breaker('only play bots', app.onlyBots, hoverAction === 'toggle-onlybots', 310, 'rgba(255,176,0,0.25)', UI.amber);
-  breaker('voice chat', voiceEnabled(), hoverAction === 'toggle-voice', 352, 'rgba(57,217,138,0.28)', '#39d98a');
+  breaker('targets shoot back', app.shootBack, hoverAction === 'toggle-shootback', 328, 'rgba(79,183,255,0.25)', UI.cool);
+  breaker('only play bots', app.onlyBots, hoverAction === 'toggle-onlybots', 370, 'rgba(255,176,0,0.25)', UI.amber);
+  breaker('voice chat', voiceEnabled(), hoverAction === 'toggle-voice', 412, 'rgba(57,217,138,0.28)', '#39d98a');
 }
 
 function hitTrain(_u: number, v: number): MenuAction | null {
@@ -316,10 +329,11 @@ function hitTrain(_u: number, v: number): MenuAction | null {
   const y = (1 - v) * TRAIN_H;
   if (y >= 80 && y <= 134) return 'start-tutorial';
   if (y >= 140 && y <= 194) return 'open-campaign';
-  if (y >= 200 && y <= 254) return 'start-training';
-  if (y >= 266 && y <= 304) return 'toggle-shootback';
-  if (y >= 308 && y <= 346) return 'toggle-onlybots';
-  if (y >= 350 && y <= 388) return 'toggle-voice';
+  if (y >= 200 && y <= 254) return 'open-raid';
+  if (y >= 260 && y <= 314) return 'start-training';
+  if (y >= 326 && y <= 364) return 'toggle-shootback';
+  if (y >= 368 && y <= 406) return 'toggle-onlybots';
+  if (y >= 410 && y <= 448) return 'toggle-voice';
   return null;
 }
 
@@ -1938,6 +1952,151 @@ function hitCampaign(u: number, v: number): MenuAction | null {
   return null;
 }
 
+// ───────────────────────────── THE RAID LOBBY ───────────────────────────────
+// Two faces of one modal: the BROWSER (open squads you can join + HOST) and a
+// joined LOBBY (the squad's four slots, the host's hardcore breaker, START).
+// Matchmaking works like RANKED's server browser: hosting makes a VISIBLE
+// room; the raid launches for everyone the moment the host starts it.
+
+const RAID_W = 640;
+const RAID_H = 560;
+const RAID_ROW_Y0 = 150;
+const RAID_ROW_H = 58;
+const RAID_ROW_GAP = 10;
+const RAID_HOST_BTN = { x: 70, y: RAID_H - 152, w: RAID_W - 140, h: 58 };
+const RAID_CLOSE_BTN = { x: RAID_W / 2 - 90, y: RAID_H - 78, w: 180, h: 48 };
+const RAID_SLOT_Y0 = 148;
+const RAID_SLOT_H = 52;
+const RAID_SLOT_GAP = 10;
+const RAID_HC_Y = 406;
+const RAID_START_BTN = { x: 70, y: RAID_H - 108, w: (RAID_W - 160) / 2, h: 56 };
+const RAID_LEAVE_BTN = { x: RAID_W / 2 + 10, y: RAID_H - 108, w: (RAID_W - 160) / 2, h: 56 };
+
+function drawRaid(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
+  panelBg(ctx, false, '#b26bff', 'RAID', RAID_W, RAID_H);
+  ctx.textAlign = 'center';
+  ctx.font = '600 21px system-ui, sans-serif';
+  ctx.fillStyle = UI.textDim;
+  ctx.fillText('four fists · five titans · one life for the squad', RAID_W / 2, 100);
+
+  if (app.raidView === 'lobby') return drawRaidLobby(ctx, hoverAction);
+
+  // — the BROWSER: open squads, or raise your own —
+  const rooms = app.raidRooms.slice(0, 4);
+  if (!rooms.length) {
+    ctx.fillStyle = UI.steelDim;
+    ctx.font = '600 22px system-ui, sans-serif';
+    ctx.fillText('no open raids — raise your own squad', RAID_W / 2, RAID_ROW_Y0 + 70);
+  }
+  rooms.forEach((room, i) => {
+    const ry = RAID_ROW_Y0 + i * (RAID_ROW_H + RAID_ROW_GAP);
+    const hot = hoverAction === `raid-join-${room.id}`;
+    plate(ctx, 70, ry, RAID_W - 140, RAID_ROW_H, {
+      cut: 12,
+      fill: hot ? 'rgba(178,107,255,0.16)' : 'rgba(150,150,170,0.08)',
+      stroke: hot ? '#b26bff' : UI.steelDim,
+      rivets: false,
+    });
+    ctx.textAlign = 'left';
+    ctx.font = '700 24px system-ui, sans-serif';
+    ctx.fillStyle = hot ? '#d9c2ff' : UI.text;
+    ctx.fillText(`${room.host}'S RAID`, 92, ry + RAID_ROW_H / 2 + 2);
+    ctx.textAlign = 'right';
+    ctx.font = '800 22px system-ui, sans-serif';
+    ctx.fillStyle = room.count >= 4 ? UI.danger : UI.coolBright;
+    ctx.fillText(`${room.count}/4`, RAID_W - 92, ry + RAID_ROW_H / 2 + 2);
+    if (room.hardcore) {
+      ctx.font = '800 15px system-ui, sans-serif';
+      ctx.fillStyle = UI.danger;
+      ctx.fillText('HARDCORE', RAID_W - 150, ry + RAID_ROW_H / 2 + 2);
+    }
+    ctx.textAlign = 'center';
+  });
+
+  buttonPlate(ctx, RAID_HOST_BTN.x, RAID_HOST_BTN.y, RAID_HOST_BTN.w, RAID_HOST_BTN.h, 'HOST A RAID', '#b26bff', hoverAction === 'raid-host');
+  buttonPlate(ctx, RAID_CLOSE_BTN.x, RAID_CLOSE_BTN.y, RAID_CLOSE_BTN.w, RAID_CLOSE_BTN.h, 'CLOSE', UI.steel, hoverAction === 'raid-close');
+}
+
+function drawRaidLobby(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
+  const host = mesh.isHost();
+  // The squad's four slots — filled callsigns, or the seat left open.
+  for (let seat = 0; seat < 4; seat++) {
+    const ry = RAID_SLOT_Y0 + seat * (RAID_SLOT_H + RAID_SLOT_GAP);
+    const occupied = !!mesh.occupants[seat];
+    const isMe = mesh.joined && seat === mesh.mySeat;
+    plate(ctx, 70, ry, RAID_W - 140, RAID_SLOT_H, {
+      cut: 12,
+      fill: isMe ? 'rgba(255,122,24,0.14)' : occupied ? 'rgba(178,107,255,0.10)' : 'rgba(150,150,170,0.06)',
+      stroke: isMe ? UI.ember : occupied ? '#b26bff' : UI.steelDim,
+      rivets: false,
+    });
+    ctx.textAlign = 'left';
+    ctx.font = '700 23px system-ui, sans-serif';
+    ctx.fillStyle = occupied ? UI.text : UI.steelDim;
+    const label = occupied ? mesh.names[seat] || `RAIDER ${seat + 1}` : 'open seat…';
+    ctx.fillText(label, 92, ry + RAID_SLOT_H / 2 + 2);
+    if (seat === 0 && occupied) {
+      ctx.textAlign = 'right';
+      ctx.font = '800 16px system-ui, sans-serif';
+      ctx.fillStyle = '#d9c2ff';
+      ctx.fillText('HOST', RAID_W - 92, ry + RAID_SLOT_H / 2 + 2);
+    }
+    ctx.textAlign = 'center';
+  }
+
+  // The HARDCORE breaker — the host throws it; everyone sees where it sits.
+  ctx.textAlign = 'left';
+  ctx.font = '700 21px system-ui, sans-serif';
+  ctx.fillStyle = hoverAction === 'raid-hardcore' && host ? UI.danger : UI.textDim;
+  ctx.fillText('hardcore — no healing between titans', 92, RAID_HC_Y + 23);
+  const pw = 96;
+  const ph = 34;
+  const px = RAID_W - 92 - pw;
+  plate(ctx, px, RAID_HC_Y, pw, ph, {
+    cut: 10,
+    fill: mesh.raidHardcore ? 'rgba(232,53,42,0.25)' : 'rgba(150,150,170,0.12)',
+    stroke: mesh.raidHardcore ? UI.danger : host && hoverAction === 'raid-hardcore' ? UI.danger : UI.steelDim,
+    rivets: false,
+  });
+  ctx.fillStyle = mesh.raidHardcore ? UI.danger : UI.steelDim;
+  const kw = pw / 2 - 10;
+  ctx.fillRect(mesh.raidHardcore ? px + pw - kw - 6 : px + 6, RAID_HC_Y + 6, kw, ph - 12);
+  ctx.textAlign = 'center';
+
+  if (host) {
+    buttonPlate(ctx, RAID_START_BTN.x, RAID_START_BTN.y, RAID_START_BTN.w, RAID_START_BTN.h, 'START', UI.danger, hoverAction === 'raid-start');
+  } else {
+    ctx.font = '600 20px system-ui, sans-serif';
+    ctx.fillStyle = 'rgba(217,194,255,0.85)';
+    ctx.fillText('waiting for the host…', RAID_START_BTN.x + RAID_START_BTN.w / 2, RAID_START_BTN.y + RAID_START_BTN.h / 2 + 2);
+  }
+  buttonPlate(ctx, RAID_LEAVE_BTN.x, RAID_LEAVE_BTN.y, RAID_LEAVE_BTN.w, RAID_LEAVE_BTN.h, 'LEAVE', UI.steel, hoverAction === 'raid-leave');
+}
+
+function hitRaid(u: number, v: number): MenuAction | null {
+  const x = u * RAID_W;
+  const y = (1 - v) * RAID_H;
+  const inBtn = (b: { x: number; y: number; w: number; h: number }): boolean =>
+    x >= b.x && x <= b.x + b.w && y >= b.y - 4 && y <= b.y + b.h + 4;
+
+  if (app.raidView === 'lobby') {
+    if (mesh.isHost() && y >= RAID_HC_Y - 4 && y <= RAID_HC_Y + 40 && x >= 70 && x <= RAID_W - 70) return 'raid-hardcore';
+    if (mesh.isHost() && inBtn(RAID_START_BTN)) return 'raid-start';
+    if (inBtn(RAID_LEAVE_BTN)) return 'raid-leave';
+    return null;
+  }
+  if (inBtn(RAID_HOST_BTN)) return 'raid-host';
+  if (inBtn(RAID_CLOSE_BTN)) return 'raid-close';
+  const rooms = app.raidRooms.slice(0, 4);
+  for (let i = 0; i < rooms.length; i++) {
+    const ry = RAID_ROW_Y0 + i * (RAID_ROW_H + RAID_ROW_GAP);
+    if (y >= ry - 4 && y <= ry + RAID_ROW_H + 4 && x >= 70 && x <= RAID_W - 70 && rooms[i].count < 4) {
+      return `raid-join-${rooms[i].id}` as MenuAction;
+    }
+  }
+  return null;
+}
+
 // ─────────────────────────── SHOP & LOCKER ──────────────────────────────────
 // Two faces of one tabbed cosmetics plate. SHOP lists only the items you DON'T
 // own yet, with prices (buying auto-equips AND stocks your locker); LOCKER lists
@@ -2423,6 +2582,11 @@ export function createMenu(scene: Scene): Menu {
     cw: CAMP_W,
     ch: CAMP_H,
   });
+  // The RAID lobby (browser / squad room) — same modal slot as the campaign.
+  const raid = makePanel('raid', 1.05, 1.05 * (RAID_H / RAID_W), drawRaid, hitRaid, {
+    cw: RAID_W,
+    ch: RAID_H,
+  });
   // The coin readout beside the paper button, and the platform shop it links to.
   const coinHud = makePanel('coins', 0.24, 0.24 * (COIN_HUD_H / COIN_HUD_W), (ctx) => drawCoinHud(ctx), () => null, {
     cw: COIN_HUD_W,
@@ -2484,8 +2648,11 @@ export function createMenu(scene: Scene): Menu {
   // The titan line-up opens dead centre too — same modal slot as the paper.
   campaign.mesh.position.set(0, 1.5, -1.2);
   campaign.mesh.visible = false;
+  // The raid lobby shares the centre modal slot.
+  raid.mesh.position.set(0, 1.5, -1.18);
+  raid.mesh.visible = false;
 
-  const panels = [train, duel, info, board, custom, balls, gazetteBtn, muteBtn, passthroughBtn, coinHud, shop, news, campaign];
+  const panels = [train, duel, info, board, custom, balls, gazetteBtn, muteBtn, passthroughBtn, coinHud, shop, news, campaign, raid];
   for (const p of panels) {
     p.redraw(null);
     group.add(p.mesh);

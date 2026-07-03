@@ -114,6 +114,11 @@ export class CollisionSystem extends createSystem({
         // Arcade mesh: same victim authority for any enemy ball; the report
         // names the attacker's seat so only they spend their ball.
         if (owner !== 0 && ownerTeam !== 0) this.enemyBallVsMe(ball, owner, hitboxes, radius, damage, returning);
+      } else if (app.mode === 'campaign' && app.arcade === 'raid') {
+        // RAID: my sim rules only MY balls vs the titan — every raider
+        // reports their own landed hits to the host (rdmg), so a squadmate's
+        // RENDERED ball must never also dent my local copy of the boss.
+        if (owner === 0) this.resolveLocalHit(ball, owner, ownerTeam, hitboxes, radius, damage, returning);
       } else {
         // Bot bouts (incl. arcade 2v2/FFA): one local sim is authoritative for
         // every fighter — resolve this ball against any enemy-team body.

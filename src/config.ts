@@ -316,6 +316,42 @@ export const CAMPAIGN = {
   leaderboardSize: 5, // times kept per mode (gauntlet / hardcore)
 };
 
+/**
+ * RAID — the four-player group campaign. Same five titans as the gauntlet but
+ * built for a SQUAD: bigger, far tougher, attacks split across four platforms,
+ * and GOLIATH does not stay down. The host runs the boss (attack picks, health,
+ * weak-point pattern) and echoes state; every client renders every attack and
+ * judges only the strikes aimed at ITS OWN platform.
+ */
+export const RAID = {
+  /** Titan growth over the solo campaign versions. */
+  scaleMult: 1.22,
+  /** Boss health multiplier — "more than 4x": four raiders, and then some. */
+  healthMult: 4.6,
+  /** Attack cadence multiplier — four targets to pressure, so it swings sooner. */
+  cooldownMult: 0.62,
+  /** Charge-time multiplier — slightly snappier telegraphs. */
+  chargeMult: 0.92,
+  /** GOLIATH's crown ring stops take this many hits each in a raid (a squad
+   *  shreds single-hit stops too fast). */
+  crownPerStop: 2,
+  /** The DECREE — GOLIATH's raid-only GROUP attack: novas bloom on EVERY
+   *  platform at once around one shared canonical bearing, so the whole squad
+   *  must rotate to the same compass point together. */
+  decreeWeight: 4, // vs his other attacks once it unlocks
+  decreeCharge: 2.4, // seconds — the longest windup in the game
+  /** THE RESURRECTION (raid GOLIATH only) — beats in seconds:
+   *  fallen still → a shake → he rises over `riseTime` while his health bar
+   *  refills, timed so the fight resumes ON the drop of the bespoke track. */
+  resStillTime: 3.0,
+  resShakeTime: 1.4,
+  resRiseTime: 6.0,
+  /** Phase 2: the crown walked in REVERSE, this many loops, enrage locked on. */
+  phase2Loops: 2,
+  /** Host state-echo cadence (seconds). */
+  stateEcho: 0.3,
+};
+
 /** Match format: best-of rounds, Blaston-style pacing. */
 export const MATCH = {
   startDelay: 7, // quick-match pre-fight hold before the first live round
@@ -461,7 +497,7 @@ export function teamColor(team: number): number {
  *             three sit N / E / W around a shared centre, everyone facing in.
  */
 
-export type ArcadeMode = '1v1' | '2v2' | 'ffa';
+export type ArcadeMode = '1v1' | '2v2' | 'ffa' | 'raid';
 
 /** Centre-to-centre spacing between same-side platforms in 2v2. */
 export const TEAM_SPACING = 1.9;
@@ -473,6 +509,10 @@ export const TEAM_SPACING = 1.9;
  * and chaotic — right for a brawl.
  */
 export const FFA_ARM = ARENA_GAP / 2;
+
+/** RAID arc seat bearings (radians about the boss anchor): a ~108° semicircle
+ *  spread, symmetric, ~1.9 m between neighbouring platforms. */
+const RAID_ARC_ANGLES = [-0.9424778, -0.31415927, 0.31415927, 0.9424778];
 
 /** One platform's place in a mode's roster. */
 export interface FighterSlot {
@@ -507,7 +547,23 @@ export const MODE_LAYOUT: Record<ArcadeMode, FighterSlot[]> = {
     { pos: [FFA_ARM, 0, -FFA_ARM], yaw: Math.PI / 2, team: 2 }, // east, faces -X
     { pos: [-FFA_ARM, 0, -FFA_ARM], yaw: -Math.PI / 2, team: 3 }, // west, faces +X
   ],
+  // RAID: four platforms on a semicircular arc around the titan's pit — the
+  // pit anchor sits at (0,0,-ARENA_GAP) and every seat stands ON A CIRCLE of
+  // radius ARENA_GAP around it, yawed to face it. That geometry is the whole
+  // trick: because each seat faces the anchor at the same distance, the titan
+  // lands at (0, 0, -ARENA_GAP) in EVERY player's local frame — exactly where
+  // the solo campaign puts it — so the entire boss-fight stack (telegraphs on
+  // your platform, weak-point aim, dodge geometry) runs unchanged per client,
+  // and only the OTHER raiders' attacks/platforms need seat transforms.
+  raid: RAID_ARC_ANGLES.map((phi) => ({
+    pos: [Math.sin(phi) * ARENA_GAP, 0, -ARENA_GAP + Math.cos(phi) * ARENA_GAP] as [number, number, number],
+    yaw: phi,
+    team: 0, // one squad — no friendly fire
+  })),
 };
+
+/** RAID canonical boss anchor — the pit the arc curls around. */
+export const RAID_BOSS_ANCHOR: [number, number, number] = [0, 0, -ARENA_GAP];
 
 /** Opponent slots for a mode (everyone but the local player at slot 0). */
 export function opponentSlots(mode: ArcadeMode): FighterSlot[] {

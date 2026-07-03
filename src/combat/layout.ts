@@ -96,6 +96,27 @@ export function peerPos(out: Vector3, peerSeat: number, x: number, y: number, z:
   return rotY(out, out.x, out.y, out.z, -me.yaw);
 }
 
+/**
+ * MY-world point → a peer seat's LOCAL frame — the exact inverse of peerPos.
+ * (The raid host aims titan strikes in the TARGET's frame; a remote target's
+ * head arrives in my world off the pose bus and gets pulled back through
+ * this before it rides the wire.)
+ */
+export function worldToPeer(out: Vector3, peerSeat: number, x: number, y: number, z: number): Vector3 {
+  const canonical = MODE_LAYOUT[app.arcade];
+  const s = app.mySlot;
+  const me = canonical[s] ?? { pos: [0, 0, 0], yaw: 0, team: 0 };
+  const peer = canonical[peerSeat] ?? me;
+  // R(yaw_s) · w
+  rotY(out, x, y, z, me.yaw);
+  // + (pos_s - pos_p)
+  out.x += me.pos[0] - peer.pos[0];
+  out.y += me.pos[1] - peer.pos[1];
+  out.z += me.pos[2] - peer.pos[2];
+  // R(-yaw_p) ·
+  return rotY(out, out.x, out.y, out.z, -peer.yaw);
+}
+
 /** Their-local velocity/direction → my world (rotation only, no translation). */
 export function peerVel(out: Vector3, peerSeat: number, x: number, y: number, z: number): Vector3 {
   const canonical = MODE_LAYOUT[app.arcade];

@@ -22,6 +22,10 @@ export interface MeshInbox {
 
 interface MeshImplApi {
   queue(mode: ArcadeMode): Promise<void>;
+  hostRaid(name: string): Promise<void>;
+  joinRaid(roomId: string, name: string): Promise<boolean>;
+  setRaidHardcore(v: boolean): void;
+  startRaid(): void;
   send(msg: PeerMessage): void;
   lock(): void;
   dropSeat(seat: number): void;
@@ -48,6 +52,9 @@ class Mesh {
   /** Room closed to new joiners — full, or the host locked a short-handed FFA. */
   locked = false;
   joined = false;
+  /** RAID lobby state, mirrored live from the room doc. */
+  raidHardcore = false;
+  raidStarted = false;
   /** Status sink for the lobby panel. */
   onStatus: (s: string) => void = () => {};
 
@@ -82,6 +89,34 @@ class Mesh {
     await this.impl.queue(mode);
   }
 
+  /** RAID: open a fresh visible lobby with me as host (never auto-joins). */
+  async hostRaid(name: string, onStatus?: (s: string) => void): Promise<void> {
+    this.close();
+    if (onStatus) this.onStatus = onStatus;
+    const { MeshImpl } = await import('./meshImpl.js');
+    this.impl = new MeshImpl(this);
+    await this.impl.hostRaid(name);
+  }
+
+  /** RAID: claim a seat in a listed lobby. False = it filled/closed first. */
+  async joinRaid(roomId: string, name: string, onStatus?: (s: string) => void): Promise<boolean> {
+    this.close();
+    if (onStatus) this.onStatus = onStatus;
+    const { MeshImpl } = await import('./meshImpl.js');
+    this.impl = new MeshImpl(this);
+    return this.impl.joinRaid(roomId, name);
+  }
+
+  /** RAID host: flip the lobby's hardcore breaker (mirrored to everyone). */
+  setRaidHardcore(v: boolean): void {
+    this.impl?.setRaidHardcore(v);
+  }
+
+  /** RAID host: lock the lobby and launch — every member sees `raidStarted`. */
+  startRaid(): void {
+    this.impl?.startRaid();
+  }
+
   /** Broadcast a game message to every connected peer (stamped with my seat). */
   send(msg: PeerMessage): void {
     this.impl?.send(msg);
@@ -107,6 +142,8 @@ class Mesh {
     this.joined = false;
     this.full = false;
     this.locked = false;
+    this.raidHardcore = false;
+    this.raidStarted = false;
     this.inbox.length = 0;
     this.mySeat = 0;
     this.occupants = [];

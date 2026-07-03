@@ -126,10 +126,18 @@ export const app: {
   campaignStage: number;
   /**
    * How the campaign is being played: one titan ('single'), the timed
-   * back-to-back GAUNTLET RUN (health refills between titans), or HARDCORE
-   * (same run, no healing).
+   * back-to-back GAUNTLET RUN (health refills between titans), HARDCORE
+   * (same run, no healing), or the four-player RAID (always a full run).
    */
-  campaignMode: 'single' | 'gauntlet' | 'hardcore';
+  campaignMode: 'single' | 'gauntlet' | 'hardcore' | 'raid';
+  /** The RAID lobby modal is open over the lobby (like campaignOpen). */
+  raidOpen: boolean;
+  /** Which face the raid modal shows: the room browser, or a joined lobby. */
+  raidView: 'browser' | 'lobby';
+  /** Open raid rooms for the browser (live from raidWatch). */
+  raidRooms: { id: string; host: string; count: number; hardcore: boolean }[];
+  /** The launched raid runs hardcore (host's lobby toggle, stamped at start). */
+  raidHardcore: boolean;
   /** Which backdrop the arena renders — held across every mode. */
   environment: AppEnvironment;
   /** Player's chosen avatar-accent hue (0..1 around the colour wheel). */
@@ -180,6 +188,10 @@ export const app: {
   campaignOpen: false,
   campaignStage: 0,
   campaignMode: 'single',
+  raidOpen: false,
+  raidView: 'browser',
+  raidRooms: [],
+  raidHardcore: false,
   environment: ((): AppEnvironment => {
     const e = localStorage.getItem('ff-env');
     // First-ever launch (nothing stored) opens in the desert arena; after that

@@ -38,7 +38,7 @@ const ICE_SERVERS: RTCConfiguration = {
   iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }],
 };
 const ROOM_FRESH_MS = 3 * 60 * 1000;
-const CAPACITY: Record<ArcadeMode, number> = { '1v1': 2, '2v2': 4, ffa: 4 };
+const CAPACITY: Record<ArcadeMode, number> = { '1v1': 2, '2v2': 4, ffa: 4, raid: 4 };
 
 let firebaseApp: FirebaseApp | undefined;
 function db(): Firestore {
@@ -88,6 +88,78 @@ export class MeshImpl {
     this.state.joined = true;
     this.state.onStatus(seat === 0 ? 'hosting — waiting for players…' : `joined (seat ${seat})`);
     this.watchRoom();
+  }
+
+  /** RAID: always CREATE a fresh, visible lobby (never auto-join) — the room
+   *  browser is the front door; hosts and joiners take different paths. */
+  async hostRaid(name: string): Promise<void> {
+    this.mode = 'raid';
+    this.state.capacity = CAPACITY.raid;
+    this.state.onStatus('opening a raid lobby…');
+    const rooms = collection(db(), 'arcadeRooms');
+    const seats = Array.from({ length: this.state.capacity }, (_, i) => (i === 0 ? this.clientId : ''));
+    const names = Array.from({ length: this.state.capacity }, (_, i) => (i === 0 ? name : ''));
+    this.roomRef = await addDoc(rooms, {
+      mode: 'raid',
+      capacity: this.state.capacity,
+      seats,
+      names,
+      hardcore: false,
+      started: false,
+      open: true,
+      createdAt: serverTimestamp(),
+    });
+    if (this.closed) return;
+    this.state.mySeat = 0;
+    this.state.joined = true;
+    this.state.names[0] = name;
+    this.state.onStatus('lobby open — waiting for raiders…');
+    this.watchRoom();
+  }
+
+  /** RAID: claim a seat in a SPECIFIC listed lobby. False = filled/gone. */
+  async joinRaid(roomId: string, name: string): Promise<boolean> {
+    this.mode = 'raid';
+    this.state.capacity = CAPACITY.raid;
+    this.state.onStatus('joining the raid…');
+    const ref = doc(collection(db(), 'arcadeRooms'), roomId);
+    try {
+      const seat = await runTransaction(db(), async (txn) => {
+        const fresh = await txn.get(ref);
+        if (!fresh.exists() || fresh.data()?.open !== true || fresh.data()?.started === true) {
+          throw new Error('gone');
+        }
+        const seats = (fresh.data().seats as string[]) ?? [];
+        const names = (fresh.data().names as string[]) ?? seats.map(() => '');
+        const free = seats.findIndex((s) => !s);
+        if (free < 0) throw new Error('full');
+        seats[free] = this.clientId;
+        names[free] = name;
+        txn.update(ref, { seats, names, open: !seats.every((s) => s) });
+        return free;
+      });
+      if (this.closed) return false;
+      this.roomRef = ref;
+      this.state.mySeat = seat;
+      this.state.joined = true;
+      this.state.names[seat] = name;
+      this.state.onStatus(`joined (seat ${seat})`);
+      this.watchRoom();
+      return true;
+    } catch {
+      this.state.onStatus('that lobby just closed');
+      return false;
+    }
+  }
+
+  /** RAID host: flip the lobby's hardcore breaker (room doc mirrors it out). */
+  setRaidHardcore(v: boolean): void {
+    if (this.roomRef) void updateDoc(this.roomRef, { hardcore: v }).catch(() => {});
+  }
+
+  /** RAID host: lock the lobby and launch — members see `started` flip. */
+  startRaid(): void {
+    if (this.roomRef) void updateDoc(this.roomRef, { started: true, open: false }).catch(() => {});
   }
 
   send(msg: PeerMessage): void {
@@ -192,6 +264,16 @@ export class MeshImpl {
       this.rawSeats = (snap.data().seats as string[]) ?? [];
       this.applyOccupants();
       this.state.locked = snap.data().open === false;
+      // RAID lobby extras: seed the callsigns from the doc (the `iam` message
+      // re-affirms them in the bout) and mirror the host's controls.
+      const docNames = snap.data().names as string[] | undefined;
+      if (docNames) {
+        docNames.forEach((n, i) => {
+          if (n && !this.state.names[i]) this.state.names[i] = n;
+        });
+      }
+      this.state.raidHardcore = snap.data().hardcore === true;
+      this.state.raidStarted = snap.data().started === true;
       if (this.state.full) this.state.onStatus('all players in — fight!');
       const occ = this.state.occupants; // masked — never (re)connect a dropped seat
       for (let seat = 0; seat < occ.length; seat++) {

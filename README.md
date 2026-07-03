@@ -67,6 +67,26 @@ in-your-face boxing feel.
   the line-up's boards — and finishing it unlocks **HARDCORE** (no healing,
   its own board). The in-fight HUD is floating text and bare bars — no
   boards, no lectures.
+- **RAID** — the four-player group campaign, right under CAMPAIGN in the
+  ARCADE panel. Matchmaking works like RANKED: hosting raises a **visible
+  lobby** other boxers join from a browser; the host holds a **HARDCORE**
+  breaker (no healing between titans) and the START switch, and the whole
+  squad drops in together. Four platforms stand on a **semicircular arc**
+  around the titan's pit — the seat-relative layout puts the boss dead ahead
+  of every raider while your squadmates (avatars, voice, live health bars)
+  flank you on the curve. Same five titans, raid-cut: **bigger, far tougher
+  (well over 4× the health), swinging faster**, every strike aimed at ONE
+  raider's platform (the titan visibly squares up to whoever it hunts) while
+  everyone watches the telegraph land. It always runs gauntlet-style — all
+  five in a row, no lobby between, until it's beaten or the whole squad is
+  down (a downed raider spectates; a refit between titans stands them back
+  up unless hardcore). GOLIATH ends it with two raid-only cards: the
+  **DECREE** (novas bloom on EVERY platform around one shared safe bearing —
+  the squad rotates together or burns) and **the resurrection** — he falls,
+  lies still, shakes… and rises over six seconds to a bespoke anthem
+  ("BrAîN 3AtęŘ") as his health bar refills, the second fight landing on the
+  drop: crown circuit in REVERSE, enrage locked on, until he stays down.
+  First full raid clear pays double.
 - **AIM TRAINING** — the heart of the game. Bullseye discs and humanoid
   cutouts pop up across the gap; land your fire while they're up. Streaks
   multiply your score and the cadence ramps. Flip **targets shoot back** on

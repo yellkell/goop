@@ -90,6 +90,44 @@ export type PeerMessage =
       timer: number;
       msg: string;
       reset: number;
+    }
+  /**
+   * RAID (host → all): the titan starts an attack. `seat` is the TARGET's
+   * canonical seat; coordinates are in the TARGET's local frame (their
+   * platform at their origin), so every client can transform + render the
+   * telegraph on the right platform while only the target judges damage.
+   * 'decree' is GOLIATH's group attack: novas on EVERY platform, `a` being
+   * the shared CANONICAL safe bearing.
+   */
+  | {
+      k: 'ratk';
+      kind: 'slam' | 'sweep' | 'beam' | 'volley' | 'nova' | 'decree';
+      seat: number;
+      x?: number;
+      z?: number;
+      y?: number;
+      a?: number;
+    }
+  /** RAID (client → host): my ball landed on the titan's weak point `spot`
+   *  for `pts` damage. The host validates the spot is LIVE and applies it. */
+  | { k: 'rdmg'; spot: string; pts: number }
+  /**
+   * RAID (host → all, ~3 Hz + on change): the authoritative boss state.
+   * `ph`: 0 idle · 1 intro · 2 fight · 3 stage-felled · 4 wipe · 5 resurrect.
+   * `t` is the host's clock within the phase (guests sync their sequences),
+   * `cyc`/`hits` the weak-point pattern cursor, `p2` GOLIATH's second life.
+   */
+  | {
+      k: 'rst';
+      ph: number;
+      t: number;
+      stage: number;
+      hp: number;
+      max: number;
+      cyc: number;
+      hits: number;
+      enr: 0 | 1;
+      p2: 0 | 1;
     };
 
 /** Client → relay server envelope. */
