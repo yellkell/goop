@@ -89,8 +89,18 @@ export class MeshSystem extends createSystem({
   private ffaGraceTimer = 0;
   /** Seats whose spatial voice we've hooked up this bout. */
   private voiced = new Set<number>();
+  /** True while a raid bout is live — the rising edge resets the per-bout
+   *  clocks (see the raid branch in update). */
+  private raidLive = false;
 
   update(delta: number): void {
+    // Track the raid bout's rising edge from EVERY path — a finished raid
+    // resets app.arcade to '1v1', so the raid branch below never sees the
+    // falling edge itself.
+    if (app.arcade !== 'raid' || app.state !== 'playing' || app.mode !== 'campaign' || !mesh.joined) {
+      this.raidLive = false;
+    }
+
     // The duel is NetworkSystem's job; the mesh only ever runs the brawls.
     if (app.arcade === '1v1') {
       this.clearVoice();
@@ -105,6 +115,17 @@ export class MeshSystem extends createSystem({
         if (mesh.inbox.length) mesh.inbox.length = 0;
         this.clearVoice();
         return;
+      }
+      // Rising edge — the raid just went live. Fresh per-bout clocks are NOT
+      // optional here: `lastPose` persists across bouts, so timestamps left by
+      // an earlier 2v2/FFA/raid made every raider look STALE_MS-silent on the
+      // very first frame and checkStalePeers instantly dropped them — "we
+      // never had all 4 get in, it always dropped at least 2 of us".
+      if (!this.raidLive) {
+        this.raidLive = true;
+        this.lastPose = [];
+        this.iamTimer = 0; // introduce myself immediately
+        for (const t of this.targets) t.fresh = false; // no lerping to a dead bout's poses
       }
       this.receive();
       this.checkStalePeers();
@@ -147,6 +168,7 @@ export class MeshSystem extends createSystem({
           this.lastReset = -1;
           this.iamTimer = 0; // introduce myself the moment the bout goes live
           this.lastPose = []; // fresh pose-staleness windows for this bout
+          for (const t of this.targets) t.fresh = false; // no lerping to a dead bout's poses
           this.lastAstate = performance.now(); // grace before watching the host
         }
       }

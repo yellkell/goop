@@ -594,8 +594,14 @@ export class CampaignSystem extends createSystem({
     stopBattleTrack(); // a forfeit mid-bout leaves the score running otherwise
     // A raid leaves the arc layout behind; everything returns to the classic
     // lobby footing. (The titan's own Health pool needs no restoring — no
-    // fighter ever lent it one.)
-    if (app.arcade === 'raid') app.arcade = '1v1';
+    // fighter ever lent it one.) The SEAT must reset with the mode: the 1v1
+    // layout has two seats, and a raider's mySlot of 2/3 left in place made
+    // the very next localLayout() index off the end of MODE_LAYOUT['1v1'] and
+    // THROW — the end-of-raid crash, on every client but the host.
+    if (app.arcade === 'raid') {
+      app.arcade = '1v1';
+      app.mySlot = 0;
+    }
     applyRoster();
     applyArenaLayout(this.scene);
   }

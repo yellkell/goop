@@ -208,7 +208,10 @@ export class MeshImpl {
         const snap = await txn.get(ref);
         if (!snap.exists()) return;
         const seats = (snap.data().seats as string[]) ?? [];
-        if (seat === 0 && seats.filter((s) => s).length <= 1) {
+        // Last one out deletes the room, WHATEVER seat they hold — a raid's
+        // host (seat 0) usually leaves first at run end, and the old seat-0-
+        // only rule left every finished raid behind as a zombie doc.
+        if (seats.filter((s) => s).length <= 1 && (!seats[seat] || seats[seat] === id)) {
           txn.delete(ref);
         } else if (seats[seat] === id) {
           seats[seat] = '';
@@ -337,7 +340,13 @@ export class MeshImpl {
     const peer: Peer = { seat, pc, evt: null, pose: null, unsubs: [] };
     this.peers.set(seat, peer);
     pc.onconnectionstatechange = () => {
-      if (['failed', 'disconnected', 'closed'].includes(pc.connectionState)) this.dropPeer(seat);
+      // Only terminal states drop the peer. 'disconnected' is TRANSIENT — ICE
+      // routinely blips through it and recovers (Quest Wi-Fi especially), and a
+      // drop here is PERMANENT (dropped seats are masked and never reconnected)
+      // — it was silently killing raiders who were still very much present.
+      // A genuinely dead peer still gets caught: 'failed'/'closed' land here,
+      // and in a live bout the pose-staleness backstop (MeshSystem) is faster.
+      if (['failed', 'closed'].includes(pc.connectionState)) this.dropPeer(seat);
     };
     // Spatial voice: surface this peer's mic track to the facade, keyed by seat.
     pc.ontrack = (ev) => {

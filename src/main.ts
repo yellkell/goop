@@ -11,6 +11,7 @@
  */
 
 import { launchXR, SessionMode, World } from '@iwsdk/core';
+import { installCrashTrap } from './debug/crashTrap.js';
 import { initLeaderboard } from './net/leaderboard.js';
 import { initGazette } from './net/gazette.js';
 import { enterMenuMusic } from './audio/menuMusic.js';
@@ -36,6 +37,8 @@ import { PlayerGloveSystem } from './systems/PlayerGloveSystem.js';
 import { PlayerGestureSystem } from './systems/PlayerGestureSystem.js';
 import { FXSystem } from './systems/FXSystem.js';
 import { DesertSystem } from './systems/DesertSystem.js';
+
+installCrashTrap(); // headset playtests have no console — trap + persist crashes
 
 const container = document.getElementById('scene-container') as HTMLDivElement;
 const enterVrButton = document.getElementById('enter-vr') as HTMLButtonElement | null;

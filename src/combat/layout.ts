@@ -50,7 +50,10 @@ export function localLayout(): LocalSlot[] {
 
 function computeLocalLayout(): LocalSlot[] {
   const canonical = MODE_LAYOUT[app.arcade];
-  const s = app.mySlot;
+  // Clamp a seat the mode doesn't have to 0 — a mode switch (raid arc → 1v1
+  // lobby) can momentarily leave mySlot pointing past the new layout, and
+  // indexing off the end here used to THROW mid-frame (the raid-end crash).
+  const s = canonical[app.mySlot] ? app.mySlot : 0;
   const binary = modeTeams(app.arcade).length === 2;
 
   // Local ordering: me first, then the others in canonical order.
