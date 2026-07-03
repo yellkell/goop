@@ -14,9 +14,10 @@ import { fadeInMenuMusic, isMusicMuted } from './menuMusic.js';
 import victoryUrl from '../assets/music/victory.mp3?url';
 import brainEaterUrl from '../assets/music/brain-eater.mp3?url';
 
-// Auto-discovered battle tracks — drop more .mp3s in assets/music/battle.
+// Auto-discovered battle tracks — drop more .mp3/.m4a files in
+// assets/music/battle and they join the random pool automatically.
 const battleUrls = Object.values(
-  import.meta.glob('../assets/music/battle/*.mp3', { eager: true, query: '?url', import: 'default' }) as Record<
+  import.meta.glob('../assets/music/battle/*.{mp3,m4a}', { eager: true, query: '?url', import: 'default' }) as Record<
     string,
     string
   >,
