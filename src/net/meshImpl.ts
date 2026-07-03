@@ -57,6 +57,11 @@ interface Peer {
   evt: RTCDataChannel | null;
   pose: RTCDataChannel | null;
   unsubs: Unsubscribe[];
+  /** ICE candidates that arrived BEFORE the remote description was set —
+   *  buffered and flushed after it lands (adding them early throws, and the
+   *  snapshot listener never re-delivers an 'added', so they'd be lost and
+   *  the pair could simply never connect). */
+  pending: RTCIceCandidateInit[];
 }
 
 export class MeshImpl {
@@ -74,6 +79,9 @@ export class MeshImpl {
   private closed = false;
   private micStream: MediaStream | null = null;
   private micPromise: Promise<MediaStream | null> | null = null;
+  /** Raid-lobby liveness heartbeat — the browser hides rooms whose beat went
+   *  stale, so a lobby abandoned by a crash/quit stops being listed. */
+  private beatTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(private readonly state: MeshState) {}
 
@@ -115,6 +123,7 @@ export class MeshImpl {
     this.state.names[0] = name;
     this.state.onStatus('lobby open — waiting for raiders…');
     this.watchRoom();
+    this.startBeat();
   }
 
   /** RAID: claim a seat in a SPECIFIC listed lobby. False = filled/gone. */
@@ -145,11 +154,26 @@ export class MeshImpl {
       this.state.names[seat] = name;
       this.state.onStatus(`joined (seat ${seat})`);
       this.watchRoom();
+      this.startBeat(); // any live member keeps the lobby listed, not just the host
       return true;
     } catch {
       this.state.onStatus('that lobby just closed');
       return false;
     }
+  }
+
+  /** Stamp `beat` on the room every 30 s while I'm a live member. The raid
+   *  browser hides rooms whose beat is stale, so lobbies orphaned by a crash,
+   *  a closed tab or a sleeping headset fall off the list on their own —
+   *  nothing client-side can be relied on to clean up after a hard death. */
+  private startBeat(): void {
+    if (this.beatTimer !== null) return;
+    const tick = (): void => {
+      if (this.closed || !this.roomRef) return;
+      void updateDoc(this.roomRef, { beat: serverTimestamp() }).catch(() => {});
+    };
+    tick();
+    this.beatTimer = setInterval(tick, 30_000);
   }
 
   /** RAID host: flip the lobby's hardcore breaker (room doc mirrors it out). */
@@ -186,6 +210,10 @@ export class MeshImpl {
   close(): void {
     if (this.closed) return;
     this.closed = true;
+    if (this.beatTimer !== null) {
+      clearInterval(this.beatTimer);
+      this.beatTimer = null;
+    }
     this.roomUnsub?.();
     this.roomUnsub = null;
     for (const peer of this.peers.values()) {
@@ -313,19 +341,22 @@ export class MeshImpl {
   /** Free a dead player's seat in the room doc so a replacement can claim it —
    *  a hard-disconnected client never cleans up its own seat. Best-effort +
    *  idempotent (every survivor may attempt it; the id guard makes all but the
-   *  first bail). Only re-opens the room to joiners if it's still FILLING; a
-   *  live (locked) bout stays closed. */
+   *  first bail). ONLY while the room is still FILLING: emptying a seat in a
+   *  live (locked/started) bout wouldn't let anyone replace them anyway — all
+   *  it did was broadcast ONE client's (possibly mistaken) drop verdict to the
+   *  whole squad, eliminating that player for everyone. In a live bout each
+   *  client keeps its own local mask instead. */
   private vacateSeatInDoc(seat: number, deadId: string): void {
     const ref = this.roomRef;
     if (!ref) return;
     void runTransaction(db(), async (txn) => {
       const snap = await txn.get(ref);
       if (!snap.exists()) return;
+      if (snap.data().open === false) return; // live bout — seats stay put
       const seats = (snap.data().seats as string[]) ?? [];
       if (seats[seat] !== deadId) return; // already vacated / reclaimed
       seats[seat] = '';
-      const locked = snap.data().open === false; // live bout — don't reopen mid-fight
-      txn.update(ref, { seats, open: locked ? false : !seats.every((s) => s) });
+      txn.update(ref, { seats, open: !seats.every((s) => s) });
     }).catch(() => {});
   }
 
@@ -337,7 +368,7 @@ export class MeshImpl {
 
   private newPeer(seat: number): Peer {
     const pc = new RTCPeerConnection(ICE_SERVERS);
-    const peer: Peer = { seat, pc, evt: null, pose: null, unsubs: [] };
+    const peer: Peer = { seat, pc, evt: null, pose: null, unsubs: [], pending: [] };
     this.peers.set(seat, peer);
     pc.onconnectionstatechange = () => {
       // Only terminal states drop the peer. 'disconnected' is TRANSIENT — ICE
@@ -423,7 +454,10 @@ export class MeshImpl {
       onSnapshot(ref, (snap) => {
         const answer = snap.data()?.answer as RTCSessionDescriptionInit | undefined;
         if (answer && !pc.currentRemoteDescription) {
-          void pc.setRemoteDescription(new RTCSessionDescription(answer)).catch(() => {});
+          void pc
+            .setRemoteDescription(new RTCSessionDescription(answer))
+            .then(() => this.flushCandidates(peer))
+            .catch(() => {});
         }
       }),
     );
@@ -451,6 +485,10 @@ export class MeshImpl {
         if (offer && !pc.currentRemoteDescription) {
           void (async () => {
             await pc.setRemoteDescription(new RTCSessionDescription(offer));
+            // Flush buffered candidates NOW — addVoice below can stall for
+            // seconds on the mic-permission prompt, and the offerer's trickle
+            // candidates mostly arrive inside exactly that window.
+            this.flushCandidates(peer);
             await this.addVoice(pc); // answer with my mic too
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
@@ -467,10 +505,24 @@ export class MeshImpl {
       onSnapshot(cands, (snap) => {
         for (const change of snap.docChanges()) {
           if (change.type !== 'added') continue;
-          void peer.pc.addIceCandidate(new RTCIceCandidate(change.doc.data() as RTCIceCandidateInit)).catch(() => {});
+          const cand = change.doc.data() as RTCIceCandidateInit;
+          // Trickle-ICE race: a candidate landing before the remote
+          // description throws inside addIceCandidate and is gone for good
+          // (snapshots never re-deliver an 'added') — pairs that lost this
+          // race never connected AT ALL. Buffer early arrivals; the
+          // handshake flushes them right after setRemoteDescription.
+          if (!peer.pc.remoteDescription) peer.pending.push(cand);
+          else void peer.pc.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {});
         }
       }),
     );
+  }
+
+  /** Feed the buffered early candidates in, now that the remote SDP is set. */
+  private flushCandidates(peer: Peer): void {
+    for (const cand of peer.pending.splice(0)) {
+      void peer.pc.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {});
+    }
   }
 
   private dropPeer(seat: number): void {

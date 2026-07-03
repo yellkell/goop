@@ -101,6 +101,16 @@ export class MeshSystem extends createSystem({
       this.raidLive = false;
     }
 
+    // RAID LOBBY: the squad talks from the moment they're seated together —
+    // the WebRTC voice tracks connect while the room fills, so attach them
+    // here instead of waiting for the launch. (app.arcade only becomes 'raid'
+    // at launch, so this rides the lobby flags, ahead of the mode branches.)
+    if (app.state === 'menu' && app.raidOpen && mesh.joined) {
+      if (mesh.inbox.length) mesh.inbox.length = 0; // no bout yet — drop wire chatter
+      this.lobbyVoice();
+      return;
+    }
+
     // The duel is NetworkSystem's job; the mesh only ever runs the brawls.
     if (app.arcade === '1v1') {
       this.clearVoice();
@@ -222,6 +232,29 @@ export class MeshSystem extends createSystem({
     if (this.voiced.size === 0) return;
     detachAllMeshVoice();
     this.voiced.clear();
+  }
+
+  /** Raid-lobby voice: no avatars to pin to yet, so every raider's voice sits
+   *  just ahead of the listener at conversational volume — the squad can plan
+   *  (and confirm everyone's actually connected) before the launch. */
+  private lobbyVoice(): void {
+    this.world.camera.getWorldPosition(_p);
+    this.world.camera.getWorldQuaternion(_q);
+    updateListener(_p, _q);
+    for (const [seat, stream] of mesh.voice) {
+      if (!this.voiced.has(seat)) {
+        attachMeshVoice(seat, stream);
+        this.voiced.add(seat);
+      }
+      _v.set(_p.x, _p.y, _p.z - 0.8);
+      setMeshSpeaker(seat, _v);
+    }
+    for (const seat of [...this.voiced]) {
+      if (!mesh.voice.has(seat)) {
+        detachMeshVoice(seat);
+        this.voiced.delete(seat);
+      }
+    }
   }
 
   // --- outgoing ------------------------------------------------------------

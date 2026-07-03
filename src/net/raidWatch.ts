@@ -13,8 +13,11 @@
 
 import { FIREBASE_ENABLED } from './firebaseConfig.js';
 
-/** Lobbies older than this with nobody starting them are abandoned — hide. */
-const FRESH_MS = 15 * 60 * 1000;
+/** A live lobby's members stamp `beat` on the room doc every 30 s (meshImpl).
+ *  A beat older than this means every member crashed/quit without cleaning up
+ *  — a zombie shell, not a joinable lobby. Legacy docs without a beat fall
+ *  back to createdAt, so old abandoned rooms age out the same way. */
+const BEAT_STALE_MS = 2 * 60 * 1000;
 
 export interface RaidRoom {
   /** The `arcadeRooms` doc id — passed to mesh.joinRaid to claim a seat. */
@@ -59,13 +62,16 @@ export function startRaidWatch(onRooms: ListListener): void {
             const data = docSnap.data();
             if (data.started === true) return;
             const created = (data.createdAt?.toMillis?.() as number | undefined) ?? now;
-            if (now - created > FRESH_MS) return;
+            const beat = (data.beat?.toMillis?.() as number | undefined) ?? created;
+            if (now - beat > BEAT_STALE_MS) return; // nobody alive inside — zombie
             const seats = (data.seats as string[]) ?? [];
+            const count = seats.filter(Boolean).length;
+            if (count === 0) return; // an empty shell isn't a lobby
             const names = (data.names as string[]) ?? [];
             list.push({
               id: docSnap.id,
               host: typeof names[0] === 'string' && names[0] ? names[0] : 'BOXER',
-              count: seats.filter(Boolean).length,
+              count,
               hardcore: data.hardcore === true,
             });
           });
