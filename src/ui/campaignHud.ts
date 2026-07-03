@@ -23,6 +23,8 @@ import {
 } from 'three';
 import { ARENA_GAP } from '../config.js';
 import { UI, segmentBar, stencilFont } from './industrial.js';
+import { countdownArt } from './countdownArt.js';
+import { drawContentPlate } from './plateArt.js';
 
 interface TextPlane {
   mesh: Mesh;
@@ -143,12 +145,20 @@ export function createCampaignHud(scene: Scene): CampaignHud {
     },
 
     title(text, sub, accent = UI.emberBright) {
-      const key = `${text}|${sub}|${accent}`;
+      // The FIGHT beat borrows the ring-countdown's neon FIGHT plate — the same
+      // art regular matches show — instead of plain stencil text. Falls back to
+      // the stencil word until the PNG has decoded (the decoded flag rides the
+      // key, so a re-call upgrades text → art the instant it's ready).
+      const fightArt = text === 'FIGHT' && !sub ? countdownArt('FIGHT') : null;
+      const key = `${text}|${sub}|${accent}|${fightArt ? 'art' : 'txt'}`;
       if (key === centre.key) return;
       centre.key = key;
       const { ctx, w, h } = centre;
       ctx.clearRect(0, 0, w, h);
-      if (text) {
+      if (fightArt) {
+        // Size the visible FIGHT glyph to ~⅔ the canvas height, centred.
+        drawContentPlate(ctx, fightArt, w, h, Math.round(h * 0.66), 20);
+      } else if (text) {
         fitStencil(ctx, text, 120, w - 80);
         const grad = ctx.createLinearGradient(0, h / 2 - 70, 0, h / 2 + 70);
         grad.addColorStop(0, '#fff3cf');

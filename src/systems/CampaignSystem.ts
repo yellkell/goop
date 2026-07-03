@@ -448,9 +448,12 @@ export class CampaignSystem extends createSystem({
       sfx.bossRoar(this.def.scale * 0.8);
     }
 
-    // FIGHT flash, then the bell.
+    // FIGHT flash, then the bell — the same neon FIGHT plate the ring
+    // countdown shows. Re-asserted every frame of the beat (the HUD guards on
+    // content, so it's a no-op once drawn) so the art swaps in the moment its
+    // PNG finishes decoding, even if that lands a frame or two late.
     const fightStart = titleStart + titleTime;
-    if (this.t >= fightStart && this.t - delta < fightStart) {
+    if (this.t >= fightStart && this.t < fightStart + fightCardTime) {
       this.hud.title('FIGHT', '', '#ffc04d');
     }
 
