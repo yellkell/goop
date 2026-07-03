@@ -217,19 +217,20 @@ export const BOSSES: BossDef[] = [
 
 /**
  * The RAID cut of a titan: grown past the solo version, a health pool sized
- * for FOUR fists (well over 4x), and a cadence tuned for a squad — it swings
- * sooner and telegraphs snap a touch faster, because on any given strike
- * three of you are safe and one of you is not.
+ * for FOUR fists (well over 4x), and a cadence tuned per stage to how many
+ * raiders each swing marks — stage I rotates one target and swings fast;
+ * stage III+ mark the whole squad, so the pace eases back toward solo.
  */
-export function raidBoss(def: BossDef): BossDef {
+export function raidBoss(def: BossDef, stage: number): BossDef {
   const charge = { ...def.charge };
   for (const k of Object.keys(charge) as AttackKind[]) charge[k] *= RAID.chargeMult;
+  const cd = RAID.cooldownMult[stage] ?? RAID.cooldownMult[RAID.cooldownMult.length - 1] ?? 0.9;
   return {
     ...def,
     scale: def.scale * RAID.scaleMult,
     health: Math.round(def.health * RAID.healthMult),
-    cooldownMin: def.cooldownMin * RAID.cooldownMult,
-    cooldownMax: def.cooldownMax * RAID.cooldownMult,
+    cooldownMin: def.cooldownMin * cd,
+    cooldownMax: def.cooldownMax * cd,
     charge,
   };
 }

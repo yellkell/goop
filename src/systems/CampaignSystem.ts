@@ -132,11 +132,12 @@ interface ActiveAttack {
    * "THIS spot gets hit". Disposed at that zone's detonation.
    */
   markers: (Group | null)[];
-  /** RAID: which canonical seat this attack is aimed at (0 in solo). Zone
-   *  coordinates are in the TARGET's local frame; only the target judges
-   *  damage — everyone else renders. The DECREE hits every seat at once. */
-  seat: number;
-  /** Extra per-zone seats for the DECREE (one nova per platform). */
+  /** RAID: the canonical seats this attack hunts ([0] in solo). Zone
+   *  coordinates are in each TARGET's local frame; only a zone's own target
+   *  judges damage — everyone else renders. Sweeps and stage III+ attacks
+   *  mark the whole squad at once. */
+  seats: number[];
+  /** Which target seat each zone belongs to (parallel with zones). */
   zoneSeats: number[];
 }
 
@@ -235,6 +236,8 @@ export class CampaignSystem extends createSystem({
   /** Whose platform the titan squares up to (raid: the current target). */
   private faceSeat = 0;
   private lastTarget = -1;
+  /** Seconds left of the full-turn lash a squad sweep detonates with. */
+  private spinT = 0;
 
   init(): void {
     this.hud = createCampaignHud(this.scene);
@@ -369,7 +372,7 @@ export class CampaignSystem extends createSystem({
       if (msg.k === 'rdmg' && this.isAuthority()) {
         this.applyBossDamage(msg.spot, msg.pts);
       } else if (msg.k === 'ratk' && seat !== mesh.mySeat) {
-        this.buildAttack(msg.kind, msg.seat, { x: msg.x, z: msg.z, y: msg.y, a: msg.a });
+        this.buildAttack(msg.kind, msg.seats, { x: msg.x, z: msg.z, y: msg.y, a: msg.a });
       } else if (msg.k === 'rst' && !this.isAuthority()) {
         this.applyRaidState(msg);
       }
@@ -483,7 +486,7 @@ export class CampaignSystem extends createSystem({
   /** Everything one titan bout needs: rig, pools, weak points, intro cue. */
   private stageSetup(healPlayer: boolean, warning: string): void {
     const base = BOSSES[clamp(app.campaignStage, 0, BOSSES.length - 1)];
-    this.def = this.raid() ? raidBoss(base) : base;
+    this.def = this.raid() ? raidBoss(base, app.campaignStage) : base;
     this.p2 = false;
     this.rig?.dispose();
     this.rig = buildTitan(this.def);
@@ -517,6 +520,7 @@ export class CampaignSystem extends createSystem({
     this.cycleIdx = 0; // every pattern opens on the head
     this.hitsOnPoint = 0;
     this.invuln = 0;
+    this.spinT = 0;
     this.enraged = false;
     this.cardTimer = 0;
     this.cooldown = this.attackCooldown() + 0.8;
@@ -1064,21 +1068,48 @@ export class CampaignSystem extends createSystem({
   }
 
   /**
-   * AUTHORITY: pick a weighted attack (avoiding an immediate repeat), pick a
-   * TARGET (raid: a living raider, never the same one twice while others
-   * stand), broadcast it (raid), then build the live copy locally. Guests
-   * build theirs from the ratk message.
+   * The stage's targeting doctrine: SWEEPS always mark the WHOLE squad (the
+   * spinning lash catches everyone); other attacks hunt ONE raider on stage
+   * I, TWO at random on stage II, and EVERYONE from stage III on. Group
+   * picks come back sorted around the arc so cascades travel one way.
+   */
+  private raidTargets(kind: AttackKind | 'decree'): number[] {
+    if (!this.raid()) return [0];
+    const alive = this.aliveSeats();
+    if (!alive.length) return [this.mySeatId()];
+    const arcOrder = (seats: number[]): number[] => {
+      const canonical = MODE_LAYOUT[app.arcade];
+      return seats.slice().sort((a, b) => (canonical[a]?.yaw ?? 0) - (canonical[b]?.yaw ?? 0));
+    };
+    if (kind === 'sweep' || kind === 'decree') return arcOrder(alive);
+    const stage = app.campaignStage;
+    if (stage <= 0 || alive.length === 1) {
+      // Stage I: one raider at a time — never the same one twice while
+      // others stand, so the heat visibly rotates around the arc.
+      const pickFrom = alive.length > 1 ? alive.filter((s) => s !== this.lastTarget) : alive;
+      const seat = pickFrom[Math.floor(Math.random() * pickFrom.length)] ?? alive[0];
+      this.lastTarget = seat;
+      return [seat];
+    }
+    if (stage === 1) {
+      // Stage II: two at random, together.
+      const pool = alive.slice();
+      const first = pool.splice(Math.floor(Math.random() * pool.length), 1)[0];
+      const second = pool.length ? pool[Math.floor(Math.random() * pool.length)] : undefined;
+      this.lastTarget = -1;
+      return arcOrder(second === undefined ? [first] : [first, second]);
+    }
+    // Stage III+: the whole squad, every swing.
+    this.lastTarget = -1;
+    return arcOrder(alive);
+  }
+
+  /**
+   * AUTHORITY: pick a weighted attack (avoiding an immediate repeat), pick
+   * its TARGETS per the stage doctrine, broadcast (raid), then build the
+   * live copy locally. Guests build theirs from the ratk message.
    */
   private startAttack(): void {
-    // The target seat first — the aim parameters live in ITS frame.
-    let seat = 0;
-    if (this.raid()) {
-      const alive = this.aliveSeats();
-      const pickFrom = alive.length > 1 ? alive.filter((s) => s !== this.lastTarget) : alive;
-      seat = pickFrom[Math.floor(Math.random() * pickFrom.length)] ?? mesh.mySeat;
-      this.lastTarget = seat;
-    }
-
     // The DECREE: GOLIATH's raid-only group attack, once he's angry (either
     // life). Rolls ahead of the normal pool — everyone gets marked at once.
     if (
@@ -1087,9 +1118,10 @@ export class CampaignSystem extends createSystem({
       (this.enraged || this.p2) &&
       Math.random() * (RAID.decreeWeight + 10) < RAID.decreeWeight
     ) {
-      const a = rand(-Math.PI, Math.PI); // one CANONICAL safe bearing for all
-      mesh.send({ k: 'ratk', kind: 'decree', seat, a });
-      this.buildAttack('decree', seat, { a });
+      const seats = this.raidTargets('decree');
+      const a = [rand(-Math.PI, Math.PI)]; // one CANONICAL safe bearing for all
+      mesh.send({ k: 'ratk', kind: 'decree', seats, a });
+      this.buildAttack('decree', seats, { a });
       return;
     }
 
@@ -1114,42 +1146,49 @@ export class CampaignSystem extends createSystem({
     }
     this.lastKind = kind;
 
-    // Aim parameters, in the TARGET's local frame (their platform at their
-    // origin). For a remote target the head comes off the pose bus in MY
-    // world and gets pulled back into their frame.
-    if (seat === this.mySeatId()) this.playerHead(_head);
-    else {
-      this.playerHeadOf(seat, _p);
-      worldToPeer(_head, seat, _p.x, _p.y, _p.z);
-    }
-    const params: { x?: number; z?: number; y?: number; a?: number } = {};
-    if (kind === 'slam') {
-      params.x = clamp(_head.x, -OCTAGON_HALF_WIDTH + 0.15, OCTAGON_HALF_WIDTH - 0.15);
-      params.z = clamp(_head.z, -OCTAGON_HALF_DEPTH + 0.1, OCTAGON_HALF_DEPTH - 0.1);
-    } else if (kind === 'sweep') {
-      params.y = clamp(_head.y - 0.12, 1.3, 1.55);
-    } else if (kind === 'nova') {
-      const playerAng = Math.hypot(_head.x, _head.z) > 0.15 ? Math.atan2(_head.x, _head.z) : rand(-Math.PI, Math.PI);
-      params.a = playerAng + Math.PI + rand(-0.5, 0.5);
+    // Aim parameters PER TARGET, each in that target's local frame (their
+    // platform at their origin). A remote target's head comes off the pose
+    // bus in MY world and gets pulled back into their frame.
+    const seats = this.raidTargets(kind);
+    const params: { x: number[]; z: number[]; y: number[]; a: number[] } = { x: [], z: [], y: [], a: [] };
+    for (const seat of seats) {
+      if (seat === this.mySeatId()) this.playerHead(_head);
+      else {
+        this.playerHeadOf(seat, _p);
+        worldToPeer(_head, seat, _p.x, _p.y, _p.z);
+      }
+      if (kind === 'slam') {
+        params.x.push(clamp(_head.x, -OCTAGON_HALF_WIDTH + 0.15, OCTAGON_HALF_WIDTH - 0.15));
+        params.z.push(clamp(_head.z, -OCTAGON_HALF_DEPTH + 0.1, OCTAGON_HALF_DEPTH - 0.1));
+      } else if (kind === 'sweep') {
+        params.y.push(clamp(_head.y - 0.12, 1.3, 1.55));
+      } else if (kind === 'nova') {
+        const playerAng = Math.hypot(_head.x, _head.z) > 0.15 ? Math.atan2(_head.x, _head.z) : rand(-Math.PI, Math.PI);
+        params.a.push(playerAng + Math.PI + rand(-0.5, 0.5));
+      }
     }
 
-    if (this.raid()) mesh.send({ k: 'ratk', kind, seat, ...params });
-    this.buildAttack(kind, seat, params);
+    if (this.raid()) mesh.send({ k: 'ratk', kind, seats, ...params });
+    this.buildAttack(kind, seats, params);
   }
 
   /**
    * Build the LIVE attack — shared by the authority (its own pick) and every
    * guest (from the ratk message). Zone coordinates are TARGET-local; the
    * telegraphs/markers are placed through seatPoint so they land on the right
-   * platform in every player's frame. Only the target judges damage.
+   * platforms in every player's frame. Only each zone's own target judges
+   * damage. Multi-target builds carry a zone set PER SEAT — hammer ghosts on
+   * every marked platform, a fan of beams, volleys cycling raiders, novas
+   * with per-raider wedges, and the squad sweep's cascading blade.
    */
   private buildAttack(
     kind: AttackKind | 'decree',
-    seat: number,
-    params: { x?: number; z?: number; y?: number; a?: number },
+    seats: number[],
+    params: { x?: number[]; z?: number[]; y?: number[]; a?: number[] },
   ): void {
     this.disposeAttack(); // a straggling ratk never stacks two live attacks
-    this.faceSeat = seat;
+    if (!seats.length) seats = [this.mySeatId()];
+    this.faceSeat = seats[0];
     const chargeTime =
       kind === 'decree'
         ? RAID.decreeCharge
@@ -1160,17 +1199,18 @@ export class CampaignSystem extends createSystem({
     const staggers: number[] = [];
     const beamOffsets: number[] = [];
     const markers: (Group | null)[] = [];
-    // Strike with the arm nearer the target (world side of their platform).
-    this.seatPoint(seat, 0, 0, 0, _p);
-    const arm: 0 | 1 = _p.x + (seat === this.mySeatId() ? this.headX() : 0) < 0 ? 1 : 0;
+    // Strike with the arm nearer the primary target (multi-target windups
+    // hoist BOTH arms — see animateTitan).
+    this.seatPoint(seats[0], 0, 0, 0, _p);
+    const arm: 0 | 1 = _p.x + (seats[0] === this.mySeatId() ? this.headX() : 0) < 0 ? 1 : 0;
 
     if (kind === 'decree') {
       // Novas bloom on EVERY standing platform around ONE canonical bearing —
       // the whole squad rotates to the same compass point together, or burns.
-      const canonicalA = params.a ?? 0;
+      const canonicalA = params.a?.[0] ?? 0;
       const canonical = MODE_LAYOUT[app.arcade];
       const halfAngle = CAMPAIGN.novaEnragedHalfAngle;
-      for (const s of this.aliveSeats()) {
+      for (const s of seats) {
         const localA = canonicalA - (canonical[s]?.yaw ?? 0);
         zones.push({ kind: 'nova', angle: localA, halfAngle });
         zoneSeats.push(s);
@@ -1185,85 +1225,104 @@ export class CampaignSystem extends createSystem({
       }
     } else if (kind === 'slam') {
       const r = CAMPAIGN.slamRadius + this.def.scale * 0.02;
-      const x0 = params.x ?? 0;
-      const z0 = params.z ?? 0;
-      const count = this.def.slamStyle === 'single' ? 1 : Math.max(1, this.def.slamCount);
-      // A marching drumline steps toward the open side of the platform.
-      const marchDir = x0 > 0 ? -1 : 1;
-      for (let i = 0; i < count; i++) {
-        const x =
-          this.def.slamStyle === 'march' && i > 0
-            ? clamp(x0 + marchDir * CAMPAIGN.marchStep * i, -OCTAGON_HALF_WIDTH + 0.15, OCTAGON_HALF_WIDTH - 0.15)
-            : x0; // 'rehit' re-marks the SAME crater
-        zones.push({ kind: 'circle', x, z: z0, r });
-        zoneSeats.push(seat);
-        const tg = circleTelegraph(r);
-        this.seatPoint(seat, x, CAMPAIGN.decalY, z0, _v);
-        tg.group.position.copy(_v);
-        this.scene.add(tg.group);
-        telegraphs.push(tg);
-        // A breath of extra hang on top of the charge, so the fist lands a
-        // touch later than the disc fills — a fairer window to clear it.
-        staggers.push(CAMPAIGN.slamImpactDelay + i * (this.def.slamStyle === 'rehit' ? CAMPAIGN.rehitDelay : CAMPAIGN.marchDelay));
-        // The ghost hammer: hangs over the disc and descends with the
-        // countdown, so the raised arm connects to THIS spot on the floor.
-        markers.push(this.makeHammerMarker(x, z0, seat));
-      }
+      // The drumline shortens as the target list grows — four platforms of
+      // three-disc marches each would read as noise, not rhythm.
+      const count =
+        this.def.slamStyle === 'single' ? 1 : Math.max(1, Math.min(this.def.slamCount, seats.length > 2 ? 2 : 3));
+      seats.forEach((seat, ti) => {
+        const x0 = params.x?.[ti] ?? 0;
+        const z0 = params.z?.[ti] ?? 0;
+        // A marching drumline steps toward the open side of the platform.
+        const marchDir = x0 > 0 ? -1 : 1;
+        for (let i = 0; i < count; i++) {
+          const x =
+            this.def.slamStyle === 'march' && i > 0
+              ? clamp(x0 + marchDir * CAMPAIGN.marchStep * i, -OCTAGON_HALF_WIDTH + 0.15, OCTAGON_HALF_WIDTH - 0.15)
+              : x0; // 'rehit' re-marks the SAME crater
+          zones.push({ kind: 'circle', x, z: z0, r });
+          zoneSeats.push(seat);
+          const tg = circleTelegraph(r);
+          this.seatPoint(seat, x, CAMPAIGN.decalY, z0, _v);
+          tg.group.position.copy(_v);
+          this.scene.add(tg.group);
+          telegraphs.push(tg);
+          // A breath of extra hang on top of the charge, so the fist lands a
+          // touch later than the disc fills — a fairer window to clear it.
+          staggers.push(
+            CAMPAIGN.slamImpactDelay + i * (this.def.slamStyle === 'rehit' ? CAMPAIGN.rehitDelay : CAMPAIGN.marchDelay),
+          );
+          // The ghost hammer: hangs over the disc and descends with the
+          // countdown, so the raised arm connects to THIS spot on the floor.
+          markers.push(this.makeHammerMarker(x, z0, seat));
+        }
+      });
     } else if (kind === 'sweep') {
       // A horizontal blade slice just under head height: duck it. Never
       // below 1.3 m — the pelvis is pinned near 0.95 m, so lower slices
       // would clip a standing body no matter what; 1.3 keeps "deep duck"
-      // as the honest answer.
-      const y = params.y ?? 1.4;
-      zones.push({ kind: 'sweep', y });
-      zoneSeats.push(seat);
-      const tg = sweepTelegraph(OCTAGON_HALF_WIDTH * 2 + 0.5, OCTAGON_HALF_DEPTH * 2 + 0.3, y, CAMPAIGN.sweepThickness);
-      this.seatPoint(seat, 0, 0, 0, _v);
-      tg.group.position.copy(_v);
-      tg.group.rotation.y = this.seatYawDelta(seat);
-      this.scene.add(tg.group);
-      telegraphs.push(tg);
-      staggers.push(0);
-    } else if (kind === 'beam') {
-      for (let i = 0; i < this.def.beams; i++) {
-        // A strip through (or beside) the target, raked from the titan.
-        // Beam zones live in MY world (they're rays, not platform decals).
-        const offset = i === 0 ? 0 : (Math.random() < 0.5 ? -1 : 1) * rand(0.5, 0.8);
-        const zone: Zone = { kind: 'beam', x: 0, z: 0, dx: 0, dz: 1, halfW: CAMPAIGN.beamHalfWidth };
-        const tg = beamTelegraph(CAMPAIGN.beamHalfWidth, 3.2);
-        this.scene.add(tg.group);
-        zones.push(zone);
+      // as the honest answer. A SQUAD sweep (raid) marks every platform at
+      // its own raider's height and lands as ONE cascading cut around the
+      // arc (seats arrive arc-ordered) while the titan spins full-turn.
+      seats.forEach((seat, ti) => {
+        const y = params.y?.[ti] ?? 1.4;
+        zones.push({ kind: 'sweep', y });
         zoneSeats.push(seat);
+        const tg = sweepTelegraph(OCTAGON_HALF_WIDTH * 2 + 0.5, OCTAGON_HALF_DEPTH * 2 + 0.3, y, CAMPAIGN.sweepThickness);
+        this.seatPoint(seat, 0, 0, 0, _v);
+        tg.group.position.copy(_v);
+        tg.group.rotation.y = this.seatYawDelta(seat);
+        this.scene.add(tg.group);
         telegraphs.push(tg);
-        beamOffsets.push(offset);
-        staggers.push(i * 0.35);
-        this.aimBeam(zone, tg, offset, seat); // initial aim (tracking re-aims)
-      }
+        staggers.push(ti * RAID.sweepCascade);
+      });
+    } else if (kind === 'beam') {
+      // A strip through (or beside) each target, raked from the visor. One
+      // target gets the boss's full battery; a group gets one ray each — a
+      // FAN of beams sweeping out across the arc.
+      const strips = seats.length > 1 ? 1 : this.def.beams;
+      seats.forEach((seat, ti) => {
+        for (let i = 0; i < strips; i++) {
+          const offset = i === 0 ? 0 : (Math.random() < 0.5 ? -1 : 1) * rand(0.5, 0.8);
+          const zone: Zone = { kind: 'beam', x: 0, z: 0, dx: 0, dz: 1, halfW: CAMPAIGN.beamHalfWidth };
+          const tg = beamTelegraph(CAMPAIGN.beamHalfWidth, 3.2);
+          this.scene.add(tg.group);
+          zones.push(zone);
+          zoneSeats.push(seat);
+          telegraphs.push(tg);
+          beamOffsets.push(offset);
+          staggers.push((ti * strips + i) * 0.35);
+          this.aimBeam(zone, tg, offset, seat); // initial aim (tracking re-aims)
+        }
+      });
     } else if (kind === 'nova') {
-      // GOLIATH's nova: everything burns EXCEPT one safe wedge — and the
-      // wedge opens roughly OPPOSITE where the target stands, so they must
-      // cross their platform while the flood charges. Run to the marked ground.
-      const angle = params.a ?? 0;
+      // GOLIATH's nova: everything burns EXCEPT one safe wedge — and each
+      // wedge opens roughly OPPOSITE where its raider stands, so everyone
+      // marked must cross their own platform while the flood charges.
       const halfAngle = this.enraged ? CAMPAIGN.novaEnragedHalfAngle : CAMPAIGN.novaHalfAngle;
-      zones.push({ kind: 'nova', angle, halfAngle });
-      zoneSeats.push(seat);
-      const tg = novaTelegraph(CAMPAIGN.novaRadius, angle, halfAngle);
-      this.seatPoint(seat, 0, CAMPAIGN.decalY, 0, _v);
-      tg.group.position.copy(_v);
-      tg.group.rotation.y = this.seatYawDelta(seat);
-      this.scene.add(tg.group);
-      telegraphs.push(tg);
-      staggers.push(0);
+      seats.forEach((seat, ti) => {
+        const angle = params.a?.[ti] ?? 0;
+        zones.push({ kind: 'nova', angle, halfAngle });
+        zoneSeats.push(seat);
+        const tg = novaTelegraph(CAMPAIGN.novaRadius, angle, halfAngle);
+        this.seatPoint(seat, 0, CAMPAIGN.decalY, 0, _v);
+        tg.group.position.copy(_v);
+        tg.group.rotation.y = this.seatYawDelta(seat);
+        this.scene.add(tg.group);
+        telegraphs.push(tg);
+        staggers.push(0);
+      });
     } else {
       // The VOLLEY: no floor marks at all — the shoulder pods spool up
       // (watch the muzzle glows swell through the windup) and then hurl
-      // blockable fireballs straight at the target, alternating pods. Each
-      // shot is aimed where their head is at ITS launch: keep moving, or
-      // catch it on a fist.
-      for (let i = 0; i < this.def.volleyCount; i++) {
+      // blockable fireballs, alternating pods. A group volley CYCLES the
+      // targets shot by shot, at least one each. Every shot is aimed where
+      // its raider's head is at ITS launch: keep moving, or catch it on a
+      // fist.
+      const shots = Math.max(this.def.volleyCount, seats.length);
+      for (let i = 0; i < shots; i++) {
         const side = (i % 2 === 0 ? -1 : 1) as -1 | 1;
         zones.push({ kind: 'shot', side });
-        zoneSeats.push(seat);
+        zoneSeats.push(seats[i % seats.length]);
         telegraphs.push(null);
         staggers.push(i * CAMPAIGN.volleyInterval);
         markers.push(this.makeMuzzleGlow(side));
@@ -1282,7 +1341,7 @@ export class CampaignSystem extends createSystem({
       tracks: kind === 'beam' && this.def.beamTracks,
       beamOffsets,
       markers,
-      seat,
+      seats,
       zoneSeats,
     };
     sfx.chargeWhine(chargeTime);
@@ -1366,13 +1425,13 @@ export class CampaignSystem extends createSystem({
     const a = this.attack!;
     a.time += delta;
 
-    // VULTURE's law: the beam strips FOLLOW you until the late lock —
+    // VULTURE's law: the beam strips FOLLOW their marks until the late lock —
     // dodging early just tells it where you were.
     if (a.tracks && a.time < a.chargeTime * CAMPAIGN.beamLockAt) {
       for (let i = 0; i < a.zones.length; i++) {
         const zone = a.zones[i];
         const tg = a.telegraphs[i];
-        if (zone.kind === 'beam' && tg) this.aimBeam(zone, tg, a.beamOffsets[i] ?? 0, a.seat);
+        if (zone.kind === 'beam' && tg) this.aimBeam(zone, tg, a.beamOffsets[i] ?? 0, a.zoneSeats[i] ?? a.seats[0]);
       }
     }
 
@@ -1390,7 +1449,7 @@ export class CampaignSystem extends createSystem({
         const m = a.markers[i] ?? null;
         this.disposeMarker(m);
         a.markers[i] = null;
-        this.detonate(a.kind, a.zones[i], a.zoneSeats[i] ?? a.seat);
+        this.detonate(a.kind, a.zones[i], a.zoneSeats[i] ?? a.seats[0]);
       } else {
         const fill = clamp(a.time / dueAt, 0, 1);
         a.telegraphs[i]?.update(fill, this.time);
@@ -1437,10 +1496,22 @@ export class CampaignSystem extends createSystem({
       sfx.slamImpact();
       if (zone.kind === 'circle') this.spawnFistCrash(zone.x, zone.z, seat);
       this.strikeSwing[this.attack!.arm] = 0.6;
+      // A multi-platform slam alternates fists, landing to landing — both
+      // hoisted hammers visibly take their turns.
+      if (this.attack!.seats.length > 1) {
+        this.attack!.arm = (this.attack!.arm === 0 ? 1 : 0) as 0 | 1;
+      }
     } else if (kind === 'sweep') {
       sfx.sweepWhoosh();
       if (zone.kind === 'sweep') this.spawnBladeSweep(zone.y, this.attack!.arm, seat);
       this.strikeSwing[this.attack!.arm] = 0.6;
+      // The squad sweep: the titan whips through a FULL TURN while the blade
+      // cascades around the arc — re-armed per landing so the spin carries
+      // through the whole cut.
+      if (this.raid() && this.attack!.seats.length > 1) {
+        this.spinT = Math.max(this.spinT, 0.5);
+        this.strikeSwing[this.attack!.arm === 0 ? 1 : 0] = 0.6; // both arms follow through
+      }
     } else if (kind === 'beam') {
       sfx.beamBlast();
       if (zone.kind === 'beam') this.spawnBeamColumn(zone);
@@ -1755,15 +1826,31 @@ export class CampaignSystem extends createSystem({
     }
 
     // RAID: the whole machine squares up to whoever it's hunting — the body
-    // yaw eases toward the current target's platform, so the squad can READ
-    // who's about to eat the next strike. Solo keeps the fixed π yaw.
+    // yaw eases toward the CENTROID of the marked platforms (one raider: dead
+    // at them; the whole squad: the middle of the arc), so everyone can READ
+    // where the next strike is going. A squad sweep overrides everything
+    // with a full-turn lash while the blade cascades. Solo keeps the π yaw.
     if (fighting && this.raid()) {
-      this.seatPoint(this.faceSeat, 0, 0, 0, _p);
-      const targetYaw = Math.atan2(-(_p.x - rig.root.position.x), -(_p.z - rig.root.position.z));
-      let dy = targetYaw - rig.root.rotation.y;
-      while (dy > Math.PI) dy -= Math.PI * 2;
-      while (dy < -Math.PI) dy += Math.PI * 2;
-      rig.root.rotation.y += dy * Math.min(1, delta * 3.2);
+      if (this.spinT > 0) {
+        this.spinT -= delta;
+        rig.root.rotation.y += delta * RAID.sweepSpinRate;
+      } else {
+        const seats = this.attack?.seats ?? [this.faceSeat];
+        let cx = 0;
+        let cz = 0;
+        for (const s of seats) {
+          this.seatPoint(s, 0, 0, 0, _p);
+          cx += _p.x;
+          cz += _p.z;
+        }
+        cx /= seats.length;
+        cz /= seats.length;
+        const targetYaw = Math.atan2(-(cx - rig.root.position.x), -(cz - rig.root.position.z));
+        let dy = targetYaw - rig.root.rotation.y;
+        while (dy > Math.PI) dy -= Math.PI * 2;
+        while (dy < -Math.PI) dy += Math.PI * 2;
+        rig.root.rotation.y += dy * Math.min(1, delta * 3.2);
+      }
     }
 
     // The head tracks its prey (lookAt aims +Z; the visor lives on −Z, flip).
@@ -1814,15 +1901,19 @@ export class CampaignSystem extends createSystem({
       this.strikeSwing[i] = Math.max(0, this.strikeSwing[i] - delta);
       let targetX = arm.restX;
       let targetZ = arm.restZ;
+      // Multi-target windups use BOTH arms — a two-fisted hoist over a pair
+      // of marked platforms, or the wide double wind-out that precedes the
+      // squad sweep's full-turn lash. One target keeps the single-arm tell.
+      const bothArms = !!a && a.seats.length > 1;
       if (a && a.kind === 'nova') {
         // The nova: BOTH arms hoist together — the whole machine coils.
         const fill = clamp(a.time / a.chargeTime, 0, 1);
         targetX = arm.restX - 2.2 * fill;
         targetZ = arm.restZ * (1 + fill);
-      } else if (a && a.arm === i && (a.kind === 'slam' || a.kind === 'sweep')) {
+      } else if (a && (a.arm === i || bothArms) && (a.kind === 'slam' || a.kind === 'sweep')) {
         const fill = clamp(a.time / a.chargeTime, 0, 1);
         if (a.kind === 'slam') {
-          targetX = arm.restX - 2.5 * fill; // hoist the fist sky-high
+          targetX = arm.restX - 2.5 * fill; // hoist the fist(s) sky-high
         } else {
           targetZ = arm.restZ + (i === 0 ? -1 : 1) * 1.7 * fill; // wind out wide
           targetX = arm.restX - 0.4 * fill;

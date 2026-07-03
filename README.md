@@ -75,9 +75,14 @@ in-your-face boxing feel.
   around the titan's pit — the seat-relative layout puts the boss dead ahead
   of every raider while your squadmates (avatars, voice, live health bars)
   flank you on the curve. Same five titans, raid-cut: **bigger, far tougher
-  (well over 4× the health), swinging faster**, every strike aimed at ONE
-  raider's platform (the titan visibly squares up to whoever it hunts) while
-  everyone watches the telegraph land. It always runs gauntlet-style — all
+  (well over 4× the health)** — and the targeting ESCALATES stage by stage:
+  RUSTHOOK hunts one raider at a time (the chassis visibly squares up to its
+  mark), PISTONKAISER marks TWO at once with a two-fisted hoist, and from
+  VULTURE on every swing marks the WHOLE squad — hammer ghosts on every
+  platform, a fan of beams, volleys cycling raider to raider, novas with
+  per-raider wedges. **Sweeps always catch everyone**: the titan winds both
+  arms out wide and whips a full-turn spinning lash, the blade cascading
+  around the arc platform by platform. It always runs gauntlet-style — all
   five in a row, no lobby between, until it's beaten or the whole squad is
   down (a downed raider spectates; a refit between titans stands them back
   up unless hardcore). GOLIATH ends it with two raid-only cards: the

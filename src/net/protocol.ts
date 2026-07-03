@@ -92,21 +92,23 @@ export type PeerMessage =
       reset: number;
     }
   /**
-   * RAID (host → all): the titan starts an attack. `seat` is the TARGET's
-   * canonical seat; coordinates are in the TARGET's local frame (their
-   * platform at their origin), so every client can transform + render the
-   * telegraph on the right platform while only the target judges damage.
-   * 'decree' is GOLIATH's group attack: novas on EVERY platform, `a` being
-   * the shared CANONICAL safe bearing.
+   * RAID (host → all): the titan starts an attack. `seats` are the TARGETS'
+   * canonical seats (sweeps mark the WHOLE squad; stage I hunts one raider,
+   * stage II two, stage III+ everyone); the optional param arrays run
+   * parallel to `seats`, each value in THAT target's local frame (their
+   * platform at their origin). Every client transforms + renders the
+   * telegraphs on the right platforms; only each target judges its own
+   * damage. 'decree' is GOLIATH's group nova: `a[0]` is the shared
+   * CANONICAL safe bearing everyone rotates to together.
    */
   | {
       k: 'ratk';
       kind: 'slam' | 'sweep' | 'beam' | 'volley' | 'nova' | 'decree';
-      seat: number;
-      x?: number;
-      z?: number;
-      y?: number;
-      a?: number;
+      seats: number[];
+      x?: number[];
+      z?: number[];
+      y?: number[];
+      a?: number[];
     }
   /** RAID (client → host): my ball landed on the titan's weak point `spot`
    *  for `pts` damage. The host validates the spot is LIVE and applies it. */

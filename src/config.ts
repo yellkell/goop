@@ -328,10 +328,20 @@ export const RAID = {
   scaleMult: 1.22,
   /** Boss health multiplier — "more than 4x": four raiders, and then some. */
   healthMult: 4.6,
-  /** Attack cadence multiplier — four targets to pressure, so it swings sooner. */
-  cooldownMult: 0.62,
+  /**
+   * Attack cadence multiplier PER STAGE, tuned to how many raiders each
+   * swing marks: stage I rotates ONE target (so it swings fast to keep the
+   * squad honest), stage II marks TWO, stage III+ mark EVERYONE — the pace
+   * eases back toward solo, because now every raider dodges every swing.
+   */
+  cooldownMult: [0.62, 0.72, 0.9, 0.92, 0.88],
   /** Charge-time multiplier — slightly snappier telegraphs. */
   chargeMult: 0.92,
+  /** Seconds between blade landings as a squad sweep cascades around the
+   *  arc — one continuous spinning cut, platform after platform. */
+  sweepCascade: 0.12,
+  /** The titan's full-turn lash while a squad sweep detonates (rad/s). */
+  sweepSpinRate: 11,
   /** GOLIATH's crown ring stops take this many hits each in a raid (a squad
    *  shreds single-hit stops too fast). */
   crownPerStop: 2,
