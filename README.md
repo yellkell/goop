@@ -74,8 +74,9 @@ in-your-face boxing feel.
 - **RAID** — the four-player group campaign, right under CAMPAIGN in the
   ARCADE panel. Matchmaking works like RANKED: hosting raises a **visible
   lobby** other boxers join from a browser; the host holds a **HARDCORE**
-  breaker (no healing between titans) and the START switch, and the whole
-  squad drops in together. Four platforms stand on a **semicircular arc**
+  breaker (no healing between titans), and the raid **auto-launches the
+  instant a full squad of four is in** — no start button, the whole squad
+  drops in together. Four platforms stand on a **semicircular arc**
   around the titan's pit — the seat-relative layout puts the boss dead ahead
   of every raider while your squadmates (avatars, voice, live health bars)
   flank you on the curve. Same five titans, raid-cut: **bigger, far tougher

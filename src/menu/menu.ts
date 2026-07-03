@@ -94,7 +94,6 @@ export type MenuAction =
   | 'raid-close'
   | 'raid-host'
   | 'raid-hardcore'
-  | 'raid-start'
   | 'raid-leave'
   | `raid-join-${string}`
   | 'toggle-shootback'
@@ -2029,7 +2028,8 @@ function hitCampaign(u: number, v: number): MenuAction | null {
 
 // ───────────────────────────── THE RAID LOBBY ───────────────────────────────
 // Two faces of one modal: the BROWSER (open squads you can join + HOST) and a
-// joined LOBBY (the squad's four slots, the host's hardcore breaker, START).
+// joined LOBBY (the squad's four slots + the host's hardcore breaker). The
+// raid auto-launches when the fourth raider joins — there is no start button.
 // Matchmaking works like RANKED's server browser: hosting makes a VISIBLE
 // room; the raid launches for everyone the moment the host starts it.
 
@@ -2044,8 +2044,10 @@ const RAID_SLOT_Y0 = 148;
 const RAID_SLOT_H = 52;
 const RAID_SLOT_GAP = 10;
 const RAID_HC_Y = 406;
-const RAID_START_BTN = { x: 70, y: RAID_H - 108, w: (RAID_W - 160) / 2, h: 56 };
-const RAID_LEAVE_BTN = { x: RAID_W / 2 + 10, y: RAID_H - 108, w: (RAID_W - 160) / 2, h: 56 };
+// No START button (raids auto-launch on a full squad): a full-width status
+// line over a centred LEAVE.
+const RAID_STATUS_Y = RAID_H - 116;
+const RAID_LEAVE_BTN = { x: RAID_W / 2 - 110, y: RAID_H - 74, w: 220, h: 52 };
 
 function drawRaid(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
   panelBg(ctx, false, '#b26bff', 'RAID', RAID_W, RAID_H);
@@ -2138,13 +2140,17 @@ function drawRaidLobby(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | 
   ctx.fillRect(mesh.raidHardcore ? px + pw - kw - 6 : px + 6, RAID_HC_Y + 6, kw, ph - 12);
   ctx.textAlign = 'center';
 
-  if (host) {
-    buttonPlate(ctx, RAID_START_BTN.x, RAID_START_BTN.y, RAID_START_BTN.w, RAID_START_BTN.h, 'START', UI.danger, hoverAction === 'raid-start');
-  } else {
-    ctx.font = '600 20px system-ui, sans-serif';
-    ctx.fillStyle = 'rgba(217,194,255,0.85)';
-    ctx.fillText('waiting for the host…', RAID_START_BTN.x + RAID_START_BTN.w / 2, RAID_START_BTN.y + RAID_START_BTN.h / 2 + 2);
-  }
+  // No START button — the raid AUTO-LAUNCHES the moment all four seats fill.
+  const count = mesh.occupants.filter(Boolean).length;
+  const ready = count >= 4;
+  ctx.textAlign = 'center';
+  ctx.font = ready ? '800 24px system-ui, sans-serif' : '600 21px system-ui, sans-serif';
+  ctx.fillStyle = ready ? '#d9a832' : 'rgba(217,194,255,0.9)';
+  ctx.fillText(
+    ready ? 'SQUAD FULL — LAUNCHING…' : `${count} / 4 raiders — a full squad launches the raid`,
+    RAID_W / 2,
+    RAID_STATUS_Y,
+  );
   buttonPlate(ctx, RAID_LEAVE_BTN.x, RAID_LEAVE_BTN.y, RAID_LEAVE_BTN.w, RAID_LEAVE_BTN.h, 'LEAVE', UI.steel, hoverAction === 'raid-leave');
 }
 
@@ -2156,7 +2162,6 @@ function hitRaid(u: number, v: number): MenuAction | null {
 
   if (app.raidView === 'lobby') {
     if (mesh.isHost() && y >= RAID_HC_Y - 4 && y <= RAID_HC_Y + 40 && x >= 70 && x <= RAID_W - 70) return 'raid-hardcore';
-    if (mesh.isHost() && inBtn(RAID_START_BTN)) return 'raid-start';
     if (inBtn(RAID_LEAVE_BTN)) return 'raid-leave';
     return null;
   }

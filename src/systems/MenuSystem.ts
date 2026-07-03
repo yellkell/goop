@@ -179,15 +179,19 @@ export class MenuSystem extends createSystem({}) {
     }
 
     // RAID lobby lifecycle: the room list is only watched while the browser
-    // face is up (and we're not already seated); the fight launches for
-    // EVERYONE — host and guests alike — off the room doc's `started` flag,
-    // so the whole squad enters together.
+    // face is up (and we're not already seated). A raid AUTO-LAUNCHES the
+    // instant the lobby is full — the HOST stamps the room doc's `started`
+    // flag when all four seats fill (single writer), and EVERYONE — host and
+    // guests alike — enters together off that flag. No start button.
     if (app.raidOpen && app.raidView === 'browser' && !mesh.joined) {
       startRaidWatch((rooms) => {
         app.raidRooms = rooms;
       });
     } else {
       stopRaidWatch();
+    }
+    if (app.raidOpen && mesh.joined && mesh.isHost() && mesh.full && !mesh.raidStarted) {
+      mesh.startRaid(); // all four in — go
     }
     if (app.raidOpen && mesh.joined && mesh.raidStarted) {
       this.launchRaid();
@@ -442,11 +446,6 @@ export class MenuSystem extends createSystem({}) {
         break;
       case 'raid-hardcore':
         if (mesh.isHost()) mesh.setRaidHardcore(!mesh.raidHardcore);
-        break;
-      case 'raid-start':
-        // The doc flips `started`; every member (host included) launches off
-        // the same signal in update(), so the whole squad enters together.
-        if (mesh.isHost()) mesh.startRaid();
         break;
       case 'raid-leave':
         mesh.cancel();
