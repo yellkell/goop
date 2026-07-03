@@ -111,6 +111,15 @@ walls glow awake as your head nears the edge; lean your head out past the rim
 and the arena's fire drains your health *fast*. Dodge with your body, but stay
 on your platform.
 
+The lobby's left panel is **BATTLE** — every live fight in one place: the 1v1
+modes (Ranked / Quick / Private) and the 2V2 / FFA brawls. The **ARCADE** panel
+keeps the solo stuff (Tutorial, the titan Campaign, Aim Training). Your **arena
+backdrop** — bare AR passthrough, the papercraft desert, or the old factory —
+lives in the loadout's **ARENA** tab, and a round **passthrough disc** above the
+BATTLE panel flips the backdrop off to your real room and back, so you can size
+up your play space at a glance. The **leaderboard** groups the same way: a
+**BATTLE** tab fronts the 1V1 / 2V2 / FFA boards, ARCADE fronts the aim board.
+
 Match UI is arena-style: angled boards flank the gap (your board orange,
 theirs blue) — steel-white names haloed in team neon over corner tubing and a
 fading neon rule, health in a slim neon-edged track (red when nearly out),

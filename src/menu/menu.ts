@@ -18,7 +18,7 @@ import {
   PlaneGeometry,
   type Scene,
 } from 'three';
-import { app, DEFAULT_ACCENT_HUE, saveBallArc, saveBallAttach } from './appState.js';
+import { app, DEFAULT_ACCENT_HUE, saveBallArc, saveBallAttach, type AppEnvironment } from './appState.js';
 import { avatarOwned, customization, platformOwned } from './customization.js';
 import { rankBadge } from './rankBadges.js';
 import { coinImage } from './coinIcon.js';
@@ -64,6 +64,8 @@ export type PanelId =
   | 'coins'
   /** The little circular paper button hanging above the right panel. */
   | 'gazette'
+  /** The round passthrough toggle hanging above the BATTLE panel. */
+  | 'passthrough'
   /** The music mute disc, left of the paper button. */
   | 'mute'
   /** The Gasket Gazette front page itself (opens modal over the lobby). */
@@ -102,8 +104,16 @@ export type MenuAction =
   | 'kp-del'
   | 'kp-join'
   | `kp-${number}`
-  | 'toggle-environment'
-  | 'toggle-factory'
+  /** Quick passthrough toggle (BATTLE-panel disc): flip the backdrop off to
+   *  bare AR so you can see your real room, and back. */
+  | 'toggle-passthrough'
+  /** Arena-backdrop picker (LOCKER » ARENA tab): bare AR / desert / factory. */
+  | 'env-ar'
+  | 'env-desert'
+  | 'env-factory'
+  | 'tab-arena'
+  /** Leaderboard top tab: BATTLE fronts the 1v1 / 2v2 / ffa boards. */
+  | 'lb-battle'
   | 'lb-ranked'
   | 'lb-xp'
   | 'lb-arcade'
@@ -150,10 +160,10 @@ export type MenuAction =
 
 const PW = 512;
 const PH = 400;
-// The ARCADE panel is taller than the others to fit the CAMPAIGN row plus its
-// three breaker toggles (shoot-back, only-play-bots, voice-chat) with
-// breathing room at the bottom.
-const TRAIN_H = PH + 152;
+// The ARCADE panel holds TUTORIAL / CAMPAIGN / AIM TRAINING plus its three
+// breaker toggles (shoot-back, only-play-bots, voice-chat) — the 2V2 / FFA
+// brawls moved to the BATTLE panel, so it's shorter now.
+const TRAIN_H = PH + 20;
 // The 1V1 panel grows a little downward so the "searching for an opponent…"
 // line sits inside the frame instead of hanging off the bottom edge.
 const DUEL_H = PH + 48;
@@ -267,8 +277,9 @@ function makePanel(
   return { id, mesh, redraw, hitTest, drag, click };
 }
 
-/** Centre — ARCADE: the titan CAMPAIGN, aim training plus the 2v2 and FFA
- *  brawls, and the shoot-back toggle (which only flavours aim training). */
+/** Centre — ARCADE: the guided TUTORIAL, the single-player titan CAMPAIGN and
+ *  AIM TRAINING, plus the three breaker toggles. (2V2 / FFA now live on the
+ *  BATTLE panel with the rest of the fights.) */
 function drawTrain(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
   panelBg(ctx, false, UI.emberBright, 'ARCADE', PW, TRAIN_H);
 
@@ -276,9 +287,7 @@ function drawTrain(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null
   buttonPlate(ctx, 70, 80, PW - 140, 54, 'TUTORIAL', UI.emberBright, hoverAction === 'start-tutorial');
   // The single-player CAMPAIGN — the titan gauntlet — right below it.
   buttonPlate(ctx, 70, 140, PW - 140, 54, 'CAMPAIGN', UI.danger, hoverAction === 'open-campaign');
-  buttonPlate(ctx, 70, 200, PW - 140, 54, '2V2', UI.cool, hoverAction === 'arcade-2v2');
-  buttonPlate(ctx, 70, 260, PW - 140, 54, 'FFA', UI.amber, hoverAction === 'arcade-ffa');
-  buttonPlate(ctx, 70, 320, PW - 140, 54, 'AIM TRAINING', UI.ember, hoverAction === 'start-training');
+  buttonPlate(ctx, 70, 200, PW - 140, 54, 'AIM TRAINING', UI.ember, hoverAction === 'start-training');
 
   // Two industrial breaker switches: targets-shoot-back, then only-play-bots.
   const breaker = (text: string, on: boolean, hot: boolean, py: number, onFill: string, onStroke: string): void => {
@@ -297,28 +306,27 @@ function drawTrain(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null
     const kw = pw / 2 - 10;
     ctx.fillRect(on ? px + pw - kw - 6 : px + 6, py + 6, kw, ph - 12);
   };
-  breaker('targets shoot back', app.shootBack, hoverAction === 'toggle-shootback', 380, 'rgba(79,183,255,0.25)', UI.cool);
-  breaker('only play bots', app.onlyBots, hoverAction === 'toggle-onlybots', 422, 'rgba(255,176,0,0.25)', UI.amber);
-  breaker('voice chat', voiceEnabled(), hoverAction === 'toggle-voice', 464, 'rgba(57,217,138,0.28)', '#39d98a');
+  breaker('targets shoot back', app.shootBack, hoverAction === 'toggle-shootback', 268, 'rgba(79,183,255,0.25)', UI.cool);
+  breaker('only play bots', app.onlyBots, hoverAction === 'toggle-onlybots', 310, 'rgba(255,176,0,0.25)', UI.amber);
+  breaker('voice chat', voiceEnabled(), hoverAction === 'toggle-voice', 352, 'rgba(57,217,138,0.28)', '#39d98a');
 }
 
 function hitTrain(_u: number, v: number): MenuAction | null {
-  // v: 0 bottom → 1 top (canvas y = (1-v)*TRAIN_H — this panel is taller).
+  // v: 0 bottom → 1 top (canvas y = (1-v)*TRAIN_H).
   const y = (1 - v) * TRAIN_H;
   if (y >= 80 && y <= 134) return 'start-tutorial';
   if (y >= 140 && y <= 194) return 'open-campaign';
-  if (y >= 200 && y <= 254) return 'arcade-2v2';
-  if (y >= 260 && y <= 314) return 'arcade-ffa';
-  if (y >= 320 && y <= 374) return 'start-training';
-  if (y >= 378 && y <= 418) return 'toggle-shootback';
-  if (y >= 420 && y <= 460) return 'toggle-onlybots';
-  if (y >= 462 && y <= 502) return 'toggle-voice';
+  if (y >= 200 && y <= 254) return 'start-training';
+  if (y >= 266 && y <= 304) return 'toggle-shootback';
+  if (y >= 308 && y <= 346) return 'toggle-onlybots';
+  if (y >= 350 && y <= 388) return 'toggle-voice';
   return null;
 }
 
-/** Left — 1V1. Mode list (Ranked / Quick / Private) or the private-match flow. */
+/** Left — BATTLE. Every live fight: the 1v1 modes (Ranked / Quick / Private)
+ *  and the 2V2 / FFA brawls — or the private-match sub-flow. */
 function drawDuel(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
-  panelBg(ctx, false, UI.cool, '1 V 1', PW, DUEL_H);
+  panelBg(ctx, false, UI.cool, 'BATTLE', PW, DUEL_H);
   switch (app.duelView) {
     case 'private':
       return drawPrivateMenu(ctx, hoverAction);
@@ -357,7 +365,7 @@ function drawDuelRoot(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | n
   // RANKED — opens the server browser (host your own room, or join a listed
   // one). Greyed + dead while ONLY PLAY BOTS is on.
   buttonPlate(
-    ctx, 70, 84, PW - 140, 66,
+    ctx, 70, 74, PW - 140, 58,
     queueing ? 'CANCEL' : 'RANKED',
     queueing ? UI.amber : UI.cool,
     !rankedOff && hoverAction === rankedAction,
@@ -369,7 +377,7 @@ function drawDuelRoot(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | n
     const label = `${app.rankedRooms.length} OPEN`;
     ctx.font = '800 16px system-ui, sans-serif';
     const pillW = ctx.measureText(label).width + 34, pillH = 24;
-    const px = PW - 70 - pillW, py = 90;
+    const px = PW - 70 - pillW, py = 82;
     plate(ctx, px, py, pillW, pillH, { cut: 8, fill: 'rgba(79,183,255,0.22)', stroke: UI.cool, rivets: false });
     ctx.fillStyle = UI.coolBright;
     ctx.beginPath();
@@ -383,51 +391,39 @@ function drawDuelRoot(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | n
 
   // QUICK MATCH — drops you straight onto a bot, but keeps hunting; a human who
   // turns up pulls you into the live bout.
-  buttonPlate(ctx, 70, 156, PW - 140, 66, 'QUICK MATCH', UI.ember, hoverAction === 'quick-match');
+  buttonPlate(ctx, 70, 138, PW - 140, 58, 'QUICK MATCH', UI.ember, hoverAction === 'quick-match');
   // PRIVATE — share a 5-digit code with a friend.
-  buttonPlate(ctx, 70, 228, PW - 140, 58, 'PRIVATE', UI.coolBright, hoverAction === 'private-open');
+  buttonPlate(ctx, 70, 202, PW - 140, 54, 'PRIVATE', UI.coolBright, hoverAction === 'private-open');
 
-  // Arena-backdrop breaker switches: desert, then factory beneath it (each a
-  // toggle; turning one on turns the other off — the third state is bare AR).
-  envToggle(ctx, 'desert arena', app.environment === 'desert', hoverAction === 'toggle-environment', 290);
-  envToggle(ctx, 'old factory arena', app.environment === 'factory', hoverAction === 'toggle-factory', 334);
+  // The BRAWLS — 2V2 and FFA — sit below a faint divider: same live-fight hub,
+  // one section for duels, one for the free-for-alls.
+  ctx.strokeStyle = UI.steelDim;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(70, 268);
+  ctx.lineTo(PW - 70, 268);
+  ctx.stroke();
+  buttonPlate(ctx, 70, 280, PW - 140, 50, '2V2', UI.cool, hoverAction === 'arcade-2v2');
+  buttonPlate(ctx, 70, 336, PW - 140, 50, 'FFA', UI.amber, hoverAction === 'arcade-ffa');
 
   if (queueing) {
     ctx.textAlign = 'center';
-    ctx.font = '600 19px system-ui, sans-serif';
+    ctx.font = '600 18px system-ui, sans-serif';
     ctx.fillStyle = 'rgba(159,226,255,0.85)';
-    ctx.fillText('searching for an opponent…', PW / 2, 392);
+    ctx.fillText('searching for an opponent…', PW / 2, 404);
   }
-}
-
-/** One labelled breaker switch row at canvas y `sy`. */
-function envToggle(ctx: CanvasRenderingContext2D, label: string, on: boolean, hot: boolean, sy: number): void {
-  ctx.font = '700 23px system-ui, sans-serif';
-  ctx.textAlign = 'left';
-  ctx.fillStyle = hot ? UI.amber : UI.textDim;
-  ctx.fillText(label, 64, sy + 24);
-  const sw = 110, sh = 36, sx = PW - 64 - sw;
-  plate(ctx, sx, sy, sw, sh, {
-    cut: 10,
-    fill: on ? 'rgba(255,176,0,0.22)' : hot ? 'rgba(255,176,0,0.16)' : 'rgba(150,150,170,0.12)',
-    stroke: hot || on ? UI.amber : UI.steelDim,
-    rivets: false,
-  });
-  ctx.fillStyle = on ? UI.amber : UI.steelDim;
-  const kw = sw / 2 - 12;
-  ctx.fillRect(on ? sx + sw - kw - 8 : sx + 8, sy + 7, kw, sh - 14);
 }
 
 function hitDuelRoot(v: number): MenuAction | null {
   const y = (1 - v) * DUEL_H;
-  if (y >= 80 && y <= 152) {
+  if (y >= 70 && y <= 136) {
     if (app.state === 'queueing') return 'cancel-queue';
     return app.onlyBots ? null : 'ranked-match'; // ranked disabled in only-bots mode
   }
-  if (y >= 154 && y <= 224) return 'quick-match';
-  if (y >= 226 && y <= 288) return 'private-open';
-  if (y >= 288 && y <= 328) return 'toggle-environment';
-  if (y >= 332 && y <= 372) return 'toggle-factory';
+  if (y >= 138 && y <= 198) return 'quick-match';
+  if (y >= 202 && y <= 258) return 'private-open';
+  if (y >= 280 && y <= 332) return 'arcade-2v2';
+  if (y >= 336 && y <= 388) return 'arcade-ffa';
   return null;
 }
 
@@ -743,31 +739,32 @@ function hitPubPicker(v: number): MenuAction | null {
 const BOARD_ROW_Y0 = 164;
 const BOARD_ROW_STEP = 30;
 
-/** Top row: RANKED / XP / ARCADE / PROFILE. ARCADE fronts the three brawl
- *  boards, so it lights for any of training/duo/ffa. */
+/** Top row: BATTLE / XP / ARCADE / PROFILE. BATTLE fronts the three live-fight
+ *  boards (1v1 / 2v2 / ffa), so it lights for any of ranked/duo/ffa. ARCADE is
+ *  just AIM TRAINING now (the brawls moved under BATTLE). */
 const BOARD_TABS: Array<[string, MenuAction, (t: LeaderboardTab) => boolean]> = [
-  ['RANKED', 'lb-ranked', (t) => t === 'ranked'],
+  ['BATTLE', 'lb-battle', (t) => t === 'ranked' || t === 'duo' || t === 'ffa'],
   ['XP', 'lb-xp', (t) => t === 'xp'],
-  ['ARCADE', 'lb-arcade', (t) => t === 'training' || t === 'duo' || t === 'ffa'],
+  ['ARCADE', 'lb-arcade', (t) => t === 'training'],
   ['PROFILE', 'lb-profile', (t) => t === 'profile'],
 ];
 const BOARD_TAB_W = (BW - 96 - 48) / 4;
 
-/** ARCADE sub-tabs: the three brawl boards. */
-const ARCADE_SUBS: Array<[LeaderboardTab, string, MenuAction]> = [
-  ['training', 'AIM', 'lb-training'],
+/** BATTLE sub-tabs: the three live-fight boards. */
+const BATTLE_SUBS: Array<[LeaderboardTab, string, MenuAction]> = [
+  ['ranked', '1V1', 'lb-ranked'],
   ['duo', '2V2', 'lb-duo'],
   ['ffa', 'FFA', 'lb-ffa'],
 ];
-const ARCADE_SUB_Y = 140;
-const ARCADE_SUB_H = 38;
-const ARCADE_SUB_W = (BW - 96 - 32) / 3;
+const BATTLE_SUB_Y = 140;
+const BATTLE_SUB_H = 38;
+const BATTLE_SUB_W = (BW - 96 - 32) / 3;
 
-function arcadeActive(): boolean {
-  return leaderboard.tab === 'training' || leaderboard.tab === 'duo' || leaderboard.tab === 'ffa';
+function battleActive(): boolean {
+  return leaderboard.tab === 'ranked' || leaderboard.tab === 'duo' || leaderboard.tab === 'ffa';
 }
 
-/** Behind — the Firebase leaderboard: RANKED / XP / ARCADE boards + PROFILE. */
+/** Behind — the Firebase leaderboard: BATTLE / XP / ARCADE boards + PROFILE. */
 function drawBoard(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
   panelBg(ctx, false, UI.amber, 'LEADERBOARD', BW, BH);
   let x = 48;
@@ -787,13 +784,13 @@ function drawBoard(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null
     x += BOARD_TAB_W + 16;
   }
 
-  // ARCADE sub-tabs (AIM / 2V2 / FFA) appear only under the ARCADE tab.
-  if (arcadeActive()) {
+  // BATTLE sub-tabs (1V1 / 2V2 / FFA) appear only under the BATTLE tab.
+  if (battleActive()) {
     let sx = 48;
-    for (const [id, label, action] of ARCADE_SUBS) {
+    for (const [id, label, action] of BATTLE_SUBS) {
       const active = leaderboard.tab === id;
       const hot = hoverAction === action;
-      plate(ctx, sx, ARCADE_SUB_Y, ARCADE_SUB_W, ARCADE_SUB_H, {
+      plate(ctx, sx, BATTLE_SUB_Y, BATTLE_SUB_W, BATTLE_SUB_H, {
         cut: 8,
         fill: active ? 'rgba(79,183,255,0.18)' : hot ? 'rgba(255,176,0,0.12)' : 'rgba(150,150,170,0.08)',
         stroke: active ? UI.cool : hot ? UI.amber : UI.steelDim,
@@ -802,8 +799,8 @@ function drawBoard(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null
       ctx.font = '700 17px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.fillStyle = active ? UI.cool : hot ? UI.amber : UI.textDim;
-      ctx.fillText(label, sx + ARCADE_SUB_W / 2, ARCADE_SUB_Y + ARCADE_SUB_H / 2 + 6);
-      sx += ARCADE_SUB_W + 16;
+      ctx.fillText(label, sx + BATTLE_SUB_W / 2, BATTLE_SUB_Y + BATTLE_SUB_H / 2 + 6);
+      sx += BATTLE_SUB_W + 16;
     }
   }
 
@@ -811,9 +808,9 @@ function drawBoard(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null
   else drawBoardRows(ctx, hoverAction);
 }
 
-/** Row column origin — pushed down when the ARCADE sub-tab row is showing. */
+/** Row column origin — pushed down when the BATTLE sub-tab row is showing. */
 function boardRowY0(): number {
-  return arcadeActive() ? BOARD_ROW_Y0 + ARCADE_SUB_H + 8 : BOARD_ROW_Y0;
+  return battleActive() ? BOARD_ROW_Y0 + BATTLE_SUB_H + 8 : BOARD_ROW_Y0;
 }
 
 function drawBoardRows(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
@@ -939,10 +936,10 @@ function hitBoard(u: number, v: number): MenuAction | null {
     const i = Math.max(0, Math.min(3, Math.floor((x - 48) / (BOARD_TAB_W + 16))));
     return BOARD_TABS[i][1];
   }
-  // ARCADE sub-tabs.
-  if (arcadeActive() && y >= ARCADE_SUB_Y - 4 && y <= ARCADE_SUB_Y + ARCADE_SUB_H + 4) {
-    const i = Math.max(0, Math.min(2, Math.floor((x - 48) / (ARCADE_SUB_W + 16))));
-    return ARCADE_SUBS[i][2];
+  // BATTLE sub-tabs.
+  if (battleActive() && y >= BATTLE_SUB_Y - 4 && y <= BATTLE_SUB_Y + BATTLE_SUB_H + 4) {
+    const i = Math.max(0, Math.min(2, Math.floor((x - 48) / (BATTLE_SUB_W + 16))));
+    return BATTLE_SUBS[i][2];
   }
   if (leaderboard.tab === 'profile') {
     if (y >= 482 && y <= 536) {
@@ -1327,6 +1324,60 @@ function hitGazetteButton(u: number, v: number): MenuAction | null {
   const dx = u - 0.5;
   const dy = v - 0.5;
   return dx * dx + dy * dy <= 0.41 * 0.41 ? 'open-gazette' : null;
+}
+
+/** The round passthrough button (above the BATTLE panel): a steel disc with a
+ *  corner-bracket "framing" glyph — a square drawn as four corners only. Lit
+ *  when passthrough is live (bare AR, the backdrop off), so you can eyeball
+ *  your real room to set up your space. Matches the paper button (NOT glowing). */
+function drawPassthroughButton(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
+  ctx.clearRect(0, 0, GZ, GZ);
+  const hot = hoverAction === 'toggle-passthrough';
+  const on = app.environment === 'ar'; // passthrough live — real room showing
+  const cx = GZ / 2;
+  const cy = GZ / 2;
+  const r = 52;
+
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fillStyle = hot ? 'rgba(16,18,24,0.92)' : 'rgba(9,10,14,0.82)';
+  ctx.fill();
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = hot ? UI.amber : on ? UI.cool : UI.steel;
+  ctx.stroke();
+
+  // Corner-bracket square: four L-shaped corners with open sides — a camera
+  // framing reticle, "set up your space".
+  const s = 30; // half-side of the framed square
+  const leg = 13; // bracket arm length
+  const ink = hot ? UI.amber : on ? UI.coolBright : UI.text;
+  ctx.strokeStyle = ink;
+  ctx.lineWidth = 5;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  for (const sx of [-1, 1]) {
+    for (const sy of [-1, 1]) {
+      const px = cx + sx * s;
+      const py = cy + sy * s;
+      ctx.beginPath();
+      ctx.moveTo(px - sx * leg, py);
+      ctx.lineTo(px, py);
+      ctx.lineTo(px, py - sy * leg);
+      ctx.stroke();
+    }
+  }
+  // A small centre dot — the "you are here" of the framed space.
+  ctx.fillStyle = ink;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 3.4, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+/** Inside the disc → toggle passthrough. */
+function hitPassthroughButton(u: number, v: number): MenuAction | null {
+  const dx = u - 0.5;
+  const dy = v - 0.5;
+  return dx * dx + dy * dy <= 0.41 * 0.41 ? 'toggle-passthrough' : null;
 }
 
 /** The lobby-music mute button: a steel disc with a speaker glyph, struck
@@ -1947,10 +1998,11 @@ export function accentBarLight(u: number): number {
   return Math.max(0, Math.min(1, (u * PAN_W - ACCENT_LIGHT_BAR.x) / ACCENT_LIGHT_BAR.w));
 }
 
-/** Which tab is showing. 'colour' is locker-only, so the shop falls back to avatars. */
-function activeTab(locker: boolean): 'avatars' | 'platforms' | 'colour' {
+/** Which tab is showing. 'colour' and 'arena' are locker-only, so the shop
+ *  falls back to avatars for either. */
+function activeTab(locker: boolean): 'avatars' | 'platforms' | 'colour' | 'arena' {
   const t = customization.tab;
-  return !locker && t === 'colour' ? 'avatars' : t;
+  return !locker && (t === 'colour' || t === 'arena') ? 'avatars' : t;
 }
 
 interface DisplayItem {
@@ -2190,6 +2242,61 @@ function drawColourTab(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | 
   drawLightBar(ctx, ACCENT_LIGHT_BAR, app.accentLight, app.accentHue, true);
 }
 
+/** The LOCKER's ARENA tab — pick the backdrop that hangs behind your bouts:
+ *  bare AR (your real room), the papercraft desert, or the old factory. The
+ *  quick passthrough disc above the BATTLE panel flips between AR and whatever
+ *  you last chose here. */
+const ARENA_OPTS: Array<{ env: AppEnvironment; label: string; desc: string; action: MenuAction }> = [
+  { env: 'ar', label: 'PASSTHROUGH', desc: 'your real room — nothing painted over it', action: 'env-ar' },
+  { env: 'desert', label: 'DESERT', desc: 'papercraft dunes under an open sky', action: 'env-desert' },
+  { env: 'factory', label: 'OLD FACTORY', desc: 'a grimy ironworks pit', action: 'env-factory' },
+];
+const ARENA_ROW = { x: 40, y0: 168, w: PAN_W - 80, h: 96, step: 112 };
+
+function arenaRowRect(i: number): PanRect {
+  return { x: ARENA_ROW.x, y: ARENA_ROW.y0 + i * ARENA_ROW.step, w: ARENA_ROW.w, h: ARENA_ROW.h };
+}
+
+function drawArenaTab(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | null): void {
+  ARENA_OPTS.forEach((opt, i) => {
+    const r = arenaRowRect(i);
+    const on = app.environment === opt.env;
+    const hot = hoverAction === opt.action;
+    plate(ctx, r.x, r.y, r.w, r.h, {
+      cut: 16,
+      fill: on ? 'rgba(79,183,255,0.16)' : hot ? 'rgba(255,176,0,0.12)' : 'rgba(150,150,170,0.08)',
+      stroke: on ? UI.cool : hot ? UI.amber : UI.steelDim,
+      rivets: false,
+    });
+    // Selected marker — a lit chip on the left edge.
+    ctx.fillStyle = on ? UI.coolBright : UI.steelDim;
+    ctx.fillRect(r.x + 14, r.y + r.h / 2 - 16, 6, 32);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    ctx.font = stencilFont(30);
+    ctx.fillStyle = on ? UI.coolBright : hot ? UI.amber : UI.text;
+    ctx.fillText(opt.label, r.x + 36, r.y + 44);
+    ctx.font = '600 19px system-ui, sans-serif';
+    ctx.fillStyle = UI.textDim;
+    ctx.fillText(opt.desc, r.x + 36, r.y + 74);
+    if (on) {
+      ctx.font = '800 17px system-ui, sans-serif';
+      ctx.fillStyle = UI.coolBright;
+      ctx.textAlign = 'right';
+      ctx.fillText('EQUIPPED', r.x + r.w - 24, r.y + 44);
+    }
+  });
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+}
+
+function hitArenaTab(x: number, y: number): MenuAction | null {
+  for (let i = 0; i < ARENA_OPTS.length; i++) {
+    if (inPanRect(x, y, arenaRowRect(i))) return ARENA_OPTS[i].action;
+  }
+  return null;
+}
+
 function drawGrid(ctx: CanvasRenderingContext2D, locker: boolean, hoverAction: MenuAction | null): void {
   const { items, soon } = panelItems(locker);
   for (const it of items) drawTile(ctx, it, hoverAction);
@@ -2244,8 +2351,10 @@ function drawLocker(ctx: CanvasRenderingContext2D, hoverAction: MenuAction | nul
     { label: 'AVATARS', action: 'tab-avatars', active: tab === 'avatars' },
     { label: 'PLATFORMS', action: 'tab-platforms', active: tab === 'platforms' },
     { label: 'COLOUR', action: 'tab-colour', active: tab === 'colour' },
+    { label: 'ARENA', action: 'tab-arena', active: tab === 'arena' },
   ], hoverAction);
   if (tab === 'colour') drawColourTab(ctx, hoverAction);
+  else if (tab === 'arena') drawArenaTab(ctx, hoverAction);
   else drawGrid(ctx, true, hoverAction);
 
   ctx.textAlign = 'center';
@@ -2259,9 +2368,10 @@ function hitLocker(u: number, v: number): MenuAction | null {
   const y = (1 - v) * PAN_H;
   if (inPanRect(x, y, FOOT_SWAP)) return 'open-shop';
   if (inPanRect(x, y, FOOT_CLOSE)) return 'custom-close';
-  const t = tabHit(x, y, 3);
-  if (t !== null) return t === 0 ? 'tab-avatars' : t === 1 ? 'tab-platforms' : 'tab-colour';
-  if (activeTab(true) === 'colour') {
+  const t = tabHit(x, y, 4);
+  if (t !== null) return t === 0 ? 'tab-avatars' : t === 1 ? 'tab-platforms' : t === 2 ? 'tab-colour' : 'tab-arena';
+  const tab = activeTab(true);
+  if (tab === 'colour') {
     if (inPanRect(x, y, ARMOUR_DEF)) return 'av-uncolor';
     if (inPanRect(x, y, ACCENT_DEF)) return 'accent-default';
     if (inPanRect(x, y, ARMOUR_BAR)) return 'av-color';
@@ -2270,6 +2380,7 @@ function hitLocker(u: number, v: number): MenuAction | null {
     if (inPanRect(x, y, ACCENT_LIGHT_BAR)) return 'accent-light';
     return null;
   }
+  if (tab === 'arena') return hitArenaTab(x, y);
   return gridHit(x, y, true);
 }
 
@@ -2298,6 +2409,11 @@ export function createMenu(scene: Scene): Menu {
   });
   // The music mute button, a twin disc just LEFT of the paper button.
   const muteBtn = makePanel('mute', 0.16, 0.16, drawMuteButton, hitMuteButton, {
+    cw: GZ,
+    ch: GZ,
+  });
+  // The passthrough toggle — a twin disc hanging above the BATTLE panel.
+  const passthroughBtn = makePanel('passthrough', 0.16, 0.16, drawPassthroughButton, hitPassthroughButton, {
     cw: GZ,
     ch: GZ,
   });
@@ -2350,6 +2466,10 @@ export function createMenu(scene: Scene): Menu {
   // along the same inward-tilted arc (left → a touch further away).
   muteBtn.mesh.position.set(0.66, 1.86, -1.16);
   muteBtn.mesh.rotation.y = -0.48;
+  // The passthrough disc hangs above the BATTLE panel (left arc), sharing its
+  // outward tilt so it faces you the same way.
+  passthroughBtn.mesh.position.set(-0.84, 1.88, -1.05);
+  passthroughBtn.mesh.rotation.y = 0.48;
   // The coin readout sits just to the RIGHT of the paper button, same height +
   // tilt — symbol and balance together, as asked.
   coinHud.mesh.position.set(1.18, 1.86, -0.94);
@@ -2365,7 +2485,7 @@ export function createMenu(scene: Scene): Menu {
   campaign.mesh.position.set(0, 1.5, -1.2);
   campaign.mesh.visible = false;
 
-  const panels = [train, duel, info, board, custom, balls, gazetteBtn, muteBtn, coinHud, shop, news, campaign];
+  const panels = [train, duel, info, board, custom, balls, gazetteBtn, muteBtn, passthroughBtn, coinHud, shop, news, campaign];
   for (const p of panels) {
     p.redraw(null);
     group.add(p.mesh);

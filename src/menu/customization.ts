@@ -131,8 +131,8 @@ export const customization = {
   open: false,
   /** The SHOP face is up (a sub-modal of customisation); false = the LOCKER. */
   shopOpen: false,
-  /** Which tab the shop / locker shows. 'colour' is locker-only (the sliders). */
-  tab: 'avatars' as 'avatars' | 'platforms' | 'colour',
+  /** Which tab the shop / locker shows. 'colour' and 'arena' are locker-only. */
+  tab: 'avatars' as 'avatars' | 'platforms' | 'colour' | 'arena',
 };
 
 /** Set the custom armour hue (0..1), or -1 to revert to the skin's default. */
