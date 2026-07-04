@@ -273,6 +273,23 @@ export function roundBell(): void {
   bellStrike(0.32);
 }
 
+/** End-of-round cue: one bell, then a happy blip, a sour slide, or a flat
+ *  double-tap for an even round (ported from FIRE FIGHT, wet garnish). */
+export function roundEnd(win: boolean | 'draw'): void {
+  bellStrike(0);
+  if (win === 'draw') {
+    tone({ freq: 440, type: 'triangle', dur: 0.12, gain: 0.16, delay: 0.24 });
+    tone({ freq: 440, type: 'sine', dur: 0.16, gain: 0.12, delay: 0.4 });
+  } else if (win) {
+    tone({ freq: 523, type: 'triangle', dur: 0.1, gain: 0.2, delay: 0.25 });
+    tone({ freq: 784, type: 'triangle', dur: 0.12, gain: 0.2, delay: 0.35 });
+    bubble(600, 0.06, 0.45);
+  } else {
+    tone({ freq: 392, to: 300, type: 'sine', dur: 0.2, gain: 0.2, delay: 0.25 });
+    bubble(220, 0.06, 0.4, 0.09);
+  }
+}
+
 /** End-of-match fanfare / sad trombone (wet edition). */
 export function matchEnd(win: boolean): void {
   if (win) {

@@ -8,14 +8,29 @@
 import { COMBAT } from './config.js';
 import type { GelCreature } from './creature/GelCreature.js';
 
-export type Phase = 'lobby' | 'countdown' | 'fighting' | 'verdict';
+export type Phase = 'lobby' | 'countdown' | 'fighting' | 'roundEnd' | 'verdict';
 export type Verdict = '' | 'win' | 'ko' | 'time' | 'draw';
+export type RoundWinner = '' | 'player' | 'creature' | 'draw';
+
+/** A proper contest: best of three rounds. */
+export const MAX_ROUNDS = 3;
+export const ROUNDS_TO_WIN = 2;
+/** Rest between rounds — the goop pulls itself together, so do you. */
+export const REST_SECONDS = 7;
 
 export const match = {
   phase: 'lobby' as Phase,
   creatureHp: COMBAT.creatureHealth,
   playerHp: COMBAT.playerHealth,
   timeLeft: COMBAT.roundSeconds,
+  /** The round in progress, 1-based. */
+  round: 1,
+  playerRounds: 0,
+  creatureRounds: 0,
+  /** Who took the round that just ended (drives the rest-period screen). */
+  lastRound: '' as RoundWinner,
+  /** Seconds into the rest period. */
+  roundEndT: 0,
   /** Seconds since the countdown began. */
   countdownT: 0,
   /** The lobby menu's FIGHT button rang; FightSystem consumes this. */
@@ -59,14 +74,25 @@ export function currentDifficulty(): Difficulty {
   return DIFFICULTIES[settings.difficulty];
 }
 
-export function resetForBout(): void {
+/** Fresh round: full health both sides, clock rewound. */
+export function resetForRound(): void {
   match.creatureHp = COMBAT.creatureHealth;
   match.playerHp = COMBAT.playerHealth;
   match.timeLeft = settings.roundSeconds;
-  match.verdict = '';
-  match.verdictT = 0;
   match.playerFlash = 0;
   match.boardDirty = true;
+}
+
+/** Fresh match: round one, cards wiped. */
+export function resetForMatch(): void {
+  resetForRound();
+  match.round = 1;
+  match.playerRounds = 0;
+  match.creatureRounds = 0;
+  match.lastRound = '';
+  match.roundEndT = 0;
+  match.verdict = '';
+  match.verdictT = 0;
 }
 
 /** The one creature, shared between systems (CreatureSystem owns it). */

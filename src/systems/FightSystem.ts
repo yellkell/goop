@@ -20,9 +20,17 @@ import {
 } from 'three';
 import { announce, type Call } from '../audio/announcer.js';
 import { backToLobbyMusic, playVictoryThenLobby, startBattleMusic } from '../audio/music.js';
-import { matchEnd, roundBell, uiClick } from '../audio/sfx.js';
+import { matchEnd, roundBell, roundEnd, uiClick } from '../audio/sfx.js';
 import { ARENA, COMBAT } from '../config.js';
-import { match, resetForBout } from '../state.js';
+import {
+  match,
+  MAX_ROUNDS,
+  resetForMatch,
+  resetForRound,
+  REST_SECONDS,
+  ROUNDS_TO_WIN,
+  type RoundWinner,
+} from '../state.js';
 import { ScoreBoard } from '../ui/board.js';
 
 const BEATS: Call[] = ['3', '2', '1', 'fight'];
@@ -91,7 +99,7 @@ export class FightSystem extends createSystem({}) {
         if (match.startRequested || aPressed) {
           if (aPressed) uiClick();
           match.startRequested = false;
-          resetForBout();
+          resetForMatch();
           match.phase = 'countdown';
           match.countdownT = 0;
           this.lastBeat = -1;
@@ -122,12 +130,26 @@ export class FightSystem extends createSystem({}) {
       case 'fighting': {
         match.timeLeft -= delta;
         if (match.creatureHp <= 0) {
-          this.endBout('win');
+          this.endRound('player');
         } else if (match.playerHp <= 0) {
-          this.endBout('ko');
+          this.endRound('creature');
         } else if (match.timeLeft <= 0) {
-          if (Math.abs(match.playerHp - match.creatureHp) < 0.5) this.endBout('draw');
-          else this.endBout('time');
+          // To the cards: whoever kept more of themselves takes the round.
+          if (Math.abs(match.playerHp - match.creatureHp) < 0.5) this.endRound('draw');
+          else this.endRound(match.playerHp > match.creatureHp ? 'player' : 'creature');
+        }
+        break;
+      }
+
+      case 'roundEnd': {
+        match.roundEndT += delta;
+        if (match.roundEndT > REST_SECONDS) {
+          match.round++;
+          resetForRound();
+          match.phase = 'countdown';
+          match.countdownT = 0;
+          this.lastBeat = -1;
+          match.boardDirty = true;
         }
         break;
       }
@@ -145,13 +167,35 @@ export class FightSystem extends createSystem({}) {
     this.board.update(_head);
   }
 
-  private endBout(verdict: 'win' | 'ko' | 'time' | 'draw'): void {
-    match.phase = 'verdict';
-    match.verdict = verdict;
-    match.verdictT = 0;
+  /** A round is settled: score it, then rest or — if the cards are in —
+   *  hand the whole contest to the judges. */
+  private endRound(winner: Exclude<RoundWinner, ''>): void {
+    match.lastRound = winner;
+    if (winner === 'player') match.playerRounds++;
+    else if (winner === 'creature') match.creatureRounds++;
     match.boardDirty = true;
 
-    const playerWon = verdict === 'win' || (verdict === 'time' && match.playerHp > match.creatureHp);
+    const decided =
+      match.playerRounds >= ROUNDS_TO_WIN ||
+      match.creatureRounds >= ROUNDS_TO_WIN ||
+      match.round >= MAX_ROUNDS;
+
+    if (decided) {
+      this.endMatch();
+    } else {
+      roundEnd(winner === 'draw' ? 'draw' : winner === 'player');
+      match.phase = 'roundEnd';
+      match.roundEndT = 0;
+    }
+  }
+
+  private endMatch(): void {
+    match.phase = 'verdict';
+    match.verdictT = 0;
+    const playerWon = match.playerRounds > match.creatureRounds;
+    match.verdict = match.playerRounds === match.creatureRounds ? 'draw' : playerWon ? 'win' : 'ko';
+    match.boardDirty = true;
+
     matchEnd(playerWon);
     if (playerWon) playVictoryThenLobby();
     else backToLobbyMusic();

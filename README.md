@@ -47,6 +47,15 @@ npm run build      # typecheck + production bundle
 node scripts/shot.mjs [outDir] [scene ...]   # headless creature screenshots
 ```
 
+## Hosting (GitHub Pages)
+
+The repo ships a Pages workflow (`.github/workflows/deploy.yml`). One-time
+setup: **Settings → Pages → Build and deployment → Source: "GitHub
+Actions"**. It deploys on every push to `main` (or run it manually from the
+Actions tab on any branch via *Run workflow*). The game lands at
+`https://<owner>.github.io/goop/` — HTTPS, which WebXR requires — and the
+flat-screen creature workbench at `https://<owner>.github.io/goop/dev.html`.
+
 ## Perf notes (Quest 3)
 
 The raymarch is the budget. Knobs in `src/config.ts` (`GEL_LOOK.maxSteps`,

@@ -16,7 +16,7 @@ import {
   Vector3,
 } from 'three';
 import { COMBAT, GAME_TITLE } from '../config.js';
-import { currentDifficulty, match, settings } from '../state.js';
+import { currentDifficulty, match, MAX_ROUNDS, settings } from '../state.js';
 import { countdownArt } from './countdownArt.js';
 import { verdictArt } from './verdictArt.js';
 
@@ -109,18 +109,41 @@ export class ScoreBoard {
     g.stroke();
 
     // Title.
-    g.font = '900 92px system-ui, sans-serif';
+    g.font = '900 84px system-ui, sans-serif';
     g.textAlign = 'center';
     g.textBaseline = 'top';
     g.fillStyle = '#6dff7e';
     g.shadowColor = 'rgba(109, 255, 126, 0.55)';
     g.shadowBlur = 26;
-    g.fillText(GAME_TITLE, W / 2, 30);
+    g.fillText(GAME_TITLE, W / 2, 24);
     g.shadowBlur = 0;
 
+    // The round strip: your pips — ROUND n/3 — its pips.
+    const inMatch = match.phase !== 'lobby';
+    if (inMatch) {
+      g.font = '800 34px system-ui, sans-serif';
+      g.textBaseline = 'middle';
+      g.fillStyle = 'rgba(238, 250, 238, 0.85)';
+      g.fillText(`ROUND ${Math.min(match.round, MAX_ROUNDS)} OF ${MAX_ROUNDS}`, W / 2, 138);
+      const pip = (x: number, won: boolean, color: string) => {
+        g.beginPath();
+        g.arc(x, 138, 13, 0, Math.PI * 2);
+        g.fillStyle = won ? color : 'rgba(238, 250, 238, 0.16)';
+        g.fill();
+        g.strokeStyle = 'rgba(238, 250, 238, 0.4)';
+        g.lineWidth = 2;
+        g.stroke();
+      };
+      // Your rounds build from the left edge, its rounds from the right.
+      for (let i = 0; i < MAX_ROUNDS - 1; i++) {
+        pip(120 + i * 44, i < match.playerRounds, 'rgba(255, 176, 58, 0.95)');
+        pip(W - 120 - i * 44, i < match.creatureRounds, 'rgba(74, 222, 96, 0.95)');
+      }
+    }
+
     // Health bars.
-    this.bar(60, 160, W - 120, 68, match.creatureHp / COMBAT.creatureHealth, 'rgba(74, 222, 96, 0.95)', 'THE GOOP', match.creatureHp);
-    this.bar(60, 250, W - 120, 68, match.playerHp / COMBAT.playerHealth, 'rgba(255, 176, 58, 0.95)', 'YOU', match.playerHp);
+    this.bar(60, 172, W - 120, 64, match.creatureHp / COMBAT.creatureHealth, 'rgba(74, 222, 96, 0.95)', 'THE GOOP', match.creatureHp);
+    this.bar(60, 254, W - 120, 64, match.playerHp / COMBAT.playerHealth, 'rgba(255, 176, 58, 0.95)', 'YOU', match.playerHp);
 
     // Centre stage.
     const cx = W / 2;
@@ -138,26 +161,47 @@ export class ScoreBoard {
         g.fillStyle = '#f2fff0';
         g.fillText(msg, cx, cy);
       }
+    } else if (match.phase === 'roundEnd') {
+      // The rest period: who took the round, and a breather.
+      g.font = '900 64px system-ui, sans-serif';
+      g.textBaseline = 'middle';
+      g.fillStyle =
+        match.lastRound === 'player' ? '#ffb03a' : match.lastRound === 'creature' ? '#6dff7e' : '#f2fff0';
+      g.fillText(
+        match.lastRound === 'player'
+          ? `YOU TAKE ROUND ${match.round}`
+          : match.lastRound === 'creature'
+            ? `THE GOOP TAKES ROUND ${match.round}`
+            : `ROUND ${match.round} IS EVEN`,
+        cx,
+        cy - 20,
+      );
+      g.font = '700 40px system-ui, sans-serif';
+      g.fillStyle = 'rgba(238, 250, 238, 0.7)';
+      g.fillText('breathe — it certainly isn’t', cx, cy + 80);
     } else if (match.phase === 'verdict' && match.verdict) {
       const key = match.verdict === 'time' ? 'time' : match.verdict === 'draw' ? 'draw' : match.verdict === 'win' ? 'win' : 'ko';
       const art = verdictArt(key);
       if (art) {
-        const s = Math.min(260 / art.height, 620 / art.width);
-        g.drawImage(art, cx - (art.width * s) / 2, cy - (art.height * s) / 2, art.width * s, art.height * s);
+        const s = Math.min(200 / art.height, 620 / art.width);
+        g.drawImage(art, cx - (art.width * s) / 2, cy - 35 - (art.height * s) / 2, art.width * s, art.height * s);
       } else {
         g.font = '900 120px system-ui, sans-serif';
         g.textBaseline = 'middle';
         g.fillStyle = match.verdict === 'ko' ? '#ff7a5c' : '#f2fff0';
         g.fillText(key.toUpperCase(), cx, cy);
       }
-      // Whose verdict it was.
+      // Whose verdict it was, and the cards.
       g.font = '700 40px system-ui, sans-serif';
       g.fillStyle = 'rgba(238, 250, 238, 0.8)';
       g.fillText(
-        match.verdict === 'win' ? 'THE GOOP IS DOWN' : match.verdict === 'ko' ? 'THE GOOP GOT YOU' : match.verdict === 'draw' ? 'NOBODY BUDGED' : match.playerHp >= match.creatureHp ? 'YOU TAKE IT ON POINTS' : 'IT TAKES IT ON POINTS',
+        match.verdict === 'win' ? 'THE GOOP IS DOWN' : match.verdict === 'ko' ? 'THE GOOP TAKES IT' : 'NOBODY TAKES IT',
         cx,
-        cy + 170,
+        cy + 95,
       );
+      g.font = '800 46px system-ui, sans-serif';
+      g.fillStyle = 'rgba(238, 250, 238, 0.92)';
+      g.fillText(`ROUNDS ${match.playerRounds} – ${match.creatureRounds}`, cx, cy + 145);
     } else if (match.phase === 'fighting') {
       g.font = '900 130px system-ui, sans-serif';
       g.textBaseline = 'middle';

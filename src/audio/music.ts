@@ -66,12 +66,15 @@ export function startLobbyMusic(): void {
   }
 }
 
-/** A bout begins: fade the lobby out fast, loop a random battle track. */
+/** A bout begins: fade the lobby out fast, loop a random battle track.
+ *  No-ops if a battle track is already rolling, so the score carries
+ *  straight through the rest periods of a multi-round contest. */
 export function startBattleMusic(): void {
   clearTimeout(handoffTimer);
   lobby?.pause();
   victory?.pause();
   if (isMusicMuted() || battleUrls.length === 0) return;
+  if (battle && !battle.paused) return;
   const url = battleUrls[Math.floor(Math.random() * battleUrls.length)];
   if (!battle) {
     battle = new Audio();

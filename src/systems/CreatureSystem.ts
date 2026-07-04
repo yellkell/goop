@@ -91,6 +91,22 @@ export class CreatureSystem extends createSystem({}) {
       case 'fighting':
         this.updateFight(delta);
         break;
+      case 'roundEnd':
+        // Rest period: if you dropped it, it lies there as a puddle until
+        // the next countdown; if it took the round, it saunters back to its
+        // corner looking pleased with itself.
+        if (match.lastRound === 'player') {
+          if (!this.koApplied) {
+            this.koApplied = true;
+            creature.setKo(true);
+          }
+        } else {
+          creature.setFormTarget(0);
+          creature.moveTo(_v.set(ARENA.spawn[0], 0, ARENA.spawn[2]));
+        }
+        this.mood = 'roam';
+        this.moodT = 0;
+        break;
       case 'verdict':
         if (match.verdict === 'win' && !this.koApplied) {
           this.koApplied = true;
