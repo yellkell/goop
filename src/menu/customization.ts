@@ -1,0 +1,178 @@
+/**
+ * Customisation state: which avatar/platform skin you wear, persisted in
+ * localStorage. `version` bumps on every change so systems (mirror, gloves,
+ * torso, platform) can cheaply notice and re-apply. `open` = the lobby
+ * customisation panel + avatar mirror are showing.
+ */
+
+import {
+  type AvatarSkin,
+  avatarSkin,
+  FREE_AVATARS,
+  FREE_PLATFORMS,
+  platformSkin,
+  resolveAvatarSkin,
+} from '../avatar/skins.js';
+
+function load(key: string, fallback: string): string {
+  try {
+    return localStorage.getItem(key) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function save(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* session-only */
+  }
+}
+
+function loadHue(): number {
+  const n = parseFloat(load('ff-skin-color', ''));
+  return Number.isFinite(n) ? n : -1;
+}
+
+function loadLight(): number {
+  const n = parseFloat(load('ff-skin-light', ''));
+  return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0.5;
+}
+
+/** Platform skins the player has unlocked: the free trio plus anything bought
+ *  in the shop ('ff-owned-platforms', a JSON id array). */
+function loadOwnedPlatforms(): Set<string> {
+  const owned = new Set(FREE_PLATFORMS);
+  try {
+    const raw = localStorage.getItem('ff-owned-platforms');
+    if (raw) for (const id of JSON.parse(raw) as string[]) owned.add(id);
+  } catch {
+    /* fresh wallet — just the free trio */
+  }
+  return owned;
+}
+
+const ownedPlatforms = loadOwnedPlatforms();
+
+/** Has the player unlocked this platform skin (free or purchased)? */
+export function platformOwned(id: string): boolean {
+  return ownedPlatforms.has(id);
+}
+
+/** Record a shop purchase: mark the platform owned and persist it. The coin
+ *  debit is the caller's job (see wallet.spendCoins). */
+export function ownPlatform(id: string): void {
+  if (ownedPlatforms.has(id)) return;
+  ownedPlatforms.add(id);
+  try {
+    localStorage.setItem(
+      'ff-owned-platforms',
+      JSON.stringify([...ownedPlatforms].filter((p) => !FREE_PLATFORMS.includes(p))),
+    );
+  } catch {
+    /* session-only ownership */
+  }
+}
+
+/** Avatar skins the player has unlocked: the free set plus shop buys
+ *  ('ff-owned-avatars', a JSON id array). */
+function loadOwnedAvatars(): Set<string> {
+  const owned = new Set(FREE_AVATARS);
+  try {
+    const raw = localStorage.getItem('ff-owned-avatars');
+    if (raw) for (const id of JSON.parse(raw) as string[]) owned.add(id);
+  } catch {
+    /* fresh wallet — just the free set */
+  }
+  return owned;
+}
+
+const ownedAvatars = loadOwnedAvatars();
+
+/** Has the player unlocked this avatar skin (free or purchased)? */
+export function avatarOwned(id: string): boolean {
+  return ownedAvatars.has(id);
+}
+
+/** Record an avatar purchase: mark it owned and persist it. The coin debit is
+ *  the caller's job (see wallet.spendCoins). */
+export function ownAvatar(id: string): void {
+  if (ownedAvatars.has(id)) return;
+  ownedAvatars.add(id);
+  try {
+    localStorage.setItem(
+      'ff-owned-avatars',
+      JSON.stringify([...ownedAvatars].filter((a) => !FREE_AVATARS.includes(a))),
+    );
+  } catch {
+    /* session-only ownership */
+  }
+}
+
+/** The saved equipped avatar, or the panther if the saved one isn't owned. */
+function loadEquippedAvatar(): string {
+  const id = avatarSkin(load('ff-skin-avatar', 'crimson')).id;
+  return ownedAvatars.has(id) ? id : 'crimson';
+}
+
+export const customization = {
+  avatar: loadEquippedAvatar(),
+  platform: platformSkin(load('ff-skin-platform', 'ember')).id,
+  /** Custom armour hue (0..1) from the colour picker, or -1 to keep the
+   *  avatar's own default palette. */
+  colorHue: loadHue(),
+  /** Custom armour lightness (0..1, 0.5 = neutral) — darkens/brightens the
+   *  recoloured suit. Ignored while colorHue is -1 (default palette). */
+  colorLight: loadLight(),
+  /** Bumped on every change — consumers re-apply when they see it move. */
+  version: 1,
+  /** The customisation panel (and the avatar mirror) is up in the lobby. */
+  open: false,
+  /** The SHOP face is up (a sub-modal of customisation); false = the LOCKER. */
+  shopOpen: false,
+  /** Which tab the shop / locker shows. 'colour' and 'arena' are locker-only. */
+  tab: 'avatars' as 'avatars' | 'platforms' | 'colour' | 'arena',
+};
+
+/** Set the custom armour hue (0..1), or -1 to revert to the skin's default. */
+export function setAvatarColor(hue: number): void {
+  const h = hue < 0 ? -1 : ((hue % 1) + 1) % 1;
+  if (h === customization.colorHue) return;
+  customization.colorHue = h;
+  save('ff-skin-color', String(h));
+  customization.version += 1;
+}
+
+/** Set the custom armour lightness (0..1, 0.5 = neutral). */
+export function setAvatarLight(light: number): void {
+  const l = Math.min(1, Math.max(0, light));
+  if (l === customization.colorLight) return;
+  customization.colorLight = l;
+  save('ff-skin-light', String(l));
+  customization.version += 1;
+}
+
+/** The fully-resolved skin the LOCAL player wears: chosen shape + custom colour. */
+export function myAvatarSkin(): AvatarSkin {
+  return resolveAvatarSkin(customization.avatar, customization.colorHue, customization.colorLight);
+}
+
+export function setAvatarSkin(id: string): void {
+  if (!avatarOwned(id)) return; // only equip skins you actually own
+  const skin = avatarSkin(id);
+  if (skin.id === customization.avatar) return;
+  customization.avatar = skin.id;
+  save('ff-skin-avatar', skin.id);
+  customization.version += 1;
+}
+
+export function setPlatformSkin(id: string): void {
+  // Only equip skins you actually own (free trio + shop unlocks).
+  if (!platformOwned(id)) return;
+  const skin = platformSkin(id);
+  if (skin.id === customization.platform) return;
+  customization.platform = skin.id;
+  save('ff-skin-platform', skin.id);
+  customization.version += 1;
+}

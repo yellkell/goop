@@ -1,0 +1,609 @@
+/**
+ * The FACTORY arena — an optional backdrop behind the two platforms, a sibling
+ * to the papercraft desert. A big, mostly-enclosed dilapidated works on the edge
+ * of the town of GASKET: cracked concrete underfoot (dropped a touch so the
+ * platforms stand proud), tall rusted corrugated walls — closed on three sides,
+ * with a broken-out window strip on the EAST wall through which the open desert
+ * bakes and a lone vulture wheels. A trussed roof with a few smashed panels
+ * lets in shafts of light. The shell sits OUTSIDE the arena cage so a thrown
+ * ball always bursts on the invisible cage before it can reach a wall.
+ *
+ * Built once under one Group; DesertSystem shows/hides it and paints the sky
+ * opaque so passthrough is replaced (same render-switch trick as the desert).
+ * The central space is kept clear of clutter so the bout has room.
+ */
+
+import {
+  AmbientLight,
+  BackSide,
+  BoxGeometry,
+  CanvasTexture,
+  Color,
+  CylinderGeometry,
+  DirectionalLight,
+  DoubleSide,
+  Group,
+  HemisphereLight,
+  Mesh,
+  MeshStandardMaterial,
+  Object3D,
+  PlaneGeometry,
+  PointLight,
+  RepeatWrapping,
+  ShaderMaterial,
+  SphereGeometry,
+  SRGBColorSpace,
+} from 'three';
+import { ARENA_BOUNDS, ARENA_GAP } from '../../config.js';
+import { CONFIG } from '../desert/config.js';
+import { buildMesas } from '../desert/rocks.js';
+import { makeVulture } from '../desert/birds.js';
+import { collapseStatic } from '../merge.js';
+
+export interface Factory {
+  root: Group;
+  update(delta: number, time: number): void;
+  skyColor: Color;
+}
+
+const FLOOR_Y = -0.18; // floor dropped just enough that the platforms stand proud
+const CENTRE_Z = -ARENA_GAP / 2; // midpoint between the two platforms
+// The shell sits a clear margin OUTSIDE the arena cage so balls die before a wall.
+const HALL = {
+  minX: -(ARENA_BOUNDS.halfWidth + 1.1),
+  maxX: ARENA_BOUNDS.halfWidth + 1.1,
+  minZ: ARENA_BOUNDS.zFront - 1.1,
+  maxZ: ARENA_BOUNDS.zBack + 1.1,
+  height: ARENA_BOUNDS.ceiling + 0.9,
+};
+
+let seed = 1337;
+const rnd = (): number => {
+  seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+  return seed / 0x7fffffff;
+};
+
+// --- procedural textures ----------------------------------------------------
+
+function concreteTexture(): CanvasTexture {
+  const S = 512;
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const ctx = c.getContext('2d')!;
+  ctx.fillStyle = '#56565a';
+  ctx.fillRect(0, 0, S, S);
+  for (let i = 0; i < 220; i++) {
+    const r = 6 + rnd() * 60;
+    ctx.fillStyle = `rgba(${20 + rnd() * 40 | 0},${20 + rnd() * 40 | 0},${22 + rnd() * 40 | 0},${0.04 + rnd() * 0.1})`;
+    ctx.beginPath();
+    ctx.arc(rnd() * S, rnd() * S, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.strokeStyle = 'rgba(20,20,24,0.45)';
+  ctx.lineWidth = 3;
+  for (let i = 1; i < 4; i++) {
+    ctx.beginPath(); ctx.moveTo((i / 4) * S, 0); ctx.lineTo((i / 4) * S, S); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, (i / 4) * S); ctx.lineTo(S, (i / 4) * S); ctx.stroke();
+  }
+  ctx.strokeStyle = 'rgba(12,12,14,0.5)';
+  for (let i = 0; i < 9; i++) {
+    ctx.lineWidth = 1 + rnd() * 1.5;
+    ctx.beginPath();
+    let x = rnd() * S, y = rnd() * S;
+    ctx.moveTo(x, y);
+    for (let s = 0; s < 5; s++) { x += (rnd() - 0.5) * 90; y += (rnd() - 0.5) * 90; ctx.lineTo(x, y); }
+    ctx.stroke();
+  }
+  const tex = new CanvasTexture(c);
+  tex.wrapS = tex.wrapT = RepeatWrapping;
+  tex.colorSpace = SRGBColorSpace;
+  return tex;
+}
+
+/** Vertical corrugated steel, rusted and streaked — the dilapidated cladding. */
+function corrugatedTexture(): CanvasTexture {
+  const W = 256, H = 256;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const ctx = c.getContext('2d')!;
+  for (let x = 0; x < W; x += 16) {
+    const g = ctx.createLinearGradient(x, 0, x + 16, 0);
+    g.addColorStop(0, '#3a3e44'); g.addColorStop(0.5, '#666b72'); g.addColorStop(1, '#3a3e44');
+    ctx.fillStyle = g;
+    ctx.fillRect(x, 0, 16, H);
+  }
+  for (let i = 0; i < 90; i++) {
+    const x = rnd() * W;
+    ctx.fillStyle = `rgba(${120 + rnd() * 70 | 0},${50 + rnd() * 40 | 0},${20 + rnd() * 20 | 0},${0.08 + rnd() * 0.22})`;
+    ctx.fillRect(x, rnd() * H, 2 + rnd() * 5, 20 + rnd() * 120);
+  }
+  const tex = new CanvasTexture(c);
+  tex.wrapS = tex.wrapT = RepeatWrapping;
+  tex.colorSpace = SRGBColorSpace;
+  return tex;
+}
+
+/** "GASKET" stencilled cleanly on a crate face — readable shipping-stencil type. */
+function gasketCrateTexture(): CanvasTexture {
+  const W = 256, H = 256;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const ctx = c.getContext('2d')!;
+  // planks
+  ctx.fillStyle = '#6b4a28';
+  ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = 'rgba(40,26,12,0.5)';
+  ctx.lineWidth = 3;
+  for (let i = 1; i < 4; i++) { ctx.beginPath(); ctx.moveTo(0, (i / 4) * H); ctx.lineTo(W, (i / 4) * H); ctx.stroke(); }
+  ctx.strokeRect(5, 5, W - 10, H - 10);
+  // clean black shipping stencil: GASKET big, MACHINERY smaller beneath it
+  ctx.fillStyle = '#16100a';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  let px = 56;
+  ctx.font = `900 ${px}px 'Arial Narrow', Impact, sans-serif`;
+  while (ctx.measureText('GASKET').width > W - 36 && px > 20) { px -= 2; ctx.font = `900 ${px}px 'Arial Narrow', Impact, sans-serif`; }
+  ctx.fillText('GASKET', W / 2, H * 0.44);
+  let mpx = Math.round(px * 0.46);
+  ctx.font = `800 ${mpx}px 'Arial Narrow', Impact, sans-serif`;
+  while (ctx.measureText('MACHINERY').width > W - 40 && mpx > 12) { mpx -= 1; ctx.font = `800 ${mpx}px 'Arial Narrow', Impact, sans-serif`; }
+  ctx.fillText('MACHINERY', W / 2, H * 0.62);
+  const tex = new CanvasTexture(c);
+  tex.colorSpace = SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
+}
+
+// --- materials --------------------------------------------------------------
+
+const steel = (color: number, rough = 0.6): MeshStandardMaterial =>
+  new MeshStandardMaterial({ color, metalness: 0.85, roughness: rough });
+
+function skyDome(): Mesh {
+  const mat = new ShaderMaterial({
+    side: BackSide,
+    depthWrite: false,
+    uniforms: {
+      top: { value: new Color(CONFIG.sky.top) },
+      horizon: { value: new Color(CONFIG.sky.horizon) },
+      bottom: { value: new Color(CONFIG.sky.bottom) },
+    },
+    vertexShader: /* glsl */ `varying vec3 vDir; void main(){ vDir=normalize(position); gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+    fragmentShader: /* glsl */ `
+      uniform vec3 top, horizon, bottom; varying vec3 vDir;
+      void main(){ float h=vDir.y; vec3 c = h>0.0 ? mix(horizon,top,smoothstep(0.0,0.45,h)) : mix(horizon,bottom,smoothstep(0.0,-0.35,h)); gl_FragColor=vec4(c,1.0); }`,
+  });
+  const dome = new Mesh(new SphereGeometry(800, 32, 16), mat);
+  dome.renderOrder = -1;
+  dome.frustumCulled = false;
+  return dome;
+}
+
+/** A solid corrugated wall, or (windowed) one with a broken-out window strip. */
+function wall(root: Group, mat: MeshStandardMaterial, len: number, cx: number, cz: number, ry: number, windowed: boolean): void {
+  const h = HALL.height;
+  if (!windowed) {
+    const m = new Mesh(new PlaneGeometry(len, h), mat);
+    m.position.set(cx, FLOOR_Y + h / 2, cz);
+    m.rotation.y = ry;
+    root.add(m);
+    return;
+  }
+  const sillH = 3.7; // window strip set high up the wall
+  const winH = 2.1;
+  const topH = h - sillH - winH;
+  const band = (bh: number, by: number): void => {
+    const m = new Mesh(new PlaneGeometry(len, bh), mat);
+    m.position.set(cx, FLOOR_Y + by + bh / 2, cz);
+    m.rotation.y = ry;
+    root.add(m);
+  };
+  band(sillH, 0);
+  band(topH, sillH + winH);
+  const panes = Math.max(4, Math.round(len / 2.6));
+  const pw = len / panes;
+  // Just the mullions — every pane is smashed clean out (no glass left in).
+  for (let i = 0; i <= panes; i++) {
+    const mull = new Mesh(new BoxGeometry(0.12, winH, 0.12), steel(0x2c2f34, 0.7));
+    const off = -len / 2 + i * pw;
+    mull.position.set(cx + Math.cos(ry) * off, FLOOR_Y + sillH + winH / 2, cz - Math.sin(ry) * off);
+    mull.rotation.y = ry;
+    root.add(mull);
+  }
+}
+
+function workLamp(root: Group, x: number, z: number): { pivot: Object3D; phase: number } {
+  const pivot = new Object3D();
+  pivot.position.set(x, HALL.height + FLOOR_Y, z);
+  const cordLen = 1.6;
+  const cord = new Mesh(new CylinderGeometry(0.015, 0.015, cordLen, 5), steel(0x111114, 0.8));
+  cord.position.y = -cordLen / 2;
+  pivot.add(cord);
+  const shade = new Mesh(new CylinderGeometry(0.2, 0.11, 0.22, 10, 1, true), steel(0x3a2c20, 0.7));
+  shade.position.y = -cordLen - 0.05;
+  pivot.add(shade);
+  const bulb = new Mesh(new SphereGeometry(0.07, 8, 8), new MeshStandardMaterial({ color: 0xffd28a, emissive: 0xffc070, emissiveIntensity: 1.7 }));
+  bulb.position.y = -cordLen - 0.13;
+  pivot.add(bulb);
+  const light = new PointLight(0xffcaa0, 12, 13, 1.7);
+  light.position.y = -cordLen - 0.13;
+  pivot.add(light);
+  root.add(pivot);
+  return { pivot, phase: rnd() * Math.PI * 2 };
+}
+
+/** A rectangular hole in the floor with a flight of steps descending into a lit
+ *  pit below — sells the idea the hall is an upper floor. */
+function buildStairwell(root: Group, hx0: number, hx1: number, hz0: number, hz1: number): void {
+  const PIT = 3.0;
+  const pitY = FLOOR_Y - PIT;
+  const cx = (hx0 + hx1) / 2;
+  const cz = (hz0 + hz1) / 2;
+  const wX = hx1 - hx0, wZ = hz1 - hz0;
+  const wallMat = new MeshStandardMaterial({ color: 0x44464b, roughness: 0.95, metalness: 0.05, side: DoubleSide });
+
+  // Shaft walls lining the pit (floor level down to the landing).
+  const shaftWall = (px: number, pz: number, len: number, ry: number): void => {
+    const m = new Mesh(new PlaneGeometry(len, PIT), wallMat);
+    m.position.set(px, FLOOR_Y - PIT / 2, pz);
+    m.rotation.y = ry;
+    root.add(m);
+  };
+  shaftWall(cx, hz0, wX, 0);
+  shaftWall(cx, hz1, wX, Math.PI);
+  shaftWall(hx0, cz, wZ, Math.PI / 2);
+  shaftWall(hx1, cz, wZ, -Math.PI / 2);
+
+  // Pit floor / landing at the bottom.
+  const land = new Mesh(new PlaneGeometry(wX, wZ), wallMat);
+  land.rotation.x = -Math.PI / 2;
+  land.position.set(cx, pitY, cz);
+  root.add(land);
+
+  // Staircase descending southward (+z): each tread sits one step lower.
+  const N = 9;
+  const stepH = PIT / N;
+  const stepD = wZ / N;
+  const stepMat = steel(0x52555b, 0.7);
+  for (let i = 1; i <= N; i++) {
+    const topY = FLOOR_Y - i * stepH;
+    const zBack = hz0 + i * stepD;
+    const h = topY - pitY;
+    if (h < 0.05) continue;
+    const block = new Mesh(new BoxGeometry(wX - 0.1, h, zBack - hz0), stepMat);
+    block.position.set(cx, (topY + pitY) / 2, (hz0 + zBack) / 2);
+    root.add(block);
+  }
+
+  // A warm bulb + light down in the pit so it reads as a lived-in floor, not a void.
+  const bulb = new Mesh(
+    new SphereGeometry(0.09, 8, 8),
+    new MeshStandardMaterial({ color: 0xffd2a0, emissive: 0xffb878, emissiveIntensity: 1.5 }),
+  );
+  bulb.position.set(cx, pitY + 1.6, hz1 - 0.3);
+  root.add(bulb);
+  const light = new PointLight(0xffb878, 6, 7, 2);
+  light.position.set(cx, pitY + 1.2, cz);
+  root.add(light);
+
+  // Safety railing on the two room-facing edges (north + west); the east/south
+  // edges hug the building walls.
+  const railMat = steel(0x3c3f45, 0.6);
+  const railing = (px: number, pz: number, len: number, ry: number): void => {
+    for (const ry2 of [1.02, 0.55]) {
+      const bar = new Mesh(new BoxGeometry(len, 0.05, 0.05), railMat);
+      bar.position.set(px, FLOOR_Y + ry2, pz);
+      bar.rotation.y = ry;
+      root.add(bar);
+    }
+    const n = Math.max(2, Math.round(len / 0.9));
+    for (let i = 0; i <= n; i++) {
+      const t = -len / 2 + (i / n) * len;
+      const post = new Mesh(new BoxGeometry(0.05, 1.05, 0.05), railMat);
+      post.position.set(px + Math.cos(ry) * t, FLOOR_Y + 0.52, pz - Math.sin(ry) * t);
+      root.add(post);
+    }
+  };
+  railing(cx, hz0, wX, 0); // north edge
+  railing(hx0, cz, wZ, Math.PI / 2); // west edge
+}
+
+export function buildFactory(): Factory {
+  seed = 1337;
+  const root = new Group();
+  root.name = 'factory-environment';
+  root.visible = false;
+
+  // Everything that never moves goes here and is merged at the end into a few
+  // big batches (one per material) — same look, far fewer draw calls. Lights,
+  // the swinging work lamps, the wheeling vulture and the (already-merged)
+  // mesas stay on `root` directly.
+  const statics = new Group();
+  statics.name = 'factory-static';
+
+  const skyColor = new Color(CONFIG.sky.horizon);
+  root.add(skyDome());
+
+  // Warm desert sun raking in through the east window + soft fill.
+  const sun = new DirectionalLight(new Color('#ffcf9a'), 1.35);
+  sun.position.set(26, 16, 6);
+  sun.target.position.set(0, 0, CENTRE_Z);
+  root.add(sun, sun.target);
+  root.add(new AmbientLight(new Color('#6b6470'), 0.62));
+  root.add(new HemisphereLight(new Color(CONFIG.ibl.sky), new Color('#3a2f28'), 0.6));
+
+  buildMesas(root); // the desert's own horizon mesas, seen through the window
+
+  // A STAIRWELL hole in the SE corner — the empty corner behind the player's
+  // right shoulder (player faces −z, so +x/+z is back-right). Both the desert
+  // sand AND the concrete floor are laid as a frame AROUND the hole so the pit
+  // below shows through it.
+  const HW = 2.7, HD = 2.7, HMARGIN = 0.9;
+  const hx1 = HALL.maxX - HMARGIN, hx0 = hx1 - HW;
+  const hz1 = HALL.maxZ - HMARGIN, hz0 = hz1 - HD;
+
+  const flatRect = (
+    mat: MeshStandardMaterial,
+    x0: number,
+    x1: number,
+    z0: number,
+    z1: number,
+    y: number,
+    into: Group = root,
+  ): void => {
+    if (x1 - x0 < 1e-3 || z1 - z0 < 1e-3) return;
+    const m = new Mesh(new PlaneGeometry(x1 - x0, z1 - z0), mat);
+    m.rotation.x = -Math.PI / 2;
+    m.position.set((x0 + x1) / 2, y, (z0 + z1) / 2);
+    into.add(m);
+  };
+
+  // Desert sand, framed around the hole (so it never covers the pit).
+  const sandMat = new MeshStandardMaterial({ color: new Color(CONFIG.palette.sandLight), roughness: 1 });
+  const sandY = FLOOR_Y - 0.02;
+  flatRect(sandMat, -350, 350, -350, hz0, sandY, statics);
+  flatRect(sandMat, -350, 350, hz1, 350, sandY, statics);
+  flatRect(sandMat, -350, hx0, hz0, hz1, sandY, statics);
+  flatRect(sandMat, hx1, 350, hz0, hz1, sandY, statics);
+
+  // Cracked concrete floor, framed around the hole. ONE shared texture +
+  // material across all four pieces — the size-proportional repeat is baked into
+  // each piece's UVs instead of cloning the texture per piece. That keeps the
+  // texel size even AND lets collapseStatic merge the four pieces into a single
+  // draw call + one texture (cloning per piece defeated both — a real perf cost).
+  const floorTex = concreteTexture();
+  floorTex.wrapS = floorTex.wrapT = RepeatWrapping;
+  const floorMat = new MeshStandardMaterial({ map: floorTex, roughness: 0.95, metalness: 0.05 });
+  const DENSITY = 0.46;
+  const floorPiece = (x0: number, x1: number, z0: number, z1: number): void => {
+    if (x1 - x0 < 1e-3 || z1 - z0 < 1e-3) return;
+    const geo = new PlaneGeometry(x1 - x0, z1 - z0);
+    // Bake the per-piece repeat into the UVs (PlaneGeometry UVs run 0..1).
+    const ru = (x1 - x0) * DENSITY;
+    const rv = (z1 - z0) * DENSITY;
+    const uv = geo.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * ru, uv.getY(i) * rv);
+    const m = new Mesh(geo, floorMat);
+    m.rotation.x = -Math.PI / 2;
+    m.position.set((x0 + x1) / 2, FLOOR_Y, (z0 + z1) / 2);
+    statics.add(m);
+  };
+  floorPiece(HALL.minX, HALL.maxX, HALL.minZ, hz0); // north band (full width)
+  floorPiece(HALL.minX, HALL.maxX, hz1, HALL.maxZ); // south band
+  floorPiece(HALL.minX, hx0, hz0, hz1); // west band beside the hole
+  floorPiece(hx1, HALL.maxX, hz0, hz1); // east band beside the hole
+
+  buildStairwell(root, hx0, hx1, hz0, hz1); // has its own pit light — leave unmerged
+
+  // The shell: EAST wall windowed (desert beyond), the other three closed.
+  const clad = new MeshStandardMaterial({ map: corrugatedTexture(), metalness: 0.7, roughness: 0.72, side: DoubleSide });
+  (clad.map as CanvasTexture).repeat.set(10, 4);
+  const w = HALL.maxX - HALL.minX;
+  const d = HALL.maxZ - HALL.minZ;
+  wall(statics, clad, w, (HALL.minX + HALL.maxX) / 2, HALL.minZ, 0, false); // far (north) — closed
+  wall(statics, clad, w, (HALL.minX + HALL.maxX) / 2, HALL.maxZ, Math.PI, false); // near — closed
+  wall(statics, clad, d, HALL.minX, (HALL.minZ + HALL.maxZ) / 2, Math.PI / 2, false); // west — closed
+  wall(statics, clad, d, HALL.maxX, (HALL.minZ + HALL.maxZ) / 2, -Math.PI / 2, true); // EAST — windowed
+
+  // Roof: trusses + corrugated panels with a few smashed-out skylights.
+  const beamMat = steel(0x33363c, 0.6);
+  const roofY = FLOOR_Y + HALL.height;
+  for (let z = HALL.minZ + 2; z <= HALL.maxZ - 2; z += 3.2) {
+    const chordTop = new Mesh(new BoxGeometry(w, 0.18, 0.18), beamMat);
+    chordTop.position.set(0, roofY - 0.12, z);
+    statics.add(chordTop);
+    const chordBot = new Mesh(new BoxGeometry(w, 0.12, 0.12), beamMat);
+    chordBot.position.set(0, roofY - 0.7, z);
+    statics.add(chordBot);
+    for (let x = -w / 2 + 1; x < w / 2; x += 2) {
+      const dia = new Mesh(new BoxGeometry(0.08, 0.72, 0.08), beamMat);
+      dia.position.set(x, roofY - 0.4, z);
+      dia.rotation.z = (x % 4 < 2 ? 1 : -1) * 0.6;
+      statics.add(dia);
+    }
+  }
+  const roofMat = new MeshStandardMaterial({ map: corrugatedTexture(), metalness: 0.6, roughness: 0.75, side: DoubleSide });
+  (roofMat.map as CanvasTexture).repeat.set(8, 8);
+  const panelsX = 7, panelsZ = 8;
+  for (let i = 0; i < panelsX; i++) {
+    for (let j = 0; j < panelsZ; j++) {
+      const px = HALL.minX + (i + 0.5) * (w / panelsX);
+      const pz = HALL.minZ + (j + 0.5) * (d / panelsZ);
+      const panel = new Mesh(new PlaneGeometry(w / panelsX + 0.05, d / panelsZ + 0.05), roofMat);
+      panel.rotation.x = Math.PI / 2;
+      panel.position.set(px, roofY, pz);
+      statics.add(panel);
+    }
+  }
+
+  // Perimeter columns along the long walls — well clear of the centre already
+  // (they hug x = ±halfWidth, far from the platforms at x≈0).
+  const colMat = steel(0x3c3f45, 0.55);
+  for (const cx of [HALL.minX + 0.5, HALL.maxX - 0.5]) {
+    for (let z = HALL.minZ + 2.5; z <= HALL.maxZ - 2.5; z += 5) {
+      const col = new Mesh(new BoxGeometry(0.4, HALL.height, 0.4), colMat);
+      col.position.set(cx, FLOOR_Y + HALL.height / 2, z);
+      statics.add(col);
+    }
+  }
+
+  const crateMat = new MeshStandardMaterial({ map: gasketCrateTexture(), roughness: 0.9 });
+
+  // CONVEYOR BELTS — idle lines threading the hall, one carrying a GASKET crate.
+  const frameMat = steel(0x4a4d53, 0.6);
+  const beltMat = new MeshStandardMaterial({ color: 0x1b1c1f, roughness: 0.85 });
+  const conveyor = (cx: number, cz: number, len: number, ry: number, withBox: boolean): void => {
+    const g = new Group();
+    g.position.set(cx, FLOOR_Y, cz);
+    g.rotation.y = ry;
+    const top = 0.95;
+    for (const s of [-1, 1]) {
+      const fr = new Mesh(new BoxGeometry(len, 0.13, 0.06), frameMat);
+      fr.position.set(0, top, s * 0.33);
+      g.add(fr);
+    }
+    const belt = new Mesh(new BoxGeometry(len - 0.24, 0.05, 0.58), beltMat);
+    belt.position.set(0, top + 0.04, 0);
+    g.add(belt);
+    for (const ex of [-len / 2 + 0.12, len / 2 - 0.12]) {
+      // Length 0.55 keeps the round end caps INSIDE the side frames (inner face
+      // at z≈0.30) so they don't sit coplanar with them and flicker.
+      const roll = new Mesh(new CylinderGeometry(0.12, 0.12, 0.55, 12), steel(0x6a6e75, 0.5));
+      roll.rotation.x = Math.PI / 2;
+      roll.position.set(ex, top, 0);
+      g.add(roll);
+    }
+    for (let lx = -len / 2 + 0.5; lx <= len / 2 - 0.4; lx += 1.7) {
+      for (const s of [-1, 1]) {
+        const leg = new Mesh(new BoxGeometry(0.08, top, 0.08), frameMat);
+        leg.position.set(lx, top / 2, s * 0.3);
+        g.add(leg);
+      }
+    }
+    if (withBox) {
+      const b = new Mesh(new BoxGeometry(0.52, 0.52, 0.52), crateMat);
+      b.position.set(len * 0.12, top + 0.04 + 0.28, 0);
+      g.add(b);
+    }
+    statics.add(g);
+  };
+  conveyor(-4.5, HALL.minZ + 3.2, 6, 0, true); // across the back, carrying a crate
+  conveyor(HALL.minX + 2.6, CENTRE_Z + 6.5, 6.5, Math.PI / 2, false); // down the west side
+
+  // A neat stack of GASKET crates + a couple of drums in the WEST far corner.
+  const crate = (x: number, y: number, z: number, sz: number): void => {
+    const box = new Mesh(new BoxGeometry(sz, sz, sz), crateMat);
+    box.position.set(x, FLOOR_Y + y + sz / 2, z);
+    box.rotation.y = (rnd() - 0.5) * 0.1;
+    statics.add(box);
+  };
+  const cbx = HALL.minX + 2.6;
+  crate(cbx, 0, HALL.minZ + 1.7, 0.8);
+  crate(cbx + 0.95, 0, HALL.minZ + 1.7, 0.8);
+  crate(cbx + 0.45, 0.8, HALL.minZ + 1.7, 0.8);
+  for (const [dx, dz, col] of [[cbx + 1.9, HALL.minZ + 1.5, 0x7a4a2a], [cbx + 2.5, HALL.minZ + 2.2, 0x355a78]] as const) {
+    const drum = new Mesh(new CylinderGeometry(0.3, 0.3, 0.9, 14), steel(col, 0.8));
+    drum.position.set(dx, FLOOR_Y + 0.45, dz);
+    statics.add(drum);
+  }
+
+  // RAISED WALKWAY along the FAR (north) wall — NOT the windowed east side — a
+  // catwalk on posts with a handrail and a ladder up, adding height to the hall.
+  const deckY = 3.6;
+  const wlMinX = HALL.minX + 2.5, wlMaxX = HALL.maxX - 2.5;
+  const wlLen = wlMaxX - wlMinX;
+  const wlMidX = (wlMinX + wlMaxX) / 2;
+  const wlZ = HALL.minZ + 1.4;
+  const grating = steel(0x44474d, 0.7);
+  const deck = new Mesh(new BoxGeometry(wlLen, 0.1, 1.3), grating);
+  deck.position.set(wlMidX, FLOOR_Y + deckY, wlZ);
+  statics.add(deck);
+  for (let x = wlMinX + 1; x <= wlMaxX - 1; x += 3) {
+    const post = new Mesh(new BoxGeometry(0.13, deckY, 0.13), grating);
+    post.position.set(x, FLOOR_Y + deckY / 2, wlZ + 0.5);
+    statics.add(post);
+  }
+  // front handrail: top rail, mid rail, balusters
+  const railZ = wlZ + 0.62;
+  for (const ry of [1.0, 0.5]) {
+    const rail = new Mesh(new BoxGeometry(wlLen, 0.06, 0.06), grating);
+    rail.position.set(wlMidX, FLOOR_Y + deckY + ry, railZ);
+    statics.add(rail);
+  }
+  for (let x = wlMinX; x <= wlMaxX; x += 1.3) {
+    const bal = new Mesh(new BoxGeometry(0.04, 1.0, 0.04), grating);
+    bal.position.set(x, FLOOR_Y + deckY + 0.5, railZ);
+    statics.add(bal);
+  }
+  // ladder up at the east end of the catwalk (still on the far wall)
+  const ladX = wlMaxX - 0.5;
+  for (const s of [-1, 1]) {
+    const sideRail = new Mesh(new BoxGeometry(0.05, deckY, 0.05), grating);
+    sideRail.position.set(ladX + s * 0.22, FLOOR_Y + deckY / 2, railZ + 0.25);
+    statics.add(sideRail);
+  }
+  for (let y = 0.3; y < deckY; y += 0.32) {
+    const rung = new Mesh(new BoxGeometry(0.48, 0.04, 0.04), grating);
+    rung.position.set(ladX, FLOOR_Y + y, railZ + 0.25);
+    statics.add(rung);
+  }
+
+  // Work lamps over the action + a couple deep in the hall.
+  const lamps = [
+    workLamp(root, 0, CENTRE_Z),
+    workLamp(root, -3.4, CENTRE_Z + 2.4),
+    workLamp(root, 3.4, CENTRE_Z - 1.6),
+    workLamp(root, 0, HALL.minZ + 4),
+  ];
+
+  // Bake all that static structure down to a few draw calls (one per material).
+  collapseStatic(statics);
+  root.add(statics);
+
+  // A lone vulture wheeling OUTSIDE the east window — caught now and then.
+  const bird = makeVulture(rnd);
+  root.add(bird.obj);
+  const dihedral = bird.wings[0].rotation.z;
+  const BIRD = { cx: HALL.maxX + 48, cz: CENTRE_Z, r: 12, y: FLOOR_Y + 16.5 };
+  const PERCH_Y = FLOOR_Y + 3; // where it eases down to as it slips out of view
+  // Soar → glide down → rest (hidden) → climb back, like the desert vultures.
+  const SOAR = 24, GLIDE = 4, REST = 9;
+  const CYCLE = SOAR + 2 * GLIDE + REST;
+  const smooth = (t: number): number => t * t * (3 - 2 * t);
+
+  return {
+    root,
+    skyColor,
+    update: (_delta, time) => {
+      for (const l of lamps) l.pivot.rotation.z = Math.sin(time * 0.6 + l.phase) * 0.04;
+
+      // Where in its soar/rest cycle is the bird? `climb` is 1 aloft, eases to 0
+      // as it glides down and shrinks to a speck, and the bird hides while it rests.
+      const t = ((time % CYCLE) + CYCLE) % CYCLE;
+      let climb: number;
+      if (t < SOAR) climb = 1;
+      else if (t < SOAR + GLIDE) climb = 1 - smooth((t - SOAR) / GLIDE);
+      else if (t < SOAR + GLIDE + REST) {
+        bird.obj.visible = false; // off resting, out of sight
+        return;
+      } else climb = smooth((t - SOAR - GLIDE - REST) / GLIDE);
+      bird.obj.visible = true;
+
+      // wheel the bird on a slow lazy loop, banking into the turn + trimming.
+      const ang = time * 0.16;
+      const bx = BIRD.cx + Math.cos(ang) * BIRD.r;
+      const bz = BIRD.cz + Math.sin(ang) * BIRD.r;
+      const aloftY = BIRD.y + Math.sin(time * 0.5) * 1.1;
+      const by = PERCH_Y + (aloftY - PERCH_Y) * climb; // dive toward the perch as it leaves
+      bird.obj.position.set(bx, by, bz);
+      bird.obj.scale.setScalar(0.05 + 0.95 * climb); // shrink to a speck at the hand-off
+      const a2 = ang + 0.06;
+      const dx = BIRD.cx + Math.cos(a2) * BIRD.r - bx;
+      const dz = BIRD.cz + Math.sin(a2) * BIRD.r - bz;
+      bird.obj.rotation.set(0, Math.atan2(dx, dz), 0.32);
+      const flex = Math.sin(time * 1.1) * 0.05;
+      bird.wings[0].rotation.z = dihedral + flex;
+      bird.wings[1].rotation.z = -(dihedral + flex);
+    },
+  };
+}
