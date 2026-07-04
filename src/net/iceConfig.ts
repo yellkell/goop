@@ -21,8 +21,8 @@
  *   METERED_API_KEY   — the "API Key" on that app's dashboard page.
  */
 
-const METERED_SUBDOMAIN = ''; // e.g. 'ironballs'
-const METERED_API_KEY = '';
+const METERED_SUBDOMAIN = 'firefight'; // firefight.metered.live
+const METERED_API_KEY = 'c515a1719a26b14df71020c53db644d3acaf';
 
 /** Google's public STUN — kept as the first entry even alongside TURN, since a
  *  direct P2P path (when one exists) is always cheaper than relaying. */
