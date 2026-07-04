@@ -1,5 +1,5 @@
 /**
- * Lobby music — the "Dune Train Convoy" track that rides under the main menu.
+ * Lobby music — the "Start Again" track that rides under the main menu.
  * It starts the moment you enter VR from the landing page (a user gesture, so
  * autoplay is allowed) and loops while you're in the LOBBY. It pauses the
  * instant you start a bout or aim training, and resumes when you land back in
@@ -12,7 +12,7 @@
  * three gates — entered VR, in the lobby, not muted — funnelled through sync().
  */
 
-import musicUrl from '../assets/music/dune-train-convoy.mp3?url';
+import musicUrl from '../assets/music/start-again.m4a?url';
 
 const MUTE_KEY = 'ibb-music-muted';
 const TARGET_VOLUME = 0.5;
