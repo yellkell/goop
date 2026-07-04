@@ -238,6 +238,11 @@ export function uiClick(): void {
   tone({ freq: 140, type: 'sine', dur: 0.04, gain: 0.07 });
 }
 
+/** UI: the laser landing on a button — the click's quieter echo. */
+export function uiHover(): void {
+  bubble(520, 0.03, 0, 0.04);
+}
+
 // --- the ring bell (inherited, sacred) --------------------------------------
 
 /** One strike of the ring bell — long metallic decay. */

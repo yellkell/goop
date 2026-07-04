@@ -28,7 +28,7 @@ import {
 import { squelch, wobble } from '../audio/sfx.js';
 import { PUNCH } from '../config.js';
 import { pulseHand } from '../input/haptics.js';
-import { getCreature, match, POKES_TO_START } from '../state.js';
+import { getCreature, match } from '../state.js';
 
 const HANDS = ['left', 'right'] as const;
 type Hand = (typeof HANDS)[number];
@@ -118,11 +118,6 @@ export class FistSystem extends createSystem({}) {
           const dmg = PUNCH.damage * (0.6 + res.strength) + (res.lump ? PUNCH.lumpBonus : 0);
           match.creatureHp = Math.max(0, match.creatureHp - dmg);
           match.boardDirty = true;
-        } else if (match.phase === 'lobby') {
-          if (match.lobbyPokes < POKES_TO_START) {
-            match.lobbyPokes++;
-            match.boardDirty = true;
-          }
         }
       } else if (speed < PUNCH.hitSpeed && d < 0.02) {
         // Leaning into it — continuous gentle shove.

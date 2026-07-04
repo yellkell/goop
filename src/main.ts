@@ -20,6 +20,7 @@ import { ensureAudio } from './audio/sfx.js';
 import { CreatureSystem } from './systems/CreatureSystem.js';
 import { FightSystem } from './systems/FightSystem.js';
 import { FistSystem } from './systems/FistSystem.js';
+import { MenuSystem } from './systems/MenuSystem.js';
 
 const container = document.getElementById('scene-container') as HTMLDivElement;
 const enterButton = document.getElementById('enter-vr') as HTMLButtonElement | null;
@@ -63,10 +64,12 @@ World.create(container, {
   world.scene.add(key);
 
   // Punches first (impulses land before the body integrates), then the
-  // creature itself, then the referee reading the aftermath.
+  // creature itself, then the referee reading the aftermath, then the
+  // lobby menu (lasers + FIGHT/round/music/difficulty).
   world.registerSystem(FistSystem);
   world.registerSystem(CreatureSystem);
   world.registerSystem(FightSystem);
+  world.registerSystem(MenuSystem);
 
   const xrSupported = (await navigator.xr?.isSessionSupported(SessionMode.ImmersiveAR).catch(() => false)) === true;
 

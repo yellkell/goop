@@ -22,7 +22,7 @@ import { announce, type Call } from '../audio/announcer.js';
 import { backToLobbyMusic, playVictoryThenLobby, startBattleMusic } from '../audio/music.js';
 import { matchEnd, roundBell, uiClick } from '../audio/sfx.js';
 import { ARENA, COMBAT } from '../config.js';
-import { match, POKES_TO_START, resetForBout } from '../state.js';
+import { match, resetForBout } from '../state.js';
 import { ScoreBoard } from '../ui/board.js';
 
 const BEATS: Call[] = ['3', '2', '1', 'fight'];
@@ -88,8 +88,9 @@ export class FightSystem extends createSystem({}) {
     switch (match.phase) {
       case 'lobby': {
         const aPressed = this.input.xr.gamepads.right?.getButtonDown(InputComponent.A_Button) ?? false;
-        if (match.lobbyPokes >= POKES_TO_START || aPressed) {
+        if (match.startRequested || aPressed) {
           if (aPressed) uiClick();
+          match.startRequested = false;
           resetForBout();
           match.phase = 'countdown';
           match.countdownT = 0;
@@ -135,7 +136,6 @@ export class FightSystem extends createSystem({}) {
         match.verdictT += delta;
         if (match.verdictT > VERDICT_SECONDS) {
           match.phase = 'lobby';
-          match.lobbyPokes = 0;
           match.boardDirty = true;
         }
         break;

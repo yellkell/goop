@@ -32,6 +32,7 @@ import {
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GelCreature } from '../creature/GelCreature.js';
 import { GooFx } from '../fx/splats.js';
+import { MenuPanel } from '../ui/menuPanel.js';
 
 declare global {
   interface Window {
@@ -127,6 +128,7 @@ addEventListener('resize', () => {
 const shot = new URLSearchParams(location.search).get('shot');
 let shotClock = 0;
 let shotPunched = false;
+let menuPanel: MenuPanel | null = null;
 
 function shotDirector(dt: number): boolean {
   shotClock += dt;
@@ -167,6 +169,19 @@ function shotDirector(dt: number): boolean {
       camera.position.set(1.2, 1.05, 1.9);
       controls.target.set(0, 0.25, 0);
       return shotClock > 2.5;
+    case 'menu': {
+      // The lobby menu panel floating next to the resting glob.
+      if (!menuPanel) {
+        menuPanel = new MenuPanel();
+        menuPanel.group.position.set(0.85, 1.45, 0.9);
+        menuPanel.group.rotation.y = Math.atan2(camera.position.x - 0.85, camera.position.z - 0.9);
+        scene.add(menuPanel.group);
+        menuPanel.setHovered('fight');
+      }
+      camera.position.set(1.1, 1.5, 2.6);
+      controls.target.set(0.35, 1.0, 0);
+      return shotClock > 2.2;
+    }
     default:
       return false;
   }

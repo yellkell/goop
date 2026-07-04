@@ -21,7 +21,7 @@ import { ARENA, BRAIN, COMBAT } from '../config.js';
 import { GelCreature, type Hand } from '../creature/GelCreature.js';
 import { GooFx } from '../fx/splats.js';
 import { pulseHand } from '../input/haptics.js';
-import { getCreature, match, setCreature } from '../state.js';
+import { currentDifficulty, getCreature, match, setCreature } from '../state.js';
 
 type Mood = 'wander' | 'roam' | 'rising' | 'combo' | 'sinking' | 'staggered';
 
@@ -150,6 +150,8 @@ export class CreatureSystem extends createSystem({}) {
 
   private updateFight(_delta: number): void {
     const c = this.creature;
+    const diff = currentDifficulty();
+    c.tempoScale = diff.tempoScale;
 
     // Stagger: hurt it hard while it's committed and it collapses early.
     if ((this.mood === 'rising' || this.mood === 'combo') && this.hpAtFormUp - match.creatureHp >= BRAIN.staggerDamage) {
@@ -165,7 +167,7 @@ export class CreatureSystem extends createSystem({}) {
       case 'roam':
         c.setFormTarget(0);
         c.moveTo(this.engagePoint(_v));
-        if (this.moodT > this.moodDuration) {
+        if (this.moodT > this.moodDuration * diff.roamScale) {
           this.setMood('rising');
           this.hpAtFormUp = match.creatureHp;
           c.setFormTarget(1);
@@ -175,7 +177,7 @@ export class CreatureSystem extends createSystem({}) {
       case 'rising':
         c.moveTo(this.engagePoint(_v));
         if (c.formValue > 0.96) {
-          this.punchesLeft = BRAIN.comboMin + Math.floor(Math.random() * (BRAIN.comboMax - BRAIN.comboMin + 1));
+          this.punchesLeft = BRAIN.comboMin + Math.floor(Math.random() * (diff.comboMax - BRAIN.comboMin + 1));
           this.setMood('combo');
         }
         break;
@@ -213,7 +215,7 @@ export class CreatureSystem extends createSystem({}) {
   private resolveCreaturePunch(fistWorld: Vector3): void {
     this.playerHead(_v);
     if (fistWorld.distanceTo(_v) < 0.38 && match.phase === 'fighting') {
-      match.playerHp = Math.max(0, match.playerHp - COMBAT.creaturePunchDamage);
+      match.playerHp = Math.max(0, match.playerHp - COMBAT.creaturePunchDamage * currentDifficulty().damageScale);
       match.playerFlash = 1;
       match.boardDirty = true;
       gooSlam();

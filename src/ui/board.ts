@@ -16,7 +16,7 @@ import {
   Vector3,
 } from 'three';
 import { COMBAT, GAME_TITLE } from '../config.js';
-import { match, POKES_TO_START } from '../state.js';
+import { currentDifficulty, match, settings } from '../state.js';
 import { countdownArt } from './countdownArt.js';
 import { verdictArt } from './verdictArt.js';
 
@@ -164,15 +164,14 @@ export class ScoreBoard {
       g.fillStyle = match.timeLeft < 10 ? '#ff7a5c' : 'rgba(238, 250, 238, 0.9)';
       g.fillText(String(Math.max(0, Math.ceil(match.timeLeft))), cx, cy);
     } else {
-      // Lobby prompt.
-      const left = Math.max(0, POKES_TO_START - match.lobbyPokes);
+      // Lobby prompt: the menu panel runs the show, this just sets the mood.
       g.font = '800 56px system-ui, sans-serif';
       g.textBaseline = 'middle';
       g.fillStyle = 'rgba(238, 250, 238, 0.92)';
-      g.fillText(left > 0 ? `PUNCH THE GOOP ${'●'.repeat(left)}` : 'HERE IT COMES…', cx, cy - 30);
+      g.fillText('WARM UP ON THE GOOP', cx, cy - 30);
       g.font = '600 36px system-ui, sans-serif';
       g.fillStyle = 'rgba(238, 250, 238, 0.55)';
-      g.fillText(left > 0 ? `${left} more to start the bout` : '', cx, cy + 45);
+      g.fillText(`${settings.roundSeconds}s · ${currentDifficulty().name} · start from the menu`, cx, cy + 45);
     }
   }
 }

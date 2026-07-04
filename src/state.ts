@@ -18,8 +18,8 @@ export const match = {
   timeLeft: COMBAT.roundSeconds,
   /** Seconds since the countdown began. */
   countdownT: 0,
-  /** Lobby warm-up punches landed (N of POKES_TO_START starts the bout). */
-  lobbyPokes: 0,
+  /** The lobby menu's FIGHT button rang; FightSystem consumes this. */
+  startRequested: false,
   verdict: '' as Verdict,
   verdictT: 0,
   /** 1 when the creature just clobbered you; FightSystem fades the vignette. */
@@ -28,12 +28,41 @@ export const match = {
   boardDirty: true,
 };
 
-export const POKES_TO_START = 3;
+/** One difficulty notch: how the creature paces and how hard it hits. */
+export interface Difficulty {
+  name: string;
+  /** Scales roam time between form-ups (smaller = it attacks more often). */
+  roamScale: number;
+  /** Scales the telegraph + recovery (smaller = tighter dodge windows). */
+  tempoScale: number;
+  /** Scales its punch damage. */
+  damageScale: number;
+  comboMax: number;
+}
+
+export const DIFFICULTIES: Difficulty[] = [
+  { name: 'CHILL', roamScale: 1.45, tempoScale: 1.35, damageScale: 0.6, comboMax: 2 },
+  { name: 'SCRAP', roamScale: 1.0, tempoScale: 1.0, damageScale: 1.0, comboMax: 3 },
+  { name: 'RUMBLE', roamScale: 0.65, tempoScale: 0.75, damageScale: 1.5, comboMax: 4 },
+];
+
+export const ROUND_CHOICES = [99, 60, 30];
+
+/** Pre-bout options, set from the lobby menu panel. */
+export const settings = {
+  roundSeconds: ROUND_CHOICES[0],
+  /** Index into DIFFICULTIES. */
+  difficulty: 1,
+};
+
+export function currentDifficulty(): Difficulty {
+  return DIFFICULTIES[settings.difficulty];
+}
 
 export function resetForBout(): void {
   match.creatureHp = COMBAT.creatureHealth;
   match.playerHp = COMBAT.playerHealth;
-  match.timeLeft = COMBAT.roundSeconds;
+  match.timeLeft = settings.roundSeconds;
   match.verdict = '';
   match.verdictT = 0;
   match.playerFlash = 0;

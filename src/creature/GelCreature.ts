@@ -92,6 +92,9 @@ export class GelCreature {
   /** Telegraph glow 0..1 (drives shader flash + eye colour). */
   private telegraph = 0;
 
+  /** Difficulty tempo: scales the telegraph + recovery (1 = SCRAP). */
+  tempoScale = 1;
+
   private punch: ActivePunch | null = null;
 
   private rootTarget = new Vector3();
@@ -246,7 +249,7 @@ export class GelCreature {
       target.set(shoulder[0] + _v.x, shoulder[1] + _v.y, shoulder[2] + _v.z);
     }
     this.punch = { hand, t: 0, target, apexFired: false, onApex, onDone };
-    sfx.gooCharge(BRAIN.telegraph);
+    sfx.gooCharge(BRAIN.telegraph * this.tempoScale);
     return true;
   }
 
@@ -373,7 +376,11 @@ export class GelCreature {
     }
 
     p.t += dt;
-    const { telegraph: T, strikeTime: S, recoverTime: R } = BRAIN;
+    // Difficulty stretches/squeezes the readable parts; the strike itself
+    // stays snappy at every level (a slow punch never looks like a punch).
+    const T = BRAIN.telegraph * this.tempoScale;
+    const S = BRAIN.strikeTime;
+    const R = BRAIN.recoverTime * this.tempoScale;
     const fistI = p.hand === 'left' ? A.FIST_L : A.FIST_R;
     const elbowI = p.hand === 'left' ? A.ELBOW_L : A.ELBOW_R;
     const shoulderI = p.hand === 'left' ? A.SHOULDER_L : A.SHOULDER_R;
