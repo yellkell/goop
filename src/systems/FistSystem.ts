@@ -21,12 +21,13 @@ import {
   Group,
   Mesh,
   MeshStandardMaterial,
+  Quaternion,
   SphereGeometry,
   TorusGeometry,
   Vector3,
 } from 'three';
 import { squelch, wobble } from '../audio/sfx.js';
-import { PUNCH } from '../config.js';
+import { EXHAUST, PUNCH } from '../config.js';
 import { pulseHand } from '../input/haptics.js';
 import { getCreature, match } from '../state.js';
 
@@ -35,29 +36,48 @@ type Hand = (typeof HANDS)[number];
 
 const _pos = new Vector3();
 const _dir = new Vector3();
+const _gripQ = new Quaternion();
+const _rayQ = new Quaternion();
 
-function buildFist(): Group {
+/**
+ * A proper compact boxing glove, built along its punch axis: knuckles at
+ * -Z, cuff wrapping the wrist at +Z. Aimed down the controller's POINTING
+ * ray each frame (not the tilted grip pose — that left the old fists
+ * skew-whiff against the forearm).
+ */
+function buildFist(hand: 'left' | 'right'): Group {
   const g = new Group();
-  const skin = new MeshStandardMaterial({ color: 0x2b2f2c, roughness: 0.55, metalness: 0.1 });
-  const fist = new Mesh(new SphereGeometry(0.075, 20, 16), skin);
-  fist.scale.set(1.1, 0.92, 1.25);
-  g.add(fist);
-  // Knuckle ridge.
-  const ridge = new Mesh(new SphereGeometry(0.05, 12, 10), skin);
-  ridge.position.set(0, 0.035, -0.045);
-  ridge.scale.set(1.5, 0.7, 0.9);
-  g.add(ridge);
-  // Wrist wrap with a slime-green band — the one splash of team colour.
-  const wrist = new Mesh(new CylinderGeometry(0.045, 0.052, 0.07, 16), skin);
-  wrist.rotation.x = Math.PI / 2.6;
-  wrist.position.set(0, -0.01, 0.09);
-  g.add(wrist);
-  const band = new Mesh(
-    new TorusGeometry(0.049, 0.008, 10, 20),
-    new MeshStandardMaterial({ color: 0x39d353, roughness: 0.35, emissive: 0x1d7a2f, emissiveIntensity: 0.7 }),
-  );
-  band.rotation.x = Math.PI / 2.6 + Math.PI / 2;
-  band.position.copy(wrist.position);
+  const leather = new MeshStandardMaterial({ color: 0x1c3a24, roughness: 0.42, metalness: 0.05 });
+  const trim = new MeshStandardMaterial({
+    color: 0x39d353,
+    roughness: 0.35,
+    emissive: 0x1d7a2f,
+    emissiveIntensity: 0.6,
+  });
+
+  // Main mitt — rounded, slightly taller than wide, knuckles forward.
+  const mitt = new Mesh(new SphereGeometry(0.062, 20, 16), leather);
+  mitt.scale.set(1.05, 1.0, 1.28);
+  mitt.position.set(0, 0, -0.015);
+  g.add(mitt);
+  // Knuckle roll across the top front.
+  const roll = new Mesh(new SphereGeometry(0.045, 14, 10), leather);
+  roll.scale.set(1.35, 0.75, 0.8);
+  roll.position.set(0, 0.028, -0.06);
+  g.add(roll);
+  // Thumb, tucked on the inside.
+  const thumb = new Mesh(new SphereGeometry(0.03, 12, 8), leather);
+  thumb.scale.set(0.9, 0.8, 1.3);
+  thumb.position.set(hand === 'left' ? 0.055 : -0.055, -0.012, -0.02);
+  thumb.rotation.y = hand === 'left' ? 0.5 : -0.5;
+  g.add(thumb);
+  // Cuff at the wrist with the team-green lace band.
+  const cuff = new Mesh(new CylinderGeometry(0.048, 0.054, 0.06, 16), leather);
+  cuff.rotation.x = Math.PI / 2;
+  cuff.position.set(0, -0.004, 0.075);
+  g.add(cuff);
+  const band = new Mesh(new TorusGeometry(0.052, 0.007, 10, 20), trim);
+  band.position.set(0, -0.004, 0.104);
   g.add(band);
   return g;
 }
@@ -79,10 +99,20 @@ export class FistSystem extends createSystem({}) {
 
       let fist = this.fists[hand];
       if (!fist) {
-        fist = buildFist();
+        fist = buildFist(hand);
         fist.name = `goop-fist-${hand}`;
+        fist.position.set(0, -0.015, 0.02); // sit ON the fist, not the palm
         grip.add(fist);
         this.fists[hand] = fist;
+      }
+
+      // Knuckles down the POINTING ray: cancel the grip's natural tilt so
+      // the glove lines up with the forearm (FIRE FIGHT's glove trick).
+      const ray = this.world.playerSpaceEntities.raySpaces[hand]?.object3D;
+      if (ray) {
+        grip.getWorldQuaternion(_gripQ);
+        ray.getWorldQuaternion(_rayQ);
+        fist.quaternion.copy(_gripQ).invert().multiply(_rayQ);
       }
 
       fist.getWorldPosition(_pos);
@@ -115,7 +145,9 @@ export class FistSystem extends createSystem({}) {
         pulseHand(this.world.session, hand, 0.35 + 0.65 * res.strength, 55 + 90 * res.strength);
 
         if (match.phase === 'fighting') {
-          const dmg = PUNCH.damage * (0.6 + res.strength) + (res.lump ? PUNCH.lumpBonus : 0);
+          let dmg = PUNCH.damage * (0.6 + res.strength) + (res.lump ? PUNCH.lumpBonus : 0);
+          // It's down and it's a puddle — finish it.
+          if (creature.vulnerable) dmg *= EXHAUST.vulnerability;
           match.creatureHp = Math.max(0, match.creatureHp - dmg);
           match.boardDirty = true;
         }

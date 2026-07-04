@@ -106,6 +106,8 @@ export class GelCreature {
 
   /** Difficulty tempo: scales the telegraph + recovery (1 = SCRAP). */
   tempoScale = 1;
+  /** True while it's an exhausted puddle — hits do double (see EXHAUST). */
+  vulnerable = false;
 
   private attack: ActiveAttack | null = null;
   /** Extra body yaw layered over face-tracking — the spinning backfist. */
@@ -486,6 +488,14 @@ export class GelCreature {
           out.z = bez(base[2] + 0.02, a.target.z - 0.12, a.target.z, e);
           break;
         }
+        case 'overhand': {
+          // The big looping right: high and back, over the top, crashing
+          // DOWN onto the head at the end of the arc.
+          out.x = bez(base[0] + side * 0.12, (base[0] + a.target.x) / 2 + side * 0.15, a.target.x, e);
+          out.y = bez(base[1] + 0.48, Math.max(base[1] + 0.62, a.target.y + 0.5), a.target.y - 0.04, e);
+          out.z = bez(base[2] - 0.28, (base[2] + a.target.z) / 2, a.target.z, e);
+          break;
+        }
         case 'backfist': {
           // Arm held rigid at extension; the BODY's spin delivers it.
           const ext = Math.min(Math.max(hd, 0.55), 1.0);
@@ -544,6 +554,16 @@ export class GelCreature {
           fz = 0.02 * k;
           swell = 1 + 0.4 * k;
           put(elbowI, 0, -0.3 * k, 0);
+          break;
+        case 'overhand':
+          // Fist climbs high behind the shoulder; the body rears back.
+          fx = side * 0.12 * k;
+          fy = 0.48 * k;
+          fz = -0.28 * k;
+          swell = 1 + 0.45 * k;
+          put(elbowI, side * 0.1 * k, 0.3 * k, -0.18 * k);
+          put(A.CHEST_L, 0, 0.03 * k, -0.07 * k);
+          put(A.CHEST_R, 0, 0.03 * k, -0.07 * k);
           break;
         case 'backfist':
           // Coil the whole body the wrong way — the unmistakable wind-up.

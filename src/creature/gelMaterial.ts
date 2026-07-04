@@ -181,10 +181,15 @@ const FRAG = /* glsl */ `
       if (i >= uSteps) break;
       p = ro + rd * t;
       d = field(p);
-      if (d < max(0.0016, t * 0.0024)) { hit = true; break; }
+      if (d < max(0.0016, t * 0.0035)) { hit = true; break; }
       t += d * 0.95;
       if (t > tEnd) break;
     }
+    // Step-budget mercy: a ray that spent its steps GRAZING the surface
+    // (thin necks under an extended fist, clefts in a crouched body) is on
+    // the gel for all visual purposes — shading it kills the see-through
+    // holes that a hard discard punches through thin features.
+    if (!hit && d < 0.045 && t <= tEnd) hit = true;
     if (!hit) discard;
 
     vec3 n;

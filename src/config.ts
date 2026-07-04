@@ -17,6 +17,8 @@ export const ARENA = {
   roamRadius: 1.1,
   /** It tries to keep about this distance from your head while brawling. */
   engageDistance: 0.95,
+  /** The wall board: the whole HUD, mounted behind the creature's corner. */
+  wall: [0, 1.8, -3.3] as const,
 };
 
 /** The creature's body plan. */
@@ -59,7 +61,9 @@ export const PUNCH = {
 /** The bout. */
 export const COMBAT = {
   playerHealth: 100,
-  creatureHealth: 100,
+  /** It's a tank — wearing it down is the fight; the finisher is landing
+   *  on it once it's exhausted (see EXHAUST). */
+  creatureHealth: 300,
   /** The creature's straight does this much when it lands on you. */
   creaturePunchDamage: 9,
   /** Round length before it goes to the cards (TIME verdict). */
@@ -73,7 +77,7 @@ export const COMBAT = {
  * window (scaled by difficulty tempo); strike time is fixed so a punch
  * always looks like a punch. Damage is before the difficulty multiplier.
  */
-export type AttackName = 'jab' | 'cross' | 'hook' | 'uppercut' | 'backfist' | 'roundhouse';
+export type AttackName = 'jab' | 'cross' | 'hook' | 'uppercut' | 'overhand' | 'backfist' | 'roundhouse';
 
 export interface AttackSpec {
   telegraph: number;
@@ -89,6 +93,7 @@ export const ATTACKS: Record<AttackName, AttackSpec> = {
   cross: { telegraph: 0.62, strike: 0.17, recover: 0.55, damage: 9, hitRadius: 0.45 },
   hook: { telegraph: 0.55, strike: 0.2, recover: 0.5, damage: 11, hitRadius: 0.45 },
   uppercut: { telegraph: 0.6, strike: 0.18, recover: 0.55, damage: 12, hitRadius: 0.45 },
+  overhand: { telegraph: 0.72, strike: 0.22, recover: 0.6, damage: 13, hitRadius: 0.48 },
   backfist: { telegraph: 0.75, strike: 0.34, recover: 0.6, damage: 14, hitRadius: 0.5 },
   roundhouse: { telegraph: 0.7, strike: 0.26, recover: 0.65, damage: 13, hitRadius: 0.5 },
 };
@@ -106,8 +111,22 @@ export const BRAIN = {
   /** The strike itself: fist launch to full extension. */
   strikeTime: 0.17,
   recoverTime: 0.55,
-  /** Accumulated damage inside one form-up that staggers it back to glob. */
-  staggerDamage: 14,
+  /** Accumulated damage inside one combo that staggers it (wobble pause). */
+  staggerDamage: 30,
+};
+
+/**
+ * The finisher window. It fights on its feet the whole round; only when it
+ * is REALLY hurt does it lose its shape — collapsing into an exhausted glob
+ * that takes double damage. Dive on it.
+ */
+export const EXHAUST = {
+  /** HP fraction that triggers the collapse (once per round). */
+  threshold: 0.3,
+  /** Seconds it lies there vulnerable before pulling itself together. */
+  duration: 6,
+  /** Damage multiplier while it's down. */
+  vulnerability: 2,
 };
 
 /** Gel look. Colours are linear-ish hex fed straight into the shader. */
@@ -121,7 +140,7 @@ export const GEL_LOOK = {
   /** Eye flash colour during a punch telegraph. */
   telegraphColor: 0xffb03a,
   /** Raymarch step cap (the single biggest perf knob on Quest). */
-  maxSteps: 30,
+  maxSteps: 26,
   /** Surface wobble amplitude at rest / when agitated. */
   wobble: 0.010,
   wobbleAgitated: 0.028,

@@ -43,8 +43,9 @@ export const ANCHOR_COUNT = 20;
 export type Pose = ReadonlyArray<readonly [number, number, number, number]>;
 
 /**
- * BOXER — upright guard stance. Arms up, fists floating in front of the
- * chest, lower body flowing into a wide base mound.
+ * BOXER — upright guard stance on PROPER LEGS: two columns of gel down to
+ * splayed feet in a southpaw-ish stance (lead foot forward). No more
+ * puddle-skirt pedestal — the glob look is reserved for when it's hurt.
  */
 export const BOXER_POSE: Pose = [
   [0.0, 1.6, 0.02, 0.155], // HEAD
@@ -52,21 +53,21 @@ export const BOXER_POSE: Pose = [
   [-0.13, 1.27, 0.02, 0.175], // CHEST_L
   [0.13, 1.27, 0.02, 0.175], // CHEST_R
   [0.0, 1.02, 0.03, 0.215], // BELLY
-  [0.0, 0.78, 0.0, 0.185], // PELVIS
+  [0.0, 0.88, 0.0, 0.185], // PELVIS
   [-0.27, 1.37, 0.02, 0.125], // SHOULDER_L
   [0.27, 1.37, 0.02, 0.125], // SHOULDER_R
   [-0.34, 1.15, 0.18, 0.105], // ELBOW_L
   [0.34, 1.15, 0.18, 0.105], // ELBOW_R
   [-0.22, 1.31, 0.38, 0.125], // FIST_L — guard, lead hand a touch higher
   [0.24, 1.23, 0.34, 0.125], // FIST_R
-  [-0.14, 0.6, 0.0, 0.15], // HIP_L
-  [0.14, 0.6, 0.0, 0.15], // HIP_R
-  [-0.17, 0.34, 0.02, 0.14], // KNEE_L
-  [0.17, 0.34, 0.02, 0.14], // KNEE_R
-  [-0.23, 0.14, 0.0, 0.17], // BASE_L
-  [0.23, 0.14, 0.0, 0.17], // BASE_R
-  [0.0, 0.12, 0.21, 0.19], // BASE_F
-  [0.0, 0.12, -0.18, 0.19], // BASE_B
+  [-0.15, 0.8, 0.0, 0.15], // HIP_L
+  [0.15, 0.8, 0.0, 0.15], // HIP_R
+  [-0.16, 0.45, 0.05, 0.135], // KNEE_L — lead leg slightly forward
+  [0.16, 0.44, -0.02, 0.135], // KNEE_R
+  [-0.18, 0.13, 0.1, 0.145], // BASE_L — lead foot
+  [0.18, 0.12, -0.06, 0.145], // BASE_R — rear foot
+  [-0.14, 0.11, 0.26, 0.125], // BASE_F — lead toes, planted forward
+  [0.2, 0.11, -0.2, 0.125], // BASE_B — rear heel, dug in behind
 ];
 
 /**

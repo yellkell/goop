@@ -17,13 +17,13 @@
 
 import { createSystem, Vector3 } from '@iwsdk/core';
 import { gooSlam, gooWhiff } from '../audio/sfx.js';
-import { ARENA, ATTACKS, BRAIN, COMBAT, type AttackName } from '../config.js';
+import { ARENA, ATTACKS, BRAIN, COMBAT, EXHAUST, type AttackName } from '../config.js';
 import { GelCreature, type Hand } from '../creature/GelCreature.js';
 import { GooFx } from '../fx/splats.js';
 import { pulseHand } from '../input/haptics.js';
 import { currentDifficulty, getCreature, match, setCreature, settings } from '../state.js';
 
-type Mood = 'wander' | 'roam' | 'rising' | 'combo' | 'sinking' | 'staggered';
+type Mood = 'wander' | 'fight' | 'staggered' | 'exhausted';
 
 const _head = new Vector3();
 const _v = new Vector3();
@@ -44,6 +44,9 @@ const COMBOS: AttackName[][] = [
   ['jab', 'uppercut'],
   ['hook', 'uppercut'],
   ['jab', 'jab', 'uppercut'],
+  ['overhand'],
+  ['jab', 'overhand'],
+  ['jab', 'jab', 'overhand'],
   ['backfist'],
   ['jab', 'backfist'],
   ['jab', 'cross', 'backfist'],
@@ -55,8 +58,8 @@ const COMBOS: AttackName[][] = [
 
 const TIER_ARSENAL: AttackName[][] = [
   ['jab', 'cross'], // CHILL
-  ['jab', 'cross', 'hook', 'uppercut'], // SCRAP
-  ['jab', 'cross', 'hook', 'uppercut', 'backfist', 'roundhouse'], // RUMBLE
+  ['jab', 'cross', 'hook', 'uppercut', 'overhand'], // SCRAP
+  ['jab', 'cross', 'hook', 'uppercut', 'overhand', 'backfist', 'roundhouse'], // RUMBLE
 ];
 
 export class CreatureSystem extends createSystem({}) {
@@ -68,9 +71,17 @@ export class CreatureSystem extends createSystem({}) {
   private moodDuration = 3;
   private comboQueue: AttackName[] = [];
   private nextHand: Hand = 'left';
-  private hpAtFormUp = COMBAT.creatureHealth;
+  /** HP when the current combo started — the stagger reference. */
+  private hpAtCombo = COMBAT.creatureHealth;
   private wanderTarget = new Vector3(ARENA.spawn[0], 0, ARENA.spawn[2]);
   private koApplied = false;
+  /** Footwork: current step offset along the engagement line + its clock. */
+  private stepOffset = 0;
+  private stepTimer = 0;
+  /** Seconds until it commits to the next combination. */
+  private comboRest = 1.2;
+  /** The exhausted collapse fires once per round. */
+  private exhaustUsed = false;
 
   init(): void {
     this.fx = new GooFx();
@@ -110,14 +121,17 @@ export class CreatureSystem extends createSystem({}) {
         this.updateLobby(delta);
         break;
       case 'countdown':
-        // Back to the mark, slumped, watching you.
+        // Back to the mark, already pulling itself up onto its feet.
         creature.setKo(false);
-        creature.setFormTarget(0);
+        creature.setFormTarget(1);
+        creature.vulnerable = false;
         creature.moveTo(_v.set(ARENA.spawn[0], 0, ARENA.spawn[2]));
-        this.mood = 'roam';
+        this.mood = 'fight';
         this.moodT = 0;
-        this.moodDuration = 0.5;
+        this.comboRest = 1.4;
+        this.comboQueue = [];
         this.koApplied = false;
+        this.exhaustUsed = false;
         break;
       case 'fighting':
         this.updateFight(delta);
@@ -126,6 +140,7 @@ export class CreatureSystem extends createSystem({}) {
         // Rest period: if you dropped it, it lies there as a puddle until
         // the next countdown; if it took the round, it saunters back to its
         // corner looking pleased with itself.
+        creature.vulnerable = false;
         if (match.lastRound === 'player') {
           if (!this.koApplied) {
             this.koApplied = true;
@@ -135,7 +150,7 @@ export class CreatureSystem extends createSystem({}) {
           creature.setFormTarget(0);
           creature.moveTo(_v.set(ARENA.spawn[0], 0, ARENA.spawn[2]));
         }
-        this.mood = 'roam';
+        this.mood = 'fight';
         this.moodT = 0;
         break;
       case 'verdict':
@@ -184,74 +199,102 @@ export class CreatureSystem extends createSystem({}) {
 
   // ---------------------------------------------------------------- fight
 
+  /** Where to stand: engage distance from your head, plus the current
+   *  footwork step in or out along the same line. */
   private engagePoint(out: Vector3): Vector3 {
-    // Stand at engage distance from the player, on the line back to spawn.
     out.copy(this.creature.position).sub(_head);
     out.y = 0;
     if (out.lengthSq() < 1e-4) out.set(0, 0, -1);
-    out.normalize().multiplyScalar(ARENA.engageDistance);
+    out.normalize().multiplyScalar(Math.max(0.55, ARENA.engageDistance + this.stepOffset));
     out.add(_head);
     out.y = 0;
     return out;
   }
 
-  private updateFight(_delta: number): void {
+  private updateFight(delta: number): void {
     const c = this.creature;
     const diff = currentDifficulty();
     c.tempoScale = diff.tempoScale;
 
-    // Stagger: hurt it hard while it's committed and it collapses early.
-    if ((this.mood === 'rising' || this.mood === 'combo') && this.hpAtFormUp - match.creatureHp >= BRAIN.staggerDamage) {
+    // REALLY hurt? It loses its shape — once per round it collapses into an
+    // exhausted glob and lies there taking double damage. The finisher.
+    if (
+      this.mood !== 'exhausted' &&
+      !this.exhaustUsed &&
+      match.creatureHp > 0 &&
+      match.creatureHp <= COMBAT.creatureHealth * EXHAUST.threshold
+    ) {
+      this.exhaustUsed = true;
+      this.comboQueue = [];
       c.setFormTarget(0);
-      this.setMood('staggered', 1.3);
+      c.vulnerable = true;
+      this.setMood('exhausted', EXHAUST.duration);
+      return;
     }
 
     switch (this.mood) {
       case 'wander': // entering the fight from the lobby
-        this.setMood('roam', BRAIN.roamMin + Math.random() * (BRAIN.roamMax - BRAIN.roamMin));
+        this.setMood('fight');
         break;
 
-      case 'roam':
-        c.setFormTarget(0);
-        c.moveTo(this.engagePoint(_v));
-        if (this.moodT > this.moodDuration * diff.roamScale) {
-          this.setMood('rising');
-          this.hpAtFormUp = match.creatureHp;
-          c.setFormTarget(1);
+      case 'fight': {
+        c.setFormTarget(1);
+
+        // Footwork: pick a new step (in, out, or hold) every second or so.
+        this.stepTimer -= delta;
+        if (this.stepTimer <= 0) {
+          this.stepTimer = 0.9 + Math.random() * 1.3;
+          const r = Math.random();
+          this.stepOffset = r < 0.34 ? -0.32 : r < 0.62 ? 0.28 : 0;
         }
-        break;
-
-      case 'rising':
         c.moveTo(this.engagePoint(_v));
-        if (c.formValue > 0.96) {
-          this.comboQueue = this.pickCombo();
-          this.setMood('combo');
+
+        // Stagger: eat a burst of damage mid-combo and it wobbles off it.
+        if (this.comboQueue.length > 0 && this.hpAtCombo - match.creatureHp >= BRAIN.staggerDamage) {
+          this.comboQueue = [];
+          c.setFormTarget(1); // stays on its feet — just rocked
+          this.setMood('staggered', 1.1);
+          break;
         }
-        break;
 
-      case 'combo':
-        c.moveTo(this.engagePoint(_v));
+        // Combos, with breathing room between them (difficulty paces it).
         if (!c.isPunching) {
-          const next = this.comboQueue.shift();
-          if (!next) {
-            c.setFormTarget(0);
-            this.setMood('sinking');
-            break;
+          if (this.comboQueue.length > 0) {
+            const next = this.comboQueue.shift()!;
+            const hand = this.handFor(next);
+            c.throwAttack(next, hand, _head, (limbWorld) => this.resolveCreatureHit(next, limbWorld));
+          } else {
+            this.comboRest -= delta;
+            if (this.comboRest <= 0) {
+              this.comboQueue = this.pickCombo();
+              this.hpAtCombo = match.creatureHp;
+              this.comboRest = (0.7 + Math.random() * 1.5) * diff.roamScale;
+              this.stepOffset = -0.25; // step IN behind the first strike
+              this.stepTimer = 1.2;
+              c.moveTo(this.engagePoint(_v));
+            }
           }
-          const hand = this.handFor(next);
-          c.throwAttack(next, hand, _head, (limbWorld) => this.resolveCreatureHit(next, limbWorld));
         }
         break;
-
-      case 'sinking':
-        if (c.formValue < 0.05) {
-          this.setMood('roam', BRAIN.roamMin + Math.random() * (BRAIN.roamMax - BRAIN.roamMin));
-        }
-        break;
+      }
 
       case 'staggered':
+        c.moveTo(this.engagePoint(_v));
         if (this.moodT > this.moodDuration) {
-          this.setMood('roam', BRAIN.roamMin * 0.7 + Math.random() * 2);
+          this.comboRest = 0.5;
+          this.setMood('fight');
+        }
+        break;
+
+      case 'exhausted':
+        // A quivering puddle where it fell. Finish it.
+        c.moveTo(c.position);
+        c.sim.agitation = Math.max(c.sim.agitation, 0.55);
+        if (this.moodT > this.moodDuration) {
+          c.vulnerable = false;
+          c.setFormTarget(1);
+          this.comboRest = 1.0;
+          this.setMood('fight');
         }
         break;
     }

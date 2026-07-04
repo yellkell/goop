@@ -21,9 +21,8 @@ import {
 import { announce, type Call } from '../audio/announcer.js';
 import { backToLobbyMusic, playVictoryThenLobby, startBattleMusic } from '../audio/music.js';
 import { matchEnd, roundBell, roundEnd, uiClick } from '../audio/sfx.js';
-import { COMBAT } from '../config.js';
+import { ARENA, COMBAT } from '../config.js';
 import {
-  getCreature,
   match,
   MAX_ROUNDS,
   resetForMatch,
@@ -32,7 +31,7 @@ import {
   ROUNDS_TO_WIN,
   type RoundWinner,
 } from '../state.js';
-import { CreatureHud, WristHud } from '../ui/hud.js';
+import { WallBoard, WristHud } from '../ui/hud.js';
 
 const BEATS: Call[] = ['3', '2', '1', 'fight'];
 const VERDICT_SECONDS = 5.5;
@@ -53,14 +52,15 @@ function vignetteTexture(): CanvasTexture {
 }
 
 export class FightSystem extends createSystem({}) {
-  private hud!: CreatureHud;
+  private board!: WallBoard;
   private wrist?: WristHud;
   private lastBeat = -1;
   private vignette?: Mesh;
 
   init(): void {
-    this.hud = new CreatureHud();
-    this.scene.add(this.hud.group);
+    this.board = new WallBoard();
+    this.board.group.position.set(ARENA.wall[0], ARENA.wall[1], ARENA.wall[2]);
+    this.scene.add(this.board.group);
   }
 
   /** The wrist HUD needs a live left grip — attach the first time it shows. */
@@ -176,7 +176,7 @@ export class FightSystem extends createSystem({}) {
 
     this.ensureWrist();
     this.wrist?.update();
-    this.hud.update(delta, _head, getCreature());
+    this.board.update();
   }
 
   /** A round is settled: score it, then rest or — if the cards are in —

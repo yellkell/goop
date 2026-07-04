@@ -33,7 +33,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GelCreature } from '../creature/GelCreature.js';
 import { GooFx } from '../fx/splats.js';
 import { match } from '../state.js';
-import { CreatureHud } from '../ui/hud.js';
+import { WallBoard } from '../ui/hud.js';
 import { MenuPanel } from '../ui/menuPanel.js';
 
 declare global {
@@ -111,7 +111,7 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
 let autoSpar = false;
 let autoT = 0;
 
-const MOVES = ['jab', 'cross', 'hook', 'uppercut', 'backfist', 'roundhouse'] as const;
+const MOVES = ['jab', 'cross', 'hook', 'uppercut', 'overhand', 'backfist', 'roundhouse'] as const;
 
 addEventListener('keydown', (e) => {
   if (e.key === '1') creature.setFormTarget(0);
@@ -122,8 +122,9 @@ addEventListener('keydown', (e) => {
   }
   if (e.key === '4') autoSpar = !autoSpar;
   if (e.key === '5') creature.setKo(!creature.isKo);
-  // The moveset on its own keys: q/w/e/r/t/y = jab/cross/hook/upper/spin/kick.
-  const idx = ['q', 'w', 'e', 'r', 't', 'y'].indexOf(e.key);
+  // The moveset on its own keys: q/w/e/r/t/y/u =
+  // jab/cross/hook/upper/overhand/spin/kick.
+  const idx = ['q', 'w', 'e', 'r', 't', 'y', 'u'].indexOf(e.key);
   if (idx >= 0) creature.throwAttack(MOVES[idx], idx % 2 === 0 ? 'left' : 'right', playerHead);
 });
 
@@ -139,7 +140,7 @@ const shot = new URLSearchParams(location.search).get('shot');
 let shotClock = 0;
 let shotPunched = false;
 let menuPanel: MenuPanel | null = null;
-let hud: CreatureHud | null = null;
+let hud: WallBoard | null = null;
 
 function shotDirector(dt: number): boolean {
   shotClock += dt;
@@ -196,12 +197,13 @@ function shotDirector(dt: number): boolean {
       return shotClock > launchAt + midStrike;
     }
     case 'hud': {
-      // Mid-fight framing: boxer form, status bar riding above it.
+      // Mid-fight framing: boxer on its new legs, wall board behind it.
       if (!hud) {
-        hud = new CreatureHud();
+        hud = new WallBoard();
+        hud.group.position.set(0, 1.8, -1.4);
         scene.add(hud.group);
         match.phase = 'fighting';
-        match.creatureHp = 64;
+        match.creatureHp = 190;
         match.playerHp = 81;
         match.round = 2;
         match.playerRounds = 1;
@@ -209,8 +211,8 @@ function shotDirector(dt: number): boolean {
         match.boardDirty = true;
       }
       creature.setFormTarget(1);
-      camera.position.set(0.75, 1.55, 2.4);
-      controls.target.set(0, 1.25, 0);
+      camera.position.set(0.9, 1.5, 2.7);
+      controls.target.set(0, 1.2, -0.4);
       return shotClock > 3.2;
     }
     case 'menu': {
@@ -261,7 +263,7 @@ function frame(now: number): void {
 
   playerHead.copy(camera.position);
   creature.update(dt, playerHead);
-  hud?.update(dt, playerHead, creature);
+  hud?.update();
   fx.update(dt);
   controls.update();
   renderer.render(scene, camera);
