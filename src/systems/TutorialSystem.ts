@@ -39,6 +39,7 @@ import { Health } from '../components/Health.js';
 import { match } from '../combat/matchState.js';
 import { ballCommands, opponents } from '../combat/opponentBus.js';
 import { app } from '../menu/appState.js';
+import { startTutorialMusic, stopTutorialMusic } from '../audio/tutorialMusic.js';
 import { MATCH } from '../config.js';
 import { UI, plate, stencilFont } from '../ui/industrial.js';
 
@@ -352,6 +353,7 @@ export class TutorialSystem extends createSystem({
     this.cleared = false;
     this.makePopup();
     this.enterStep();
+    startTutorialMusic(); // loops for the whole tutorial (lessons + graduation fight)
   }
 
   private toGrad(): void {
@@ -372,6 +374,7 @@ export class TutorialSystem extends createSystem({
     this.readyHover = false;
     this.active = false;
     this.phase = 'lessons';
+    stopTutorialMusic(); // the lobby music fades back up on the way out
   }
 
   // --- queries --------------------------------------------------------------
