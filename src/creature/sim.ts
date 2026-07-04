@@ -103,6 +103,13 @@ export class GoopSim {
   ko = 0;
   /** Recent-violence level 0..1; the shader roils the surface with it. */
   agitation = 0;
+  /**
+   * Blend-width multiplier, shared with the shader. Mid-strike the body
+   * "tenses" — a wider smooth-min keeps a fully stretched limb reading as
+   * one rope of gel instead of beads. The CPU field uses the same value so
+   * what you punch stays exactly what you see.
+   */
+  blendScale = 1;
 
   /** Extra per-anchor offsets (punch animation drives arm anchors here). */
   readonly offsets: Float32Array = new Float32Array(ANCHOR_COUNT * 3);
@@ -188,7 +195,7 @@ export class GoopSim {
    * Mirrors the shader: smooth-min over core+lumps+drips, dents carved out.
    */
   fieldAt(p: Vector3): number {
-    const k = CREATURE.blend;
+    const k = CREATURE.blend * this.blendScale;
     let d = 1e5;
     for (const b of this.core) {
       const dx = p.x - b.x;

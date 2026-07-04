@@ -26,7 +26,7 @@ import {
   SphereGeometry,
   Vector3,
 } from 'three';
-import { BRAIN, CREATURE } from '../config.js';
+import { ATTACKS, CREATURE, type AttackName } from '../config.js';
 import * as sfx from '../audio/sfx.js';
 import type { GooFx } from '../fx/splats.js';
 import { createGelMaterial, type GelUniforms } from './gelMaterial.js';
@@ -35,15 +35,27 @@ import { GoopSim, type PunchResult } from './sim.js';
 
 export type Hand = 'left' | 'right';
 
-interface ActivePunch {
+interface ActiveAttack {
+  name: AttackName;
   hand: Hand;
-  /** Seconds since the punch began. */
+  /** Seconds since the attack began. */
   t: number;
-  /** Where the fist is going, creature-local (snapshotted at wind-up). */
+  /** Where the strike is going, creature-local (snapshotted at wind-up). */
   target: Vector3;
   apexFired: boolean;
-  onApex?: (fistWorld: Vector3) => void;
+  whooshFired: boolean;
+  onApex?: (limbWorld: Vector3) => void;
   onDone?: () => void;
+}
+
+function easeInOut(t: number): number {
+  return t * t * (3 - 2 * t);
+}
+
+/** Quadratic bezier, written out (no allocs in the strike loop). */
+function bez(a: number, b: number, c: number, t: number): number {
+  const u = 1 - t;
+  return u * u * a + 2 * u * t * b + t * t * c;
 }
 
 const _v = new Vector3();
@@ -95,7 +107,9 @@ export class GelCreature {
   /** Difficulty tempo: scales the telegraph + recovery (1 = SCRAP). */
   tempoScale = 1;
 
-  private punch: ActivePunch | null = null;
+  private attack: ActiveAttack | null = null;
+  /** Extra body yaw layered over face-tracking — the spinning backfist. */
+  private extraYaw = 0;
 
   private rootTarget = new Vector3();
   private facePoint = new Vector3();
@@ -179,7 +193,8 @@ export class GelCreature {
     if (down === this.koTarget > 0.5) return;
     this.koTarget = down ? 1 : 0;
     if (down) {
-      this.punch = null;
+      this.attack = null;
+      this.extraYaw = 0;
       this.telegraph = 0;
       sfx.koSplat();
     } else {
@@ -224,33 +239,48 @@ export class GelCreature {
     return this.sim.fieldAt(_v);
   }
 
-  // ---------------------------------------------------------------- punches
+  // ---------------------------------------------------------------- attacks
 
   get isPunching(): boolean {
-    return this.punch !== null;
+    return this.attack !== null;
   }
 
   /**
-   * Wind up and throw a straight at a world point. Fires `onApex` at full
-   * extension with the fist's world position (the AI checks the hit there).
+   * Wind up and deliver a named strike at a world point. Fires `onApex` at
+   * full extension with the striking blob's world position (the AI checks
+   * the hit there). Every attack telegraphs in its own readable silhouette —
+   * that IS the dodge language.
    */
-  throwPunch(hand: Hand, targetWorld: Vector3, onApex?: (fistWorld: Vector3) => void, onDone?: () => void): boolean {
-    if (this.punch || this.koTarget > 0 || this.form < 0.7) return false;
+  throwAttack(
+    name: AttackName,
+    hand: Hand,
+    targetWorld: Vector3,
+    onApex?: (limbWorld: Vector3) => void,
+    onDone?: () => void,
+  ): boolean {
+    if (this.attack || this.koTarget > 0 || this.form < 0.7) return false;
     this.group.updateMatrixWorld();
     const target = new Vector3().copy(targetWorld);
     this.group.worldToLocal(target);
-    // Cap reach so the arm stretches heroically but not absurdly.
+    // Cap reach so the limb stretches heroically but not absurdly.
     const shoulder = hand === 'left' ? BOXER_POSE[A.SHOULDER_L] : BOXER_POSE[A.SHOULDER_R];
     _v.set(target.x - shoulder[0], target.y - shoulder[1], target.z - shoulder[2]);
     const reach = _v.length();
-    const maxReach = 1.35;
+    const maxReach = name === 'roundhouse' ? 1.4 : 1.25;
     if (reach > maxReach) {
       _v.multiplyScalar(maxReach / reach);
       target.set(shoulder[0] + _v.x, shoulder[1] + _v.y, shoulder[2] + _v.z);
     }
-    this.punch = { hand, t: 0, target, apexFired: false, onApex, onDone };
-    sfx.gooCharge(BRAIN.telegraph * this.tempoScale);
+    // A kick lands at chest/chin height, not orbit.
+    if (name === 'roundhouse') target.y = Math.min(target.y, 1.45);
+    this.attack = { name, hand, t: 0, target, apexFired: false, whooshFired: false, onApex, onDone };
+    sfx.gooCharge(ATTACKS[name].telegraph * this.tempoScale);
     return true;
+  }
+
+  /** Legacy alias — a plain cross (the workbench key drives this). */
+  throwPunch(hand: Hand, targetWorld: Vector3, onApex?: (fistWorld: Vector3) => void, onDone?: () => void): boolean {
+    return this.throwAttack('cross', hand, targetWorld, onApex, onDone);
   }
 
   /** A player fist arriving. Returns what the gel made of it. */
@@ -302,14 +332,17 @@ export class GelCreature {
       this.group.position.addScaledVector(_v.normalize(), step);
     }
 
-    // Face the face-point (yaw only, springy).
-    _v.copy(this.facePoint).sub(this.group.position);
-    const targetYaw = Math.atan2(_v.x, _v.z);
-    let dYaw = targetYaw - this.yaw;
-    while (dYaw > Math.PI) dYaw -= Math.PI * 2;
-    while (dYaw < -Math.PI) dYaw += Math.PI * 2;
-    this.yaw += dYaw * Math.min(1, dt * (1.5 + this.form * 2.5));
-    this.group.rotation.set(0, this.yaw, 0);
+    // Face the face-point (yaw only, springy) — unless mid-spin: the
+    // backfist owns the body's rotation while it's coiling/whipping.
+    if (this.attack?.name !== 'backfist') {
+      _v.copy(this.facePoint).sub(this.group.position);
+      const targetYaw = Math.atan2(_v.x, _v.z);
+      let dYaw = targetYaw - this.yaw;
+      while (dYaw > Math.PI) dYaw -= Math.PI * 2;
+      while (dYaw < -Math.PI) dYaw += Math.PI * 2;
+      this.yaw += dYaw * Math.min(1, dt * (1.5 + this.form * 2.5));
+    }
+    this.group.rotation.set(0, this.yaw + this.extraYaw, 0);
 
     // Inertia: the gel lags when the root accelerates.
     if (dt > 1e-4) {
@@ -329,8 +362,8 @@ export class GelCreature {
     this.playerLocal.copy(playerHeadWorld);
     this.group.worldToLocal(this.playerLocal);
 
-    // --- punch timeline ---
-    this.updatePunch(dt);
+    // --- attack timeline ---
+    this.updateAttack(dt);
 
     // --- simulate the body ---
     this.sim.update(dt);
@@ -351,6 +384,9 @@ export class GelCreature {
       this.telegraph,
       _m,
     );
+    // Strike-time blend widening (see sim.blendScale) — shader stays in
+    // lock-step with the CPU field.
+    this.gel.material.uniforms.uBlend.value = CREATURE.blend * this.sim.blendScale;
 
     // Shadow hugs the current mass footprint.
     const spread = Math.max(_v2.x, _v2.z) * 2.4;
@@ -366,95 +402,253 @@ export class GelCreature {
     this.updateEyes(dt, playerHeadWorld);
   }
 
-  private updatePunch(dt: number): void {
-    const p = this.punch;
+  /**
+   * The moveset choreography. Every attack is telegraph → strike → recover:
+   * the telegraph is offset-driven (springy, organic, READABLE — each move
+   * has its own silhouette), the strike PINS the striking blob to a
+   * kinematic path (a spring can't chase a 0.2 s strike; without the pin
+   * every swing whiffs), and recovery hands the extended limb back to the
+   * spring for the snap-back wobble.
+   */
+  private updateAttack(dt: number): void {
+    const a = this.attack;
     this.sim.offsets.fill(0);
     this.sim.radiusScale.fill(1);
-    if (!p) {
+    if (!a) {
       this.sim.pinIndex = -1;
+      this.extraYaw = 0;
+      this.sim.blendScale = 1;
       this.telegraph = Math.max(0, this.telegraph - dt * 6);
       return;
     }
 
-    p.t += dt;
-    this.sim.pinIndex = -1; // strike phase below re-pins each frame
-    // Difficulty stretches/squeezes the readable parts; the strike itself
-    // stays snappy at every level (a slow punch never looks like a punch).
-    const T = BRAIN.telegraph * this.tempoScale;
-    const S = BRAIN.strikeTime;
-    const R = BRAIN.recoverTime * this.tempoScale;
-    const fistI = p.hand === 'left' ? A.FIST_L : A.FIST_R;
-    const elbowI = p.hand === 'left' ? A.ELBOW_L : A.ELBOW_R;
-    const shoulderI = p.hand === 'left' ? A.SHOULDER_L : A.SHOULDER_R;
+    a.t += dt;
+    this.sim.pinIndex = -1; // the strike phase below re-pins each frame
+    const spec = ATTACKS[a.name];
+    // Difficulty stretches the readable parts; the strike stays snappy.
+    const T = spec.telegraph * this.tempoScale;
+    const S = spec.strike;
+    const R = spec.recover * this.tempoScale;
 
-    // Where the fist rests in the current pose, and the vector to the target.
-    const base = BOXER_POSE[fistI];
-    _v.set(p.target.x - base[0], p.target.y - base[1], p.target.z - base[2]);
+    const left = a.hand === 'left';
+    const kick = a.name === 'roundhouse';
+    const limbI = kick ? (left ? A.KNEE_L : A.KNEE_R) : left ? A.FIST_L : A.FIST_R;
+    const elbowI = left ? A.ELBOW_L : A.ELBOW_R;
+    const shoulderI = left ? A.SHOULDER_L : A.SHOULDER_R;
+    const hipI = left ? A.HIP_L : A.HIP_R;
+    const baseI = left ? A.BASE_L : A.BASE_R;
+    const side = left ? -1 : 1; // this limb's outward X
+    const base = BOXER_POSE[limbI];
 
-    let fx = 0, fy = 0, fz = 0, swell = 1;
-    if (p.t < T) {
-      // Wind-up: fist draws back and down, swelling; the body glows.
-      const k = easeOutCubic(p.t / T);
-      const aim = _v3.copy(_v).normalize();
-      fx = -aim.x * 0.26 * k;
-      fy = -0.06 * k;
-      fz = -aim.z * 0.26 * k;
-      swell = 1 + 0.45 * k;
+    // Aim from the limb's rest pose to the snapshotted target.
+    _v.set(a.target.x - base[0], a.target.y - base[1], a.target.z - base[2]);
+    const aimLen = Math.max(_v.length(), 1e-4);
+    const ax = _v.x / aimLen;
+    const ay = _v.y / aimLen;
+    const az = _v.z / aimLen;
+
+    // Target's horizontal bearing from the body centre (spin + kick paths).
+    const hd = Math.max(Math.hypot(a.target.x, a.target.z), 1e-4);
+    const dirX = a.target.x / hd;
+    const dirZ = a.target.z / hd;
+
+    const o = this.sim.offsets;
+    const put = (i: number, x: number, y: number, z: number): void => {
+      o[i * 3] += x;
+      o[i * 3 + 1] += y;
+      o[i * 3 + 2] += z;
+    };
+
+    /** The strike path — where the striking blob is at strike-phase k. */
+    const pathAt = (k: number, out: { x: number; y: number; z: number }): void => {
+      const e = easeOutCubic(k);
+      switch (a.name) {
+        case 'jab':
+        case 'cross': {
+          // Straight line from the windup pullback to the target.
+          const w = a.name === 'jab' ? 0.14 : 0.26;
+          out.x = base[0] - ax * w + (a.target.x - base[0] + ax * w) * e;
+          out.y = base[1] - ay * w + (a.target.y - base[1] + ay * w) * e;
+          out.z = base[2] - az * w + (a.target.z - base[2] + az * w) * e;
+          break;
+        }
+        case 'hook': {
+          // Wide horizontal arc: out to the side, then curving in.
+          out.x = bez(base[0] + side * 0.38, (base[0] + a.target.x) / 2 + side * 0.5, a.target.x, e);
+          out.y = bez(base[1] + 0.08, (base[1] + a.target.y) / 2 + 0.06, a.target.y, e);
+          out.z = bez(base[2] - 0.1, (base[2] + a.target.z) / 2, a.target.z, e);
+          break;
+        }
+        case 'uppercut': {
+          // Drop low, then rocket up through the chin.
+          out.x = bez(base[0], a.target.x, a.target.x, e);
+          out.y = bez(base[1] - 0.5, a.target.y - 0.45, a.target.y + 0.08, e);
+          out.z = bez(base[2] + 0.02, a.target.z - 0.12, a.target.z, e);
+          break;
+        }
+        case 'backfist': {
+          // Arm held rigid at extension; the BODY's spin delivers it.
+          const ext = Math.min(Math.max(hd, 0.55), 1.0);
+          out.x = dirX * ext;
+          out.y = a.target.y;
+          out.z = dirZ * ext;
+          break;
+        }
+        case 'roundhouse': {
+          // The puddle skirt whips up into a leg sweeping a horizontal arc.
+          const theta = side * 1.9 * (1 - e);
+          const cos = Math.cos(theta);
+          const sin = Math.sin(theta);
+          const r = 0.5 + (Math.min(hd, 1.35) - 0.5) * e;
+          out.x = (dirX * cos + dirZ * sin) * r;
+          out.z = (-dirX * sin + dirZ * cos) * r;
+          out.y = 0.3 + (a.target.y - 0.3) * e;
+          break;
+        }
+      }
+    };
+
+    let fx = 0;
+    let fy = 0;
+    let fz = 0;
+    let swell = 1;
+    let midSwell = 1; // the elbow/hip fattens with the stretch — keeps the
+    // extended limb one continuous rope instead of beads on a string
+
+    if (a.t < T) {
+      // ---- telegraph: each attack's own readable silhouette ----
+      const k = easeOutCubic(a.t / T);
       this.telegraph = Math.min(1, this.telegraph + dt * 3.5);
-    } else if (p.t < T + S) {
-      // The strike: launch to full extension. The fist blob is PINNED to the
-      // kinematic arc — a spring can't chase a 0.17 s punch, so without this
-      // the visible fist arrives after the hit check and every swing whiffs.
-      const k = easeOutCubic((p.t - T) / S);
-      fx = _v.x * k;
-      fy = _v.y * k;
-      fz = _v.z * k;
-      swell = 1.45;
-      this.sim.pinIndex = fistI;
-      this.sim.pinPos.x = base[0] + fx;
-      this.sim.pinPos.y = base[1] + fy;
-      this.sim.pinPos.z = base[2] + fz;
+      switch (a.name) {
+        case 'jab':
+          fx = -ax * 0.14 * k;
+          fy = -ay * 0.14 * k;
+          fz = -az * 0.14 * k;
+          swell = 1 + 0.25 * k;
+          break;
+        case 'cross':
+          fx = -ax * 0.26 * k;
+          fy = -0.06 * k;
+          fz = -az * 0.26 * k;
+          swell = 1 + 0.45 * k;
+          break;
+        case 'hook':
+          fx = side * 0.38 * k;
+          fy = 0.08 * k;
+          fz = -0.1 * k;
+          swell = 1 + 0.4 * k;
+          put(elbowI, side * 0.3 * k, 0.16 * k, -0.05 * k);
+          break;
+        case 'uppercut':
+          fy = -0.5 * k;
+          fz = 0.02 * k;
+          swell = 1 + 0.4 * k;
+          put(elbowI, 0, -0.3 * k, 0);
+          break;
+        case 'backfist':
+          // Coil the whole body the wrong way — the unmistakable wind-up.
+          this.extraYaw = -0.9 * side * k;
+          fx = -side * 0.3 * k;
+          fy = 0.05 * k;
+          fz = -0.08 * k;
+          swell = 1 + 0.35 * k;
+          put(shoulderI, -side * 0.12 * k, 0, 0);
+          break;
+        case 'roundhouse':
+          // Mass shifts off the kicking side; the skirt gathers.
+          fx = -side * 0.12 * k;
+          fy = 0.05 * k;
+          fz = -0.15 * k;
+          swell = 1 + 0.5 * k;
+          put(hipI, -side * 0.08 * k, 0.05 * k, -0.08 * k);
+          put(A.CHEST_L, -side * 0.1 * k, 0, 0);
+          put(A.CHEST_R, -side * 0.1 * k, 0, 0);
+          break;
+      }
+    } else if (a.t < T + S) {
+      // ---- strike: pin the limb to the path ----
+      const k = (a.t - T) / S;
       this.telegraph = Math.max(0, this.telegraph - dt * 10);
-      if (!p.apexFired && k > 0.9) {
-        p.apexFired = true;
-        sfx.gooWhoosh();
-        // Report the PIN target (full extension), not last frame's blob.
-        _v3.set(base[0] + _v.x, base[1] + _v.y, base[2] + _v.z);
+      if (!a.whooshFired) {
+        a.whooshFired = true;
+        if (a.name === 'backfist') sfx.spinWhoosh();
+        else if (a.name === 'roundhouse') sfx.kickWhoosh();
+        else sfx.gooWhoosh();
+      }
+      if (a.name === 'backfist') {
+        // The spin itself: coil releases through a full rotation.
+        this.extraYaw = side * (-0.9 + (Math.PI * 2 + 0.9) * easeInOut(k));
+      }
+      pathAt(k, this._pin);
+      fx = this._pin.x - base[0];
+      fy = this._pin.y - base[1];
+      fz = this._pin.z - base[2];
+      swell = kick ? 1.35 : 1.45;
+      midSwell = 1.5;
+      this.sim.blendScale = 1.35;
+      this.sim.pinIndex = limbI;
+      this.sim.pinPos.x = this._pin.x;
+      this.sim.pinPos.y = this._pin.y;
+      this.sim.pinPos.z = this._pin.z;
+      const apexK = a.name === 'backfist' ? 0.93 : 0.9;
+      if (!a.apexFired && k > apexK) {
+        a.apexFired = true;
+        // Report the path END (full extension), not last frame's blob.
+        pathAt(1, this._pin);
+        _v3.set(this._pin.x, this._pin.y, this._pin.z);
         this.group.updateMatrixWorld();
         this.group.localToWorld(_v3);
-        p.onApex?.(_v3);
+        a.onApex?.(_v3);
       }
-    } else if (p.t < T + S + R) {
-      // Recover: everything flows back to guard.
-      const k = 1 - easeOutCubic((p.t - T - S) / R);
-      fx = _v.x * k;
-      fy = _v.y * k;
-      fz = _v.z * k;
-      swell = 1 + 0.45 * k;
+    } else if (a.t < T + S + R) {
+      // ---- recover: hand the extended limb back to the springs ----
+      const k = 1 - easeOutCubic((a.t - T - S) / R);
+      this.extraYaw = 0; // 2π ≡ 0 — the spin lands facing you again
+      pathAt(1, this._pin);
+      fx = (this._pin.x - base[0]) * k;
+      fy = (this._pin.y - base[1]) * k;
+      fz = (this._pin.z - base[2]) * k;
+      swell = 1 + (kick ? 0.4 : 0.45) * k;
+      midSwell = 1 + 0.5 * k;
+      this.sim.blendScale = 1 + 0.35 * k;
     } else {
-      const done = p.onDone;
-      this.punch = null;
+      const done = a.onDone;
+      this.attack = null;
+      this.extraYaw = 0;
       done?.();
       return;
     }
 
-    // Drive the arm chain: fist leads, elbow and shoulder follow, the torso
-    // leans its mass into it.
-    const o = this.sim.offsets;
-    o[fistI * 3] = fx;
-    o[fistI * 3 + 1] = fy;
-    o[fistI * 3 + 2] = fz;
-    o[elbowI * 3] = fx * 0.55;
-    o[elbowI * 3 + 1] = fy * 0.55;
-    o[elbowI * 3 + 2] = fz * 0.55;
-    o[shoulderI * 3] = fx * 0.25;
-    o[shoulderI * 3 + 1] = fy * 0.25;
-    o[shoulderI * 3 + 2] = fz * 0.25;
-    o[A.CHEST_L * 3 + 2] = fz * 0.1;
-    o[A.CHEST_R * 3 + 2] = fz * 0.1;
-    o[A.BELLY * 3 + 2] = fz * 0.08;
-    this.sim.radiusScale[fistI] = swell;
+    // Drive the chain. Joints interpolate ALONG THE LINE from their root to
+    // the strike point — fraction-of-offset following detaches the arm at
+    // full extension (the smooth-min can only bridge so far); a joint ladder
+    // keeps the limb one connected rope of gel however far it stretches.
+    put(limbI, fx, fy, fz);
+    const px = base[0] + fx;
+    const py = base[1] + fy;
+    const pz = base[2] + fz;
+    const ladder = (jointI: number, rootI: number, frac: number, lift = 0): void => {
+      const jb = BOXER_POSE[jointI];
+      const rb = BOXER_POSE[rootI];
+      o[jointI * 3] += rb[0] + (px - rb[0]) * frac - jb[0];
+      o[jointI * 3 + 1] += rb[1] + (py - rb[1]) * frac - jb[1] + lift;
+      o[jointI * 3 + 2] += rb[2] + (pz - rb[2]) * frac - jb[2];
+    };
+    if (kick) {
+      ladder(hipI, hipI, 0.52);
+      ladder(baseI, baseI, 0.24, 0.05);
+    } else {
+      ladder(elbowI, shoulderI, 0.6);
+      ladder(shoulderI, shoulderI, 0.24);
+    }
+    put(A.CHEST_L, 0, 0, fz * 0.1);
+    put(A.CHEST_R, 0, 0, fz * 0.1);
+    put(A.BELLY, 0, 0, fz * 0.08);
+    this.sim.radiusScale[limbI] = swell;
+    this.sim.radiusScale[kick ? hipI : elbowI] = midSwell;
   }
+
+  private readonly _pin = { x: 0, y: 0, z: 0 };
 
   private updateEyes(dt: number, playerHeadWorld: Vector3): void {
     // Blink clock.

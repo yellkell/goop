@@ -111,12 +111,20 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
 let autoSpar = false;
 let autoT = 0;
 
+const MOVES = ['jab', 'cross', 'hook', 'uppercut', 'backfist', 'roundhouse'] as const;
+
 addEventListener('keydown', (e) => {
   if (e.key === '1') creature.setFormTarget(0);
   if (e.key === '2') creature.setFormTarget(1);
-  if (e.key === '3') creature.throwPunch(Math.random() > 0.5 ? 'left' : 'right', playerHead);
+  if (e.key === '3') {
+    const move = MOVES[Math.floor(Math.random() * MOVES.length)];
+    creature.throwAttack(move, Math.random() > 0.5 ? 'left' : 'right', playerHead);
+  }
   if (e.key === '4') autoSpar = !autoSpar;
   if (e.key === '5') creature.setKo(!creature.isKo);
+  // The moveset on its own keys: q/w/e/r/t/y = jab/cross/hook/upper/spin/kick.
+  const idx = ['q', 'w', 'e', 'r', 't', 'y'].indexOf(e.key);
+  if (idx >= 0) creature.throwAttack(MOVES[idx], idx % 2 === 0 ? 'left' : 'right', playerHead);
 });
 
 addEventListener('resize', () => {
@@ -172,6 +180,21 @@ function shotDirector(dt: number): boolean {
       camera.position.set(1.2, 1.05, 1.9);
       controls.target.set(0, 0.25, 0);
       return shotClock > 2.5;
+    case 'spin':
+    case 'kick': {
+      // Catch the showpiece attacks mid-strike.
+      creature.setFormTarget(1);
+      camera.position.set(1.5, 1.45, 1.9);
+      controls.target.set(0, 1.1, 0);
+      const launchAt = 2.0;
+      if (!shotPunched && shotClock >= launchAt) {
+        shotPunched = true;
+        creature.throwAttack(shot === 'spin' ? 'backfist' : 'roundhouse', 'right', playerHead);
+      }
+      // Freeze the frame mid-strike: telegraph + just over half the strike.
+      const midStrike = shot === 'spin' ? 0.75 + 0.2 : 0.7 + 0.15;
+      return shotClock > launchAt + midStrike;
+    }
     case 'hud': {
       // Mid-fight framing: boxer form, status bar riding above it.
       if (!hud) {

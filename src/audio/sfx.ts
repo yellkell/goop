@@ -216,6 +216,21 @@ export function gooWhiff(): void {
   whooshNoise(0.22, 0.16, 900, 220);
 }
 
+/** The spinning backfist — a long sweeping rotor of air and slime. */
+export function spinWhoosh(): void {
+  whooshNoise(0.4, 0.22, 180, 1300);
+  whooshNoise(0.34, 0.14, 500, 2000, 0.08);
+  tone({ freq: 90, to: 240, type: 'sawtooth', dur: 0.32, gain: 0.06 });
+  bubble(340, 0.05, 0.2);
+}
+
+/** The roundhouse — heavier, lower, a whole limb's worth of gel in flight. */
+export function kickWhoosh(): void {
+  whooshNoise(0.3, 0.28, 160, 900);
+  tone({ freq: 120, to: 45, type: 'triangle', dur: 0.24, gain: 0.18 });
+  blub(140, 0.1, 0.14, 0.05);
+}
+
 /** The KO collapse — everything lets go at once. */
 export function koSplat(): void {
   splat(1);

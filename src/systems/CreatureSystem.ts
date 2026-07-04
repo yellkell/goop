@@ -17,16 +17,47 @@
 
 import { createSystem, Vector3 } from '@iwsdk/core';
 import { gooSlam, gooWhiff } from '../audio/sfx.js';
-import { ARENA, BRAIN, COMBAT } from '../config.js';
+import { ARENA, ATTACKS, BRAIN, COMBAT, type AttackName } from '../config.js';
 import { GelCreature, type Hand } from '../creature/GelCreature.js';
 import { GooFx } from '../fx/splats.js';
 import { pulseHand } from '../input/haptics.js';
-import { currentDifficulty, getCreature, match, setCreature } from '../state.js';
+import { currentDifficulty, getCreature, match, setCreature, settings } from '../state.js';
 
 type Mood = 'wander' | 'roam' | 'rising' | 'combo' | 'sinking' | 'staggered';
 
 const _head = new Vector3();
 const _v = new Vector3();
+
+/**
+ * The fight book — every combination it knows. Difficulty gates which
+ * strikes are in the arsenal and how long a string it will throw:
+ * CHILL sticks to the basics, SCRAP boxes properly, RUMBLE is a martial
+ * artist with a spinning backfist and a gel-tentacle roundhouse.
+ */
+const COMBOS: AttackName[][] = [
+  ['jab'],
+  ['cross'],
+  ['jab', 'cross'],
+  ['jab', 'jab', 'cross'],
+  ['hook'],
+  ['cross', 'hook'],
+  ['jab', 'uppercut'],
+  ['hook', 'uppercut'],
+  ['jab', 'jab', 'uppercut'],
+  ['backfist'],
+  ['jab', 'backfist'],
+  ['jab', 'cross', 'backfist'],
+  ['roundhouse'],
+  ['cross', 'roundhouse'],
+  ['jab', 'cross', 'hook'],
+  ['hook', 'hook', 'roundhouse'],
+];
+
+const TIER_ARSENAL: AttackName[][] = [
+  ['jab', 'cross'], // CHILL
+  ['jab', 'cross', 'hook', 'uppercut'], // SCRAP
+  ['jab', 'cross', 'hook', 'uppercut', 'backfist', 'roundhouse'], // RUMBLE
+];
 
 export class CreatureSystem extends createSystem({}) {
   private fx!: GooFx;
@@ -35,7 +66,7 @@ export class CreatureSystem extends createSystem({}) {
   private mood: Mood = 'wander';
   private moodT = 0;
   private moodDuration = 3;
-  private punchesLeft = 0;
+  private comboQueue: AttackName[] = [];
   private nextHand: Hand = 'left';
   private hpAtFormUp = COMBAT.creatureHealth;
   private wanderTarget = new Vector3(ARENA.spawn[0], 0, ARENA.spawn[2]);
@@ -193,7 +224,7 @@ export class CreatureSystem extends createSystem({}) {
       case 'rising':
         c.moveTo(this.engagePoint(_v));
         if (c.formValue > 0.96) {
-          this.punchesLeft = BRAIN.comboMin + Math.floor(Math.random() * (diff.comboMax - BRAIN.comboMin + 1));
+          this.comboQueue = this.pickCombo();
           this.setMood('combo');
         }
         break;
@@ -201,15 +232,14 @@ export class CreatureSystem extends createSystem({}) {
       case 'combo':
         c.moveTo(this.engagePoint(_v));
         if (!c.isPunching) {
-          if (this.punchesLeft <= 0) {
+          const next = this.comboQueue.shift();
+          if (!next) {
             c.setFormTarget(0);
             this.setMood('sinking');
             break;
           }
-          this.punchesLeft--;
-          const hand = this.nextHand;
-          this.nextHand = hand === 'left' ? 'right' : 'left';
-          c.throwPunch(hand, _head, (fistWorld) => this.resolveCreaturePunch(fistWorld));
+          const hand = this.handFor(next);
+          c.throwAttack(next, hand, _head, (limbWorld) => this.resolveCreatureHit(next, limbWorld));
         }
         break;
 
@@ -227,12 +257,32 @@ export class CreatureSystem extends createSystem({}) {
     }
   }
 
-  /** Full extension: did the gel fist actually reach your head? */
-  private resolveCreaturePunch(fistWorld: Vector3): void {
+  /** Draw a combination the current difficulty knows, capped in length. */
+  private pickCombo(): AttackName[] {
+    const diff = currentDifficulty();
+    const arsenal = TIER_ARSENAL[Math.min(TIER_ARSENAL.length - 1, Math.max(0, settings.difficulty))];
+    const legal = COMBOS.filter(
+      (combo) => combo.length <= diff.comboMax && combo.every((atk) => arsenal.includes(atk)),
+    );
+    return [...legal[Math.floor(Math.random() * legal.length)]];
+  }
+
+  /** Which hand throws which strike: jabs lead, crosses and the spin come
+   *  from the power side, the rest alternate. */
+  private handFor(name: AttackName): Hand {
+    if (name === 'jab') return 'left';
+    if (name === 'cross' || name === 'backfist') return 'right';
+    const hand = this.nextHand;
+    this.nextHand = hand === 'left' ? 'right' : 'left';
+    return hand;
+  }
+
+  /** Full extension: did the striking blob actually reach your head? */
+  private resolveCreatureHit(name: AttackName, limbWorld: Vector3): void {
+    const spec = ATTACKS[name];
     this.playerHead(_v);
-    // Head sphere ~0.11 + swollen fist ~0.18: 0.45 is an honest contact.
-    if (fistWorld.distanceTo(_v) < 0.45 && match.phase === 'fighting') {
-      match.playerHp = Math.max(0, match.playerHp - COMBAT.creaturePunchDamage * currentDifficulty().damageScale);
+    if (limbWorld.distanceTo(_v) < spec.hitRadius && match.phase === 'fighting') {
+      match.playerHp = Math.max(0, match.playerHp - spec.damage * currentDifficulty().damageScale);
       match.playerFlash = 1;
       match.boardDirty = true;
       gooSlam();

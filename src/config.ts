@@ -68,6 +68,31 @@ export const COMBAT = {
   countdownBeat: 1.0,
 };
 
+/**
+ * The moveset — every strike THE GOOP knows. Telegraph is your dodge
+ * window (scaled by difficulty tempo); strike time is fixed so a punch
+ * always looks like a punch. Damage is before the difficulty multiplier.
+ */
+export type AttackName = 'jab' | 'cross' | 'hook' | 'uppercut' | 'backfist' | 'roundhouse';
+
+export interface AttackSpec {
+  telegraph: number;
+  strike: number;
+  recover: number;
+  damage: number;
+  /** Contact distance from the striking blob to your head at apex. */
+  hitRadius: number;
+}
+
+export const ATTACKS: Record<AttackName, AttackSpec> = {
+  jab: { telegraph: 0.38, strike: 0.13, recover: 0.35, damage: 5, hitRadius: 0.42 },
+  cross: { telegraph: 0.62, strike: 0.17, recover: 0.55, damage: 9, hitRadius: 0.45 },
+  hook: { telegraph: 0.55, strike: 0.2, recover: 0.5, damage: 11, hitRadius: 0.45 },
+  uppercut: { telegraph: 0.6, strike: 0.18, recover: 0.55, damage: 12, hitRadius: 0.45 },
+  backfist: { telegraph: 0.75, strike: 0.34, recover: 0.6, damage: 14, hitRadius: 0.5 },
+  roundhouse: { telegraph: 0.7, strike: 0.26, recover: 0.65, damage: 13, hitRadius: 0.5 },
+};
+
 /** Creature AI pacing (seconds unless noted). */
 export const BRAIN = {
   /** Glob-phase roaming before it forms up to swing. */
