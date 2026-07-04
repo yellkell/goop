@@ -29,7 +29,7 @@ import {
 import { squelch, wobble } from '../audio/sfx.js';
 import { EXHAUST, PUNCH } from '../config.js';
 import { pulseHand } from '../input/haptics.js';
-import { getCreature, match } from '../state.js';
+import { getCreature, match, player } from '../state.js';
 
 const HANDS = ['left', 'right'] as const;
 type Hand = (typeof HANDS)[number];
@@ -60,11 +60,6 @@ function buildFist(hand: 'left' | 'right'): Group {
   mitt.scale.set(1.05, 1.0, 1.28);
   mitt.position.set(0, 0, -0.015);
   g.add(mitt);
-  // Knuckle roll across the top front.
-  const roll = new Mesh(new SphereGeometry(0.045, 14, 10), leather);
-  roll.scale.set(1.35, 0.75, 0.8);
-  roll.position.set(0, 0.028, -0.06);
-  g.add(roll);
   // Thumb, tucked on the inside.
   const thumb = new Mesh(new SphereGeometry(0.03, 12, 8), leather);
   thumb.scale.set(0.9, 0.8, 1.3);
@@ -93,6 +88,10 @@ export class FistSystem extends createSystem({}) {
     const creature = getCreature();
     this.pokeNoise = Math.max(0, this.pokeNoise - delta);
 
+    // Share the head pose for the creature's block/hit resolution.
+    const headObj = this.playerHeadEntity?.object3D;
+    if (headObj) headObj.getWorldPosition(player.head);
+
     for (const hand of HANDS) {
       const grip = this.world.playerSpaceEntities.gripSpaces[hand]?.object3D;
       if (!grip) continue;
@@ -116,6 +115,7 @@ export class FistSystem extends createSystem({}) {
       }
 
       fist.getWorldPosition(_pos);
+      player.gloves[hand].copy(_pos); // share for the creature's block checks
       const prev = this.prevPos[hand];
       if (!prev) {
         this.prevPos[hand] = new Vector3().copy(_pos);

@@ -16,12 +16,12 @@
  */
 
 import { createSystem, Vector3 } from '@iwsdk/core';
-import { gooSlam, gooWhiff } from '../audio/sfx.js';
-import { ARENA, ATTACKS, BRAIN, COMBAT, EXHAUST, type AttackName } from '../config.js';
+import { gooBlock, gooSlam, gooWhiff } from '../audio/sfx.js';
+import { ARENA, ATTACKS, BLOCK, BRAIN, COMBAT, EXHAUST, type AttackName } from '../config.js';
 import { GelCreature, type Hand } from '../creature/GelCreature.js';
 import { GooFx } from '../fx/splats.js';
 import { pulseHand } from '../input/haptics.js';
-import { currentDifficulty, getCreature, match, setCreature, settings } from '../state.js';
+import { currentDifficulty, getCreature, match, player, setCreature, settings } from '../state.js';
 
 type Mood = 'wander' | 'fight' | 'staggered' | 'exhausted';
 
@@ -75,9 +75,8 @@ export class CreatureSystem extends createSystem({}) {
   private hpAtCombo = COMBAT.creatureHealth;
   private wanderTarget = new Vector3(ARENA.spawn[0], 0, ARENA.spawn[2]);
   private koApplied = false;
-  /** Footwork: current step offset along the engagement line + its clock. */
-  private stepOffset = 0;
-  private stepTimer = 0;
+  /** Footwork sway accumulator (drives the lateral circling). */
+  private sway = 0;
   /** Seconds until it commits to the next combination. */
   private comboRest = 1.2;
   /** The exhausted collapse fires once per round. */
@@ -199,13 +198,19 @@ export class CreatureSystem extends createSystem({}) {
 
   // ---------------------------------------------------------------- fight
 
-  /** Where to stand: engage distance from your head, plus the current
-   *  footwork step in or out along the same line. */
-  private engagePoint(out: Vector3): Vector3 {
+  /** A spot `distance` from your head along the line to the creature, with a
+   *  lateral sway so it circles rather than standing on a rail. */
+  private engagePoint(out: Vector3, distance: number, lateral: number): Vector3 {
     out.copy(this.creature.position).sub(_head);
     out.y = 0;
     if (out.lengthSq() < 1e-4) out.set(0, 0, -1);
-    out.normalize().multiplyScalar(Math.max(0.55, ARENA.engageDistance + this.stepOffset));
+    out.normalize();
+    // Perpendicular (in the floor plane) for the sidestep.
+    const px = -out.z;
+    const pz = out.x;
+    out.multiplyScalar(distance);
+    out.x += px * lateral;
+    out.z += pz * lateral;
     out.add(_head);
     out.y = 0;
     return out;
@@ -215,6 +220,7 @@ export class CreatureSystem extends createSystem({}) {
     const c = this.creature;
     const diff = currentDifficulty();
     c.tempoScale = diff.tempoScale;
+    this.sway += delta;
 
     // REALLY hurt? It loses its shape — once per round it collapses into an
     // exhausted glob and lies there taking double damage. The finisher.
@@ -232,6 +238,8 @@ export class CreatureSystem extends createSystem({}) {
       return;
     }
 
+    const lateral = Math.sin(this.sway * 0.7) * 0.35;
+
     switch (this.mood) {
       case 'wander': // entering the fight from the lobby
         this.setMood('fight');
@@ -239,55 +247,53 @@ export class CreatureSystem extends createSystem({}) {
 
       case 'fight': {
         c.setFormTarget(1);
+        const committed = c.isPunching || this.comboQueue.length > 0;
 
-        // Footwork: pick a new step (in, out, or hold) every second or so.
-        this.stepTimer -= delta;
-        if (this.stepTimer <= 0) {
-          this.stepTimer = 0.9 + Math.random() * 1.3;
-          const r = Math.random();
-          this.stepOffset = r < 0.34 ? -0.32 : r < 0.62 ? 0.28 : 0;
-        }
-        c.moveTo(this.engagePoint(_v));
+        if (committed) {
+          // In a combo: LURCH to strike range and keep swinging.
+          c.moveSpeedScale = 2.6;
+          c.moveTo(this.engagePoint(_v, ARENA.strikeDistance, lateral * 0.3));
 
-        // Stagger: eat a burst of damage mid-combo and it wobbles off it.
-        if (this.comboQueue.length > 0 && this.hpAtCombo - match.creatureHp >= BRAIN.staggerDamage) {
-          this.comboQueue = [];
-          c.setFormTarget(1); // stays on its feet — just rocked
-          this.setMood('staggered', 1.1);
-          break;
-        }
-
-        // Combos, with breathing room between them (difficulty paces it).
-        if (!c.isPunching) {
-          if (this.comboQueue.length > 0) {
+          // Stagger: eat a burst of damage mid-combo and it rocks off it.
+          if (this.hpAtCombo - match.creatureHp >= BRAIN.staggerDamage) {
+            this.comboQueue = [];
+            this.setMood('staggered', 1.1);
+            break;
+          }
+          if (!c.isPunching) {
             const next = this.comboQueue.shift()!;
             const hand = this.handFor(next);
-            c.throwAttack(next, hand, _head, (limbWorld) => this.resolveCreatureHit(next, limbWorld));
-          } else {
-            this.comboRest -= delta;
-            if (this.comboRest <= 0) {
-              this.comboQueue = this.pickCombo();
-              this.hpAtCombo = match.creatureHp;
-              this.comboRest = (0.7 + Math.random() * 1.5) * diff.roamScale;
-              this.stepOffset = -0.25; // step IN behind the first strike
-              this.stepTimer = 1.2;
-              c.moveTo(this.engagePoint(_v));
-            }
+            c.throwAttack(next, hand, _head, (limbWorld, apexHand) =>
+              this.resolveCreatureHit(next, limbWorld, apexHand),
+            );
+          }
+        } else {
+          // Out of a combo: hold at RANGE, circling, winding down the dash.
+          c.moveSpeedScale = 1.5;
+          c.moveTo(this.engagePoint(_v, ARENA.rangeDistance, lateral));
+          this.comboRest -= delta;
+          if (this.comboRest <= 0) {
+            this.comboQueue = this.pickCombo();
+            this.hpAtCombo = match.creatureHp;
+            // Longer gaps = more range time; difficulty tightens them.
+            this.comboRest = (1.4 + Math.random() * 2.0) * diff.roamScale;
           }
         }
         break;
       }
 
       case 'staggered':
-        c.moveTo(this.engagePoint(_v));
+        c.moveSpeedScale = 1.2;
+        c.moveTo(this.engagePoint(_v, ARENA.rangeDistance, lateral));
         if (this.moodT > this.moodDuration) {
-          this.comboRest = 0.5;
+          this.comboRest = 0.6;
           this.setMood('fight');
         }
         break;
 
       case 'exhausted':
         // A quivering puddle where it fell. Finish it.
+        c.moveSpeedScale = 1;
         c.moveTo(c.position);
         c.sim.agitation = Math.max(c.sim.agitation, 0.55);
         if (this.moodT > this.moodDuration) {
@@ -320,19 +326,50 @@ export class CreatureSystem extends createSystem({}) {
     return hand;
   }
 
-  /** Full extension: did the striking blob actually reach your head? */
-  private resolveCreatureHit(name: AttackName, limbWorld: Vector3): void {
+  /**
+   * Full extension. Did it reach you — and if so, was a glove in the way?
+   * Blocking is spatial: a glove parked on the spot his fist lands stops it.
+   * A head-high guard covers straights/hooks/overhands; the uppercut comes
+   * up UNDER it and the body roundhouse comes around it, so you have to read
+   * him. Either way you SEE the contact (a goo flash there) and FEEL it (the
+   * hand that blocked, or both when it lands clean).
+   */
+  private resolveCreatureHit(name: AttackName, limbWorld: Vector3, apexHand: Hand): void {
+    if (match.phase !== 'fighting') {
+      gooWhiff();
+      return;
+    }
     const spec = ATTACKS[name];
     this.playerHead(_v);
-    if (limbWorld.distanceTo(_v) < spec.hitRadius && match.phase === 'fighting') {
-      match.playerHp = Math.max(0, match.playerHp - spec.damage * currentDifficulty().damageScale);
+    if (limbWorld.distanceTo(_v) >= spec.hitRadius) {
+      gooWhiff();
+      return;
+    }
+
+    // Is a glove on the impact point?
+    const dL = player.gloves.left.distanceTo(limbWorld);
+    const dR = player.gloves.right.distanceTo(limbWorld);
+    const blockHand: Hand | null = Math.min(dL, dR) < BLOCK.radius ? (dL < dR ? 'left' : 'right') : null;
+    const diffScale = currentDifficulty().damageScale;
+
+    if (blockHand) {
+      // BLOCKED — a slap of chip damage leaks, the rest is stopped dead.
+      match.playerHp = Math.max(0, match.playerHp - spec.damage * diffScale * BLOCK.chip);
+      match.boardDirty = true;
+      gooBlock();
+      this.fx.flash(limbWorld, 0xbfffca, 0.3); // white-green on the glove
+      pulseHand(this.world.session, blockHand, 0.8, 90);
+    } else {
+      // CLEAN HIT — full damage, red splat where it landed, both hands jolt.
+      match.playerHp = Math.max(0, match.playerHp - spec.damage * diffScale);
       match.playerFlash = 1;
       match.boardDirty = true;
       gooSlam();
+      this.fx.flash(limbWorld, 0xff5a3c, 0.36);
+      this.fx.burst(limbWorld, _v.copy(limbWorld).sub(this.creature.position).normalize(), 10, 3);
       pulseHand(this.world.session, 'left', 1, 220);
       pulseHand(this.world.session, 'right', 1, 220);
-    } else {
-      gooWhiff();
     }
+    void apexHand;
   }
 }

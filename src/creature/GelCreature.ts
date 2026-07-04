@@ -44,7 +44,7 @@ interface ActiveAttack {
   target: Vector3;
   apexFired: boolean;
   whooshFired: boolean;
-  onApex?: (limbWorld: Vector3) => void;
+  onApex?: (limbWorld: Vector3, hand: Hand) => void;
   onDone?: () => void;
 }
 
@@ -108,6 +108,8 @@ export class GelCreature {
   tempoScale = 1;
   /** True while it's an exhausted puddle — hits do double (see EXHAUST). */
   vulnerable = false;
+  /** Movement urgency: 1 = ooze, higher = lurch (the AI dashes in to strike). */
+  moveSpeedScale = 1;
 
   private attack: ActiveAttack | null = null;
   /** Extra body yaw layered over face-tracking — the spinning backfist. */
@@ -257,7 +259,7 @@ export class GelCreature {
     name: AttackName,
     hand: Hand,
     targetWorld: Vector3,
-    onApex?: (limbWorld: Vector3) => void,
+    onApex?: (limbWorld: Vector3, hand: Hand) => void,
     onDone?: () => void,
   ): boolean {
     if (this.attack || this.koTarget > 0 || this.form < 0.7) return false;
@@ -324,8 +326,8 @@ export class GelCreature {
     this.sim.form = this.form;
     this.sim.ko = this.koVal;
 
-    // --- root motion: ooze toward the steering target ---
-    const speed = this.koTarget > 0 ? 0 : 0.45 + this.form * 0.4;
+    // --- root motion: ooze (or lurch) toward the steering target ---
+    const speed = this.koTarget > 0 ? 0 : (0.5 + this.form * 0.4) * this.moveSpeedScale;
     _v.copy(this.rootTarget).sub(this.group.position);
     _v.y = 0;
     const dist = _v.length();
@@ -618,7 +620,7 @@ export class GelCreature {
         _v3.set(this._pin.x, this._pin.y, this._pin.z);
         this.group.updateMatrixWorld();
         this.group.localToWorld(_v3);
-        a.onApex?.(_v3);
+        a.onApex?.(_v3, a.hand);
       }
     } else if (a.t < T + S + R) {
       // ---- recover: hand the extended limb back to the springs ----

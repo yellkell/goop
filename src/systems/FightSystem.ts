@@ -31,7 +31,7 @@ import {
   ROUNDS_TO_WIN,
   type RoundWinner,
 } from '../state.js';
-import { WallBoard, WristHud } from '../ui/hud.js';
+import { WallBoard } from '../ui/hud.js';
 
 const BEATS: Call[] = ['3', '2', '1', 'fight'];
 const VERDICT_SECONDS = 5.5;
@@ -53,7 +53,6 @@ function vignetteTexture(): CanvasTexture {
 
 export class FightSystem extends createSystem({}) {
   private board!: WallBoard;
-  private wrist?: WristHud;
   private lastBeat = -1;
   private vignette?: Mesh;
 
@@ -61,15 +60,6 @@ export class FightSystem extends createSystem({}) {
     this.board = new WallBoard();
     this.board.group.position.set(ARENA.wall[0], ARENA.wall[1], ARENA.wall[2]);
     this.scene.add(this.board.group);
-  }
-
-  /** The wrist HUD needs a live left grip — attach the first time it shows. */
-  private ensureWrist(): void {
-    if (this.wrist) return;
-    const grip = this.world.playerSpaceEntities.gripSpaces.left?.object3D;
-    if (!grip) return;
-    this.wrist = new WristHud();
-    grip.add(this.wrist.mesh);
   }
 
   private ensureVignette(): void {
@@ -174,8 +164,6 @@ export class FightSystem extends createSystem({}) {
       }
     }
 
-    this.ensureWrist();
-    this.wrist?.update();
     this.board.update();
   }
 

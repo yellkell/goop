@@ -59,7 +59,7 @@ World.create(container, {
   // Quest fill-rate relief: the raymarched gel is fragment-bound, so trade
   // a hair of resolution for frame rate, and let the edges of the eye buffer
   // render cheaper (foveation) — invisible in-lens, big GPU win.
-  world.renderer.xr.setFramebufferScaleFactor(0.85);
+  world.renderer.xr.setFramebufferScaleFactor(0.72);
   world.renderer.xr.setFoveation(1);
 
   // Soft room-ish light so the fists and scoreboard read in passthrough.

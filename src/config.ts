@@ -15,10 +15,20 @@ export const ARENA = {
   spawn: [0, 0, -1.9] as const,
   /** The creature roams inside this radius around its spawn point. */
   roamRadius: 1.1,
-  /** It tries to keep about this distance from your head while brawling. */
-  engageDistance: 0.95,
+  /** Out-fighter spacing: it holds at `rangeDistance` and only lurches in to
+   *  `strikeDistance` for a combo, then backs off again. */
+  rangeDistance: 1.7,
+  strikeDistance: 0.92,
   /** The wall board: the whole HUD, mounted behind the creature's corner. */
   wall: [0, 1.8, -3.3] as const,
+};
+
+/** Your defence. Raise a glove onto the spot his fist lands and it's blocked. */
+export const BLOCK = {
+  /** A glove within this of the strike's impact point stops it. */
+  radius: 0.26,
+  /** Chip damage that still leaks through a block (fraction of the hit). */
+  chip: 0.12,
 };
 
 /** The creature's body plan. */
@@ -140,7 +150,7 @@ export const GEL_LOOK = {
   /** Eye flash colour during a punch telegraph. */
   telegraphColor: 0xffb03a,
   /** Raymarch step cap (the single biggest perf knob on Quest). */
-  maxSteps: 26,
+  maxSteps: 22,
   /** Surface wobble amplitude at rest / when agitated. */
   wobble: 0.010,
   wobbleAgitated: 0.028,

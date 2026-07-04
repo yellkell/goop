@@ -216,6 +216,13 @@ export function gooWhiff(): void {
   whooshNoise(0.22, 0.16, 900, 220);
 }
 
+/** You blocking its strike on your gloves — a dull absorbed slap, no sting. */
+export function gooBlock(): void {
+  whooshNoise(0.08, 0.2, 380, 120);
+  tone({ freq: 120, to: 60, type: 'triangle', dur: 0.1, gain: 0.2 });
+  bubble(240, 0.05, 0.03);
+}
+
 /** The spinning backfist — a long sweeping rotor of air and slime. */
 export function spinWhoosh(): void {
   whooshNoise(0.4, 0.22, 180, 1300);

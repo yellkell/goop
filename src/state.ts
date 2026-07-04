@@ -5,6 +5,7 @@
  * FightSystem referees the numbers into phases and verdicts.
  */
 
+import { Vector3 } from 'three';
 import { COMBAT } from './config.js';
 import type { GelCreature } from './creature/GelCreature.js';
 
@@ -94,6 +95,19 @@ export function resetForMatch(): void {
   match.verdict = '';
   match.verdictT = 0;
 }
+
+/**
+ * The player's live pose, written by FistSystem each frame and read by
+ * CreatureSystem when it resolves a strike — so blocking can ask "was a
+ * glove on the spot his fist landed?". World-space metres.
+ */
+export const player = {
+  head: new Vector3(0, 1.6, 0),
+  gloves: {
+    left: new Vector3(),
+    right: new Vector3(),
+  },
+};
 
 /** The one creature, shared between systems (CreatureSystem owns it). */
 let creature: GelCreature | null = null;

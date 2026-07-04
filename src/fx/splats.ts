@@ -15,18 +15,37 @@ import {
   BufferAttribute,
   BufferGeometry,
   CanvasTexture,
+  Color,
   Group,
   Mesh,
   MeshBasicMaterial,
   PlaneGeometry,
   Points,
   PointsMaterial,
+  Sprite,
+  SpriteMaterial,
   Vector3,
 } from 'three';
 
 const MAX_SPLATS = 14;
 const MAX_DROPS = 96;
 const DROP_LIFE = 0.85;
+const MAX_FLASHES = 12;
+const FLASH_LIFE = 0.36;
+
+/** Soft radial dot for impact/block flashes. */
+function flashTexture(): CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d')!;
+  const grad = g.createRadialGradient(32, 32, 1, 32, 32, 31);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.4, 'rgba(255,255,255,0.6)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  return new CanvasTexture(c);
+}
 
 function splatTexture(): CanvasTexture {
   const c = document.createElement('canvas');
@@ -74,6 +93,11 @@ export class GooFx {
   private dropGeo: BufferGeometry;
   private dropCursor = 0;
 
+  private flashes: Sprite[] = [];
+  private flashAge: number[] = [];
+  private flashSize: number[] = [];
+  private flashCursor = 0;
+
   constructor() {
     this.group.name = 'goo-fx';
 
@@ -113,6 +137,39 @@ export class GooFx {
     this.drops.frustumCulled = false;
     this.drops.renderOrder = 3;
     this.group.add(this.drops);
+
+    // Impact / block flashes — camera-facing sprites, so no billboard math.
+    const flashTex = flashTexture();
+    for (let i = 0; i < MAX_FLASHES; i++) {
+      const mat = new SpriteMaterial({
+        map: flashTex,
+        transparent: true,
+        depthWrite: false,
+        depthTest: false,
+        blending: AdditiveBlending,
+        opacity: 0,
+      });
+      const sp = new Sprite(mat);
+      sp.visible = false;
+      sp.renderOrder = 20;
+      this.group.add(sp);
+      this.flashes.push(sp);
+      this.flashAge.push(FLASH_LIFE + 1);
+      this.flashSize.push(0.3);
+    }
+  }
+
+  /** A burst of light at a world point — his fist connecting, or your
+   *  glove stopping it. `color` is 0xRRGGBB, `size` the world radius. */
+  flash(worldPos: Vector3, color: number, size: number): void {
+    const i = this.flashCursor % MAX_FLASHES;
+    this.flashCursor++;
+    const sp = this.flashes[i];
+    sp.position.copy(worldPos);
+    (sp.material as SpriteMaterial).color = new Color(color);
+    sp.visible = true;
+    this.flashAge[i] = 0;
+    this.flashSize[i] = size;
   }
 
   /** Stamp a floor splat at a world position. */
@@ -174,5 +231,19 @@ export class GooFx {
       }
     }
     if (any) (this.dropGeo.getAttribute('position') as BufferAttribute).needsUpdate = true;
+
+    for (let i = 0; i < MAX_FLASHES; i++) {
+      if (this.flashAge[i] > FLASH_LIFE) continue;
+      this.flashAge[i] += dt;
+      const t = this.flashAge[i] / FLASH_LIFE;
+      if (t >= 1) {
+        this.flashes[i].visible = false;
+        continue;
+      }
+      const sp = this.flashes[i];
+      const s = this.flashSize[i] * (0.6 + 0.8 * t); // pops outward
+      sp.scale.set(s, s, s);
+      (sp.material as SpriteMaterial).opacity = (1 - t) * (1 - t);
+    }
   }
 }

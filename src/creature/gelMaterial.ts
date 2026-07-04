@@ -181,8 +181,8 @@ const FRAG = /* glsl */ `
       if (i >= uSteps) break;
       p = ro + rd * t;
       d = field(p);
-      if (d < max(0.0016, t * 0.0035)) { hit = true; break; }
-      t += d * 0.95;
+      if (d < max(0.0018, t * 0.004)) { hit = true; break; }
+      t += d; // full-distance steps; the grazing fallback below forgives overshoot
       if (t > tEnd) break;
     }
     // Step-budget mercy: a ray that spent its steps GRAZING the surface
