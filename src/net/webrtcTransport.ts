@@ -42,14 +42,9 @@ import {
 import { firebaseConfig } from './firebaseConfig.js';
 import { serverNow, syncServerClock } from './serverClock.js';
 import { voiceEnabled } from '../audio/voicePref.js';
+import { ensureIceServers, iceConfig } from './iceConfig.js';
 import type { PeerMessage } from './protocol.js';
 import type { Transport, TransportEvents } from './transport.js';
-
-const ICE_SERVERS: RTCConfiguration = {
-  iceServers: [
-    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
-  ],
-};
 
 /** A host lobby not SEEN (heartbeat) within this is an abandoned tab — skip it.
  *  Short, because a live host heartbeats every HOST_TICK_MS; this is just how
@@ -241,7 +236,9 @@ export class WebRtcTransport implements Transport {
 
   /** Build the peer connection + voice. Returns false if cancelled meanwhile. */
   private async setupConnection(): Promise<boolean> {
-    this.pc = new RTCPeerConnection(ICE_SERVERS);
+    await ensureIceServers(); // fetch/refresh TURN creds before the PC is built
+    if (this.closed) return false;
+    this.pc = new RTCPeerConnection(iceConfig());
     this.watchConnection();
     await this.setupVoice();
     return !this.closed;

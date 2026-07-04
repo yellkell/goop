@@ -30,13 +30,11 @@ import {
 } from 'firebase/firestore';
 import { firebaseConfig } from './firebaseConfig.js';
 import { voiceEnabled } from '../audio/voicePref.js';
+import { ensureIceServers, iceConfig } from './iceConfig.js';
 import type { ArcadeMode } from '../config.js';
 import type { PeerMessage } from './protocol.js';
 import type { MeshState } from './mesh.js';
 
-const ICE_SERVERS: RTCConfiguration = {
-  iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }],
-};
 const ROOM_FRESH_MS = 3 * 60 * 1000;
 const CAPACITY: Record<ArcadeMode, number> = { '1v1': 2, '2v2': 4, ffa: 4, raid: 4 };
 
@@ -367,7 +365,7 @@ export class MeshImpl {
   }
 
   private newPeer(seat: number): Peer {
-    const pc = new RTCPeerConnection(ICE_SERVERS);
+    const pc = new RTCPeerConnection(iceConfig());
     const peer: Peer = { seat, pc, evt: null, pose: null, unsubs: [], pending: [] };
     this.peers.set(seat, peer);
     pc.onconnectionstatechange = () => {
@@ -430,6 +428,8 @@ export class MeshImpl {
   }
 
   private async connectAsOfferer(seat: number): Promise<void> {
+    await ensureIceServers(); // TURN creds ready before the PC is built
+    if (this.closed || this.peers.has(seat)) return;
     const peer = this.newPeer(seat);
     const pc = peer.pc;
     this.adopt(
@@ -465,6 +465,8 @@ export class MeshImpl {
   }
 
   private async connectAsAnswerer(seat: number): Promise<void> {
+    await ensureIceServers(); // TURN creds ready before the PC is built
+    if (this.closed || this.peers.has(seat)) return;
     const peer = this.newPeer(seat);
     const pc = peer.pc;
     pc.ondatachannel = (ev) => {
