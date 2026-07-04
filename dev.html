@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GOOP — creature workbench</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #14161a;
+        font-family: system-ui, sans-serif;
+      }
+      canvas {
+        display: block;
+      }
+      #hud {
+        position: fixed;
+        top: 10px;
+        left: 12px;
+        color: #9fe8a8;
+        font-size: 12px;
+        line-height: 1.6;
+        user-select: none;
+        pointer-events: none;
+        text-shadow: 0 1px 3px #000;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="hud">
+      GOOP creature workbench<br />
+      drag: orbit &middot; wheel: zoom &middot; click creature: punch it<br />
+      [1] glob &middot; [2] humanoid &middot; [3] throw punch &middot; [4] auto-spar &middot; [5] KO
+    </div>
+    <script type="module" src="/src/dev/devMain.ts"></script>
+  </body>
+</html>

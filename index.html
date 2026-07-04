@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>GOOP</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #0a120b;
+        font-family: system-ui, -apple-system, sans-serif;
+      }
+      #scene-container {
+        position: fixed;
+        inset: 0;
+        width: 100vw;
+        height: 100vh;
+        background:
+          radial-gradient(circle at 70% 30%, rgba(70, 220, 90, 0.18), transparent 34rem),
+          linear-gradient(135deg, #060a06 0%, #0b140c 55%, #10240f 100%);
+      }
+      .landing {
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+        display: grid;
+        align-items: center;
+        padding: clamp(24px, 7vw, 96px);
+        box-sizing: border-box;
+        color: #eef7ea;
+        background:
+          linear-gradient(90deg, rgba(3, 7, 4, 0.94) 0%, rgba(3, 7, 4, 0.72) 48%, rgba(3, 7, 4, 0.24) 100%),
+          linear-gradient(180deg, rgba(74, 222, 96, 0.16) 0%, rgba(74, 222, 96, 0) 44%);
+        transition:
+          opacity 220ms ease,
+          visibility 220ms ease;
+      }
+      /* A slow ooze of blob shadows drifting behind the copy. */
+      .landing::after {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        background:
+          radial-gradient(ellipse 34rem 22rem at 82% 78%, rgba(84, 240, 110, 0.10), transparent 70%),
+          radial-gradient(ellipse 22rem 30rem at 88% 26%, rgba(84, 240, 110, 0.07), transparent 70%);
+        animation: ooze 9s ease-in-out infinite alternate;
+      }
+      @keyframes ooze {
+        from {
+          transform: translateY(-1.5%) scale(1);
+        }
+        to {
+          transform: translateY(2.5%) scale(1.06);
+        }
+      }
+      .landing__content {
+        position: relative;
+        z-index: 1;
+        max-width: 640px;
+      }
+      .landing__title {
+        margin: 0 0 30px;
+        color: #6dff7e;
+        font-size: clamp(3.6rem, 10vw, 8.5rem);
+        font-weight: 800;
+        line-height: 0.9;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+        text-shadow: 0 0 42px rgba(96, 255, 120, 0.35);
+      }
+      .landing__subtitle {
+        margin: -16px 0 34px;
+        color: rgba(238, 247, 234, 0.82);
+        font-size: clamp(1.1rem, 2.6vw, 1.9rem);
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+      .landing__blurb {
+        margin: 0 0 40px;
+        color: rgba(238, 247, 234, 0.62);
+        font-size: clamp(0.98rem, 1.7vw, 1.15rem);
+        line-height: 1.55;
+        max-width: 480px;
+      }
+      .enter-vr {
+        width: min(100%, 300px);
+        padding: 18px 22px;
+        border: 1px solid rgba(109, 255, 126, 0.55);
+        border-radius: 14px;
+        background: linear-gradient(180deg, rgba(46, 160, 62, 0.85), rgba(24, 96, 36, 0.9));
+        color: #f2fff0;
+        font-size: 1.15rem;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        cursor: pointer;
+        transition:
+          transform 120ms ease,
+          box-shadow 120ms ease;
+        box-shadow: 0 6px 34px rgba(74, 222, 96, 0.25);
+      }
+      .enter-vr:hover:not([disabled]) {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 44px rgba(74, 222, 96, 0.4);
+      }
+      .enter-vr[disabled] {
+        opacity: 0.45;
+        cursor: default;
+      }
+      .landing__hint {
+        margin: 18px 0 0;
+        color: rgba(238, 247, 234, 0.45);
+        font-size: 0.85rem;
+        letter-spacing: 0.04em;
+      }
+      body.app-entered .landing {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="scene-container"></div>
+    <div class="landing">
+      <div class="landing__content">
+        <h1 class="landing__title">Goop</h1>
+        <p class="landing__subtitle">It reforms. You re-punch.</p>
+        <p class="landing__blurb">
+          A man-sized blob of living gel oozes into your room, pulls itself into a boxer's
+          shape and starts swinging. Knock lumps out of it, watch them crawl back home, and
+          put the whole puddle down before the bell.
+        </p>
+        <button id="enter-vr" class="enter-vr" type="button">Enter the Ring</button>
+        <p class="landing__hint">Quest 3 / 3S &middot; passthrough &middot; controllers in hand</p>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
