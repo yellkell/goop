@@ -243,7 +243,7 @@ export class GelCreature {
     const shoulder = hand === 'left' ? BOXER_POSE[A.SHOULDER_L] : BOXER_POSE[A.SHOULDER_R];
     _v.set(target.x - shoulder[0], target.y - shoulder[1], target.z - shoulder[2]);
     const reach = _v.length();
-    const maxReach = 1.15;
+    const maxReach = 1.35;
     if (reach > maxReach) {
       _v.multiplyScalar(maxReach / reach);
       target.set(shoulder[0] + _v.x, shoulder[1] + _v.y, shoulder[2] + _v.z);
@@ -371,11 +371,13 @@ export class GelCreature {
     this.sim.offsets.fill(0);
     this.sim.radiusScale.fill(1);
     if (!p) {
+      this.sim.pinIndex = -1;
       this.telegraph = Math.max(0, this.telegraph - dt * 6);
       return;
     }
 
     p.t += dt;
+    this.sim.pinIndex = -1; // strike phase below re-pins each frame
     // Difficulty stretches/squeezes the readable parts; the strike itself
     // stays snappy at every level (a slow punch never looks like a punch).
     const T = BRAIN.telegraph * this.tempoScale;
@@ -400,17 +402,26 @@ export class GelCreature {
       swell = 1 + 0.45 * k;
       this.telegraph = Math.min(1, this.telegraph + dt * 3.5);
     } else if (p.t < T + S) {
-      // The strike: launch to full extension.
+      // The strike: launch to full extension. The fist blob is PINNED to the
+      // kinematic arc — a spring can't chase a 0.17 s punch, so without this
+      // the visible fist arrives after the hit check and every swing whiffs.
       const k = easeOutCubic((p.t - T) / S);
       fx = _v.x * k;
       fy = _v.y * k;
       fz = _v.z * k;
       swell = 1.45;
+      this.sim.pinIndex = fistI;
+      this.sim.pinPos.x = base[0] + fx;
+      this.sim.pinPos.y = base[1] + fy;
+      this.sim.pinPos.z = base[2] + fz;
       this.telegraph = Math.max(0, this.telegraph - dt * 10);
       if (!p.apexFired && k > 0.9) {
         p.apexFired = true;
         sfx.gooWhoosh();
-        this.fistWorld(p.hand, _v3);
+        // Report the PIN target (full extension), not last frame's blob.
+        _v3.set(base[0] + _v.x, base[1] + _v.y, base[2] + _v.z);
+        this.group.updateMatrixWorld();
+        this.group.localToWorld(_v3);
         p.onApex?.(_v3);
       }
     } else if (p.t < T + S + R) {

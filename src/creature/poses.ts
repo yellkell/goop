@@ -35,11 +35,9 @@ export const A = {
   BASE_R: 17,
   BASE_F: 18,
   BASE_B: 19,
-  CORE_A: 20,
-  CORE_B: 21,
 } as const;
 
-export const ANCHOR_COUNT = 22;
+export const ANCHOR_COUNT = 20;
 
 /** [x, y, z, radius] per anchor. */
 export type Pose = ReadonlyArray<readonly [number, number, number, number]>;
@@ -51,9 +49,9 @@ export type Pose = ReadonlyArray<readonly [number, number, number, number]>;
 export const BOXER_POSE: Pose = [
   [0.0, 1.6, 0.02, 0.155], // HEAD
   [0.0, 1.42, 0.01, 0.125], // NECK
-  [-0.13, 1.27, 0.02, 0.165], // CHEST_L
-  [0.13, 1.27, 0.02, 0.165], // CHEST_R
-  [0.0, 1.02, 0.03, 0.195], // BELLY
+  [-0.13, 1.27, 0.02, 0.175], // CHEST_L
+  [0.13, 1.27, 0.02, 0.175], // CHEST_R
+  [0.0, 1.02, 0.03, 0.215], // BELLY
   [0.0, 0.78, 0.0, 0.185], // PELVIS
   [-0.27, 1.37, 0.02, 0.125], // SHOULDER_L
   [0.27, 1.37, 0.02, 0.125], // SHOULDER_R
@@ -69,8 +67,6 @@ export const BOXER_POSE: Pose = [
   [0.23, 0.14, 0.0, 0.17], // BASE_R
   [0.0, 0.12, 0.21, 0.19], // BASE_F
   [0.0, 0.12, -0.18, 0.19], // BASE_B
-  [-0.05, 1.15, -0.04, 0.13], // CORE_A — interior filler, keeps the torso dense
-  [0.06, 0.92, -0.03, 0.13], // CORE_B
 ];
 
 /**
@@ -80,9 +76,9 @@ export const BOXER_POSE: Pose = [
 export const GLOB_POSE: Pose = [
   [0.0, 0.72, 0.05, 0.17], // HEAD — the crown of the dome
   [-0.18, 0.58, -0.12, 0.16], // NECK
-  [-0.3, 0.35, 0.12, 0.21], // CHEST_L
-  [0.28, 0.38, 0.1, 0.21], // CHEST_R
-  [0.0, 0.3, 0.0, 0.27], // BELLY — the fat heart of the puddle
+  [-0.3, 0.35, 0.12, 0.22], // CHEST_L
+  [0.28, 0.38, 0.1, 0.22], // CHEST_R
+  [0.0, 0.3, 0.0, 0.29], // BELLY — the fat heart of the puddle
   [0.05, 0.5, -0.18, 0.22], // PELVIS
   [-0.35, 0.2, -0.18, 0.18], // SHOULDER_L
   [0.4, 0.22, -0.12, 0.18], // SHOULDER_R
@@ -98,8 +94,6 @@ export const GLOB_POSE: Pose = [
   [0.45, 0.13, 0.0, 0.19], // BASE_R
   [0.02, 0.13, 0.42, 0.2], // BASE_F
   [0.0, 0.14, -0.42, 0.2], // BASE_B
-  [-0.1, 0.4, -0.05, 0.18], // CORE_A
-  [0.12, 0.35, 0.08, 0.18], // CORE_B
 ];
 
 /**

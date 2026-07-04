@@ -230,7 +230,8 @@ export class CreatureSystem extends createSystem({}) {
   /** Full extension: did the gel fist actually reach your head? */
   private resolveCreaturePunch(fistWorld: Vector3): void {
     this.playerHead(_v);
-    if (fistWorld.distanceTo(_v) < 0.38 && match.phase === 'fighting') {
+    // Head sphere ~0.11 + swollen fist ~0.18: 0.45 is an honest contact.
+    if (fistWorld.distanceTo(_v) < 0.45 && match.phase === 'fighting') {
       match.playerHp = Math.max(0, match.playerHp - COMBAT.creaturePunchDamage * currentDifficulty().damageScale);
       match.playerFlash = 1;
       match.boardDirty = true;

@@ -78,16 +78,15 @@ const FRAG = /* glsl */ `
     return mix(b, a, h) - k * h * (1.0 - h);
   }
 
-  // Cheap organic wobble: three drifting trig waves, no texture fetches.
+  // Cheap organic wobble: one drifting trig wave, no texture fetches.
   float wobble(vec3 p, float amp) {
-    float w = sin(p.x * 7.3 + uTime * 2.1) * sin(p.y * 6.1 - uTime * 1.6) * sin(p.z * 7.9 + uTime * 2.6);
-    w += 0.5 * sin(p.x * 14.1 - uTime * 3.2) * sin(p.y * 12.7 + uTime * 2.4) * sin(p.z * 13.3 - uTime * 2.9);
-    return w * amp;
+    return sin(p.x * 7.3 + uTime * 2.1) * sin(p.y * 6.1 - uTime * 1.6) * sin(p.z * 7.9 + uTime * 2.6) * amp;
   }
 
-  // The gel field. Negative inside. detail=false skips wobble + dents for
-  // the cheap interior samples (thickness / nucleus probes).
-  float field(vec3 p, bool detail) {
+  // The march field: smooth-min over the blobs, dents carved out, wobble
+  // applied only within reach of the surface (transcendentals are the
+  // second-biggest per-step cost after the blob loop itself).
+  float field(vec3 p) {
     float d = 1e5;
     for (int i = 0; i < ${MAX_BLOBS}; i++) {
       if (i >= uCount) break;
@@ -96,37 +95,63 @@ const FRAG = /* glsl */ `
       // Far blobs can't affect the blend — plain min is cheaper and identical.
       d = (di - d > uBlend * 2.0) ? d : smin(d, di, uBlend);
     }
-    if (detail) {
-      for (int j = 0; j < ${MAX_DENTS}; j++) {
-        if (j >= uDentCount) break;
-        vec4 n = uDents[j];
-        d = -smin(-d, length(p - n.xyz) - n.w, 0.1);
-      }
-      float amp = mix(uWobble, uWobbleAgitated, uAgitation);
-      d -= wobble(p, amp);
+    for (int j = 0; j < ${MAX_DENTS}; j++) {
+      if (j >= uDentCount) break;
+      vec4 n = uDents[j];
+      d = -smin(-d, length(p - n.xyz) - n.w, 0.1);
+    }
+    if (d < 0.12) {
+      d -= wobble(p, mix(uWobble, uWobbleAgitated, uAgitation));
     }
     return d;
   }
 
-  // The denser inner slime: same blobs, ~55% radius, softer fuse.
-  float nucleusField(vec3 p) {
+  // Interior probe: blobs only, no dents, no wobble — for thickness.
+  float fieldCheap(vec3 p) {
     float d = 1e5;
     for (int i = 0; i < ${MAX_BLOBS}; i++) {
       if (i >= uCount) break;
       vec4 b = uBlobs[i];
-      d = smin(d, length(p - b.xyz) - b.w * 0.55, uBlend * 1.4);
+      float di = length(p - b.xyz) - b.w;
+      d = (di - d > uBlend * 2.0) ? d : smin(d, di, uBlend);
     }
     return d;
   }
 
-  vec3 fieldNormal(vec3 p, float t) {
-    float h = 0.004 + t * 0.0015;
-    const vec2 k = vec2(1.0, -1.0);
-    return normalize(
-      k.xyy * field(p + k.xyy * h, true) +
-      k.yyx * field(p + k.yyx * h, true) +
-      k.yxy * field(p + k.yxy * h, true) +
-      k.xxx * field(p + k.xxx * h, true));
+  // Field + ANALYTIC gradient in one pass — replaces the 4-sample
+  // tetrahedral normal (4 full blob loops) with ~1.3 loops. The gradient of
+  // a sequential polynomial smooth-min is approximated by blending the
+  // per-sphere gradients with the same weights as the distances; the
+  // dropped dh terms are visually invisible on a surface this soft.
+  float fieldGrad(vec3 p, out vec3 grad) {
+    float d = 1e5;
+    grad = vec3(0.0, 1.0, 0.0);
+    for (int i = 0; i < ${MAX_BLOBS}; i++) {
+      if (i >= uCount) break;
+      vec4 b = uBlobs[i];
+      vec3 diff = p - b.xyz;
+      float len = max(length(diff), 1e-5);
+      float di = len - b.w;
+      if (di - d > uBlend * 2.0) continue;
+      float h = clamp(0.5 + 0.5 * (d - di) / uBlend, 0.0, 1.0);
+      grad = mix(grad, diff / len, h);
+      d = mix(d, di, h) - uBlend * h * (1.0 - h);
+    }
+    for (int j = 0; j < ${MAX_DENTS}; j++) {
+      if (j >= uDentCount) break;
+      vec4 n = uDents[j];
+      vec3 diff = p - n.xyz;
+      float len = max(length(diff), 1e-5);
+      float cut = len - n.w;
+      // d' = -smin(-d, cut, k): blend toward the dent wall's inward normal.
+      float h = clamp(0.5 + 0.5 * (cut + d) / 0.1, 0.0, 1.0);
+      vec3 gneg = mix(diff / len, -grad, h);
+      float dneg = mix(cut, -d, h) - 0.1 * h * (1.0 - h);
+      d = -dneg;
+      grad = -gneg;
+    }
+    grad = normalize(grad);
+    return d;
   }
 
   // Ray vs the bounding AABB, in creature-local space.
@@ -155,42 +180,35 @@ const FRAG = /* glsl */ `
     for (int i = 0; i < 96; i++) {
       if (i >= uSteps) break;
       p = ro + rd * t;
-      d = field(p, true);
-      if (d < max(0.0016, t * 0.0022)) { hit = true; break; }
-      t += d * 0.92;
+      d = field(p);
+      if (d < max(0.0016, t * 0.0024)) { hit = true; break; }
+      t += d * 0.95;
       if (t > tEnd) break;
     }
     if (!hit) discard;
 
-    vec3 n = fieldNormal(p, t);
+    vec3 n;
+    fieldGrad(p, n);
     vec3 v = -rd;
     float ndv = max(dot(n, v), 0.0);
     float fresnel = pow(1.0 - ndv, 3.0);
 
     // ---- approximate thickness along the view ray ----
-    // Soft density accumulation (not binary inside/outside) so the alpha and
-    // absorption ramps are continuous — no onion-ring banding at the rim.
+    // Two soft density samples (not binary inside/outside) keep the alpha
+    // and absorption ramps continuous — no onion-ring banding at the rim.
     float thick = 0.0;
     {
-      const float steps = 4.0;
-      const float span = 0.42;
-      for (float s = 1.0; s <= steps; s += 1.0) {
-        float off = span * (s / steps);
-        float f = field(p + rd * off, false);
-        thick += clamp(-f / 0.09, 0.0, 1.0) * (span / steps);
-      }
+      float f1 = fieldCheap(p + rd * 0.13);
+      float f2 = fieldCheap(p + rd * 0.32);
+      thick += clamp(-f1 / 0.09, 0.0, 1.0) * 0.5;
+      thick += clamp(-f2 / 0.09, 0.0, 1.0) * 0.5;
     }
-    float thickN = clamp(thick / 0.42, 0.0, 1.0);
+    float thickN = clamp(thick, 0.0, 1.0);
 
-    // ---- nucleus glow: probe the dense inner field a bit inside ----
-    float nuc = 0.0;
-    {
-      vec3 q = p + rd * (0.06 + 0.16 * thickN);
-      float nd = nucleusField(q);
-      nuc = smoothstep(0.06, -0.1, nd);
-      // A slow internal churn so the core shimmers.
-      nuc *= 0.75 + 0.25 * sin(uTime * 1.7 + q.y * 9.0 + q.x * 7.0);
-    }
+    // ---- nucleus glow: the deep body shimmers (derived from thickness —
+    // a separate inner-field loop is a luxury Quest can't afford) ----
+    float nuc = smoothstep(0.35, 0.95, thickN);
+    nuc *= 0.7 + 0.3 * sin(uTime * 1.7 + p.y * 9.0 + p.x * 7.0);
 
     // ---- colour ----
     // Beer–Lambert-ish: thin edges show the bright shallow tint, deep body

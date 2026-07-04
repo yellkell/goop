@@ -56,6 +56,12 @@ World.create(container, {
     camera: { position: [0, 1.6, 0] },
   },
 }).then(async (world) => {
+  // Quest fill-rate relief: the raymarched gel is fragment-bound, so trade
+  // a hair of resolution for frame rate, and let the edges of the eye buffer
+  // render cheaper (foveation) — invisible in-lens, big GPU win.
+  world.renderer.xr.setFramebufferScaleFactor(0.9);
+  world.renderer.xr.setFoveation(1);
+
   // Soft room-ish light so the fists and scoreboard read in passthrough.
   const hemi = new HemisphereLight(0xdfe8dc, 0x24301f, 1.0);
   const key = new DirectionalLight(0xffffff, 0.55);

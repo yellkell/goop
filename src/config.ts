@@ -16,9 +16,7 @@ export const ARENA = {
   /** The creature roams inside this radius around its spawn point. */
   roamRadius: 1.1,
   /** It tries to keep about this distance from your head while brawling. */
-  engageDistance: 1.05,
-  /** Scoreboard position (floats up to the left of the creature). */
-  board: [-1.25, 1.85, -2.2] as const,
+  engageDistance: 0.95,
 };
 
 /** The creature's body plan. */
@@ -98,7 +96,7 @@ export const GEL_LOOK = {
   /** Eye flash colour during a punch telegraph. */
   telegraphColor: 0xffb03a,
   /** Raymarch step cap (the single biggest perf knob on Quest). */
-  maxSteps: 44,
+  maxSteps: 30,
   /** Surface wobble amplitude at rest / when agitated. */
   wobble: 0.010,
   wobbleAgitated: 0.028,

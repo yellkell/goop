@@ -32,6 +32,8 @@ import {
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GelCreature } from '../creature/GelCreature.js';
 import { GooFx } from '../fx/splats.js';
+import { match } from '../state.js';
+import { CreatureHud } from '../ui/hud.js';
 import { MenuPanel } from '../ui/menuPanel.js';
 
 declare global {
@@ -129,6 +131,7 @@ const shot = new URLSearchParams(location.search).get('shot');
 let shotClock = 0;
 let shotPunched = false;
 let menuPanel: MenuPanel | null = null;
+let hud: CreatureHud | null = null;
 
 function shotDirector(dt: number): boolean {
   shotClock += dt;
@@ -169,6 +172,24 @@ function shotDirector(dt: number): boolean {
       camera.position.set(1.2, 1.05, 1.9);
       controls.target.set(0, 0.25, 0);
       return shotClock > 2.5;
+    case 'hud': {
+      // Mid-fight framing: boxer form, status bar riding above it.
+      if (!hud) {
+        hud = new CreatureHud();
+        scene.add(hud.group);
+        match.phase = 'fighting';
+        match.creatureHp = 64;
+        match.playerHp = 81;
+        match.round = 2;
+        match.playerRounds = 1;
+        match.timeLeft = 47;
+        match.boardDirty = true;
+      }
+      creature.setFormTarget(1);
+      camera.position.set(0.75, 1.55, 2.4);
+      controls.target.set(0, 1.25, 0);
+      return shotClock > 3.2;
+    }
     case 'menu': {
       // The lobby menu panel floating next to the resting glob.
       if (!menuPanel) {
@@ -217,6 +238,7 @@ function frame(now: number): void {
 
   playerHead.copy(camera.position);
   creature.update(dt, playerHead);
+  hud?.update(dt, playerHead, creature);
   fx.update(dt);
   controls.update();
   renderer.render(scene, camera);

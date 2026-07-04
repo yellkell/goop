@@ -22,7 +22,9 @@ import { Vector3 } from 'three';
 import { CREATURE, PUNCH } from '../config.js';
 import { A, ANCHOR_COUNT, BOXER_POSE, GLOB_POSE, PUDDLE_POSE } from './poses.js';
 
-export const MAX_BLOBS = 40; // uniform array size shared with the shader
+// Uniform array size shared with the shader. 20 core + 8 lumps + 4 drips —
+// the loop bound is a real cost on Quest, so this is sized exactly.
+export const MAX_BLOBS = 32;
 export const MAX_DENTS = CREATURE.maxDents;
 
 const FLOOR_Y = 0.05; // blob centres never sink below r*rest above this
@@ -106,6 +108,15 @@ export class GoopSim {
   readonly offsets: Float32Array = new Float32Array(ANCHOR_COUNT * 3);
   /** Extra per-anchor radius scale (the striking fist swells). */
   readonly radiusScale: Float32Array = new Float32Array(ANCHOR_COUNT).fill(1);
+
+  /**
+   * Kinematic pin: while >= 0, that core blob is slammed to pinPos every
+   * step instead of spring-chasing it. The strike uses this — a real punch
+   * arrives EXACTLY where it was thrown, no spring lag; unpinning lets the
+   * spring snap it back with wobble.
+   */
+  pinIndex = -1;
+  readonly pinPos = { x: 0, y: 0, z: 0 };
 
   events: SimEvents = {};
 
@@ -442,6 +453,18 @@ export class GoopSim {
           c.z += dz * push;
         }
       }
+    }
+
+    // Kinematic pin overrides everything (the striking fist): applied after
+    // springs AND separation so nothing can nudge it off its line.
+    if (this.pinIndex >= 0 && this.pinIndex < this.core.length) {
+      const b = this.core[this.pinIndex];
+      b.x = this.pinPos.x;
+      b.y = this.pinPos.y;
+      b.z = this.pinPos.z;
+      b.px = b.x;
+      b.py = b.y;
+      b.pz = b.z;
     }
 
     // --- lumps: fly, splat, rest, crawl home ---
