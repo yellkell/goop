@@ -40,16 +40,18 @@ const VERDICT_SECONDS = 5.5;
 const _head = new Vector3();
 const _cpos = new Vector3();
 
-function vignetteTexture(): CanvasTexture {
+/** A soft edge-vignette texture in the given rgb — dark→transparent from the
+ *  rim inward, so a flash reads as colour creeping in from the screen edges. */
+function vignetteTexture(r: number, g: number, b: number): CanvasTexture {
   const c = document.createElement('canvas');
   c.width = c.height = 256;
-  const g = c.getContext('2d')!;
-  const grad = g.createRadialGradient(128, 128, 60, 128, 128, 128);
-  grad.addColorStop(0, 'rgba(200, 30, 20, 0)');
-  grad.addColorStop(0.75, 'rgba(200, 30, 20, 0.45)');
-  grad.addColorStop(1, 'rgba(160, 15, 10, 0.9)');
-  g.fillStyle = grad;
-  g.fillRect(0, 0, 256, 256);
+  const ctx = c.getContext('2d')!;
+  const grad = ctx.createRadialGradient(128, 128, 50, 128, 128, 138);
+  grad.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0)`);
+  grad.addColorStop(0.7, `rgba(${r}, ${g}, ${b}, 0.5)`);
+  grad.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0.95)`);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 256, 256);
   return new CanvasTexture(c);
 }
 
@@ -57,7 +59,8 @@ export class FightSystem extends createSystem({}) {
   private board!: WallBoard;
   private countdown!: CountdownPlate;
   private lastBeat = -1;
-  private vignette?: Mesh;
+  private vignette?: Mesh; // red — you got hit
+  private blockVig?: Mesh; // white — you blocked
 
   init(): void {
     this.board = new WallBoard();
@@ -68,23 +71,25 @@ export class FightSystem extends createSystem({}) {
     this.scene.add(this.countdown.mesh);
   }
 
+  private mkVignette(tex: CanvasTexture, z: number): Mesh {
+    const m = new Mesh(
+      new PlaneGeometry(2.8, 2.8),
+      new MeshBasicMaterial({ map: tex, transparent: true, opacity: 0, depthTest: false, depthWrite: false }),
+    );
+    m.position.set(0, 0, z);
+    m.renderOrder = 999;
+    m.visible = false;
+    return m;
+  }
+
   private ensureVignette(): void {
     if (this.vignette) return;
     const headObj = this.playerHeadEntity?.object3D;
     if (!headObj) return;
-    this.vignette = new Mesh(
-      new PlaneGeometry(2.6, 2.6),
-      new MeshBasicMaterial({
-        map: vignetteTexture(),
-        transparent: true,
-        opacity: 0,
-        depthTest: false,
-        depthWrite: false,
-      }),
-    );
-    this.vignette.position.set(0, 0, -0.6);
-    this.vignette.renderOrder = 999;
+    this.vignette = this.mkVignette(vignetteTexture(210, 30, 20), -0.6);
+    this.blockVig = this.mkVignette(vignetteTexture(230, 255, 240), -0.62);
     headObj.add(this.vignette);
+    headObj.add(this.blockVig);
   }
 
   update(delta: number): void {
@@ -93,10 +98,15 @@ export class FightSystem extends createSystem({}) {
     else _head.set(0, 1.6, 0);
 
     this.ensureVignette();
-    if (this.vignette) {
-      match.playerFlash = Math.max(0, match.playerFlash - delta * 2.1);
-      (this.vignette.material as MeshBasicMaterial).opacity = match.playerFlash * 0.65;
+    if (this.vignette && this.blockVig) {
+      // Red hit flash fades slowly (lingers so you register the hit).
+      match.playerFlash = Math.max(0, match.playerFlash - delta * 1.7);
+      (this.vignette.material as MeshBasicMaterial).opacity = match.playerFlash * 0.7;
       this.vignette.visible = match.playerFlash > 0.01;
+      // White block flash is snappier.
+      match.blockFlash = Math.max(0, match.blockFlash - delta * 3.2);
+      (this.blockVig.material as MeshBasicMaterial).opacity = match.blockFlash * 0.5;
+      this.blockVig.visible = match.blockFlash > 0.01;
     }
 
     switch (match.phase) {

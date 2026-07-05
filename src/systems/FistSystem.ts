@@ -45,7 +45,7 @@ const _rayQ = new Quaternion();
  * ray each frame (not the tilted grip pose — that left the old fists
  * skew-whiff against the forearm).
  */
-function buildFist(hand: 'left' | 'right'): Group {
+export function buildFist(hand: 'left' | 'right'): Group {
   const g = new Group();
   const leather = new MeshStandardMaterial({ color: 0x1c3a24, roughness: 0.42, metalness: 0.05 });
   const trim = new MeshStandardMaterial({
@@ -60,11 +60,13 @@ function buildFist(hand: 'left' | 'right'): Group {
   mitt.scale.set(1.05, 1.0, 1.28);
   mitt.position.set(0, 0, -0.02);
   g.add(mitt);
-  // Thumb, riding on TOP of the fist pointing up (not tucked inside).
-  const thumb = new Mesh(new SphereGeometry(0.042, 12, 10), leather);
-  thumb.scale.set(0.85, 1.5, 0.85); // elongated upward
-  thumb.position.set(hand === 'left' ? 0.05 : -0.05, 0.08, 0.01);
-  thumb.rotation.z = hand === 'left' ? -0.25 : 0.25; // splay slightly outward
+  // Thumb: a rounded pad laid ALONG THE TOP of the mitt (not a hotdog
+  // sticking up). Slightly flattened and hugging the surface, nosing toward
+  // the knuckles.
+  const thumb = new Mesh(new SphereGeometry(0.05, 14, 10), leather);
+  thumb.scale.set(0.95, 0.7, 1.15); // flat-ish and a touch long toward -Z
+  thumb.position.set(hand === 'left' ? 0.028 : -0.028, 0.062, -0.03);
+  thumb.rotation.x = -0.35; // lie forward down the top of the glove
   g.add(thumb);
   // Cuff at the wrist with the team-green lace band.
   const cuff = new Mesh(new CylinderGeometry(0.072, 0.08, 0.085, 16), leather);

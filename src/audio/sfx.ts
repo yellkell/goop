@@ -204,11 +204,13 @@ export function gooWhoosh(): void {
   tone({ freq: 150, to: 55, type: 'triangle', dur: 0.16, gain: 0.14 });
 }
 
-/** Its punch landing on YOU — wet sledgehammer. */
+/** Its punch landing on YOU — a wet sledgehammer you feel in your teeth. */
 export function gooSlam(): void {
-  tone({ freq: 82, to: 28, type: 'sine', dur: 0.38, gain: 0.38 });
-  whooshNoise(0.14, 0.24, 420, 90);
-  squelch(0.9);
+  tone({ freq: 90, to: 24, type: 'sine', dur: 0.5, gain: 0.5 }); // deep gut sub
+  tone({ freq: 150, to: 40, type: 'triangle', dur: 0.3, gain: 0.3 });
+  whooshNoise(0.18, 0.34, 500, 70);
+  squelch(1);
+  blub(110, 0.2, 0.2, 0.01); // a dull body thud under the splat
 }
 
 /** Its punch whiffing past your ear. */
@@ -216,11 +218,13 @@ export function gooWhiff(): void {
   whooshNoise(0.22, 0.16, 900, 220);
 }
 
-/** You blocking its strike on your gloves — a dull absorbed slap, no sting. */
+/** You blocking its strike on your gloves — a firm, bright leather SLAP,
+ *  clearly distinct from the deep wet slam of taking one clean. */
 export function gooBlock(): void {
-  whooshNoise(0.08, 0.2, 380, 120);
-  tone({ freq: 120, to: 60, type: 'triangle', dur: 0.1, gain: 0.2 });
-  bubble(240, 0.05, 0.03);
+  whooshNoise(0.07, 0.34, 900, 260); // sharp slap attack
+  tone({ freq: 300, to: 150, type: 'triangle', dur: 0.09, gain: 0.28 });
+  tone({ freq: 170, to: 90, type: 'sine', dur: 0.12, gain: 0.24 }); // leather body
+  bubble(520, 0.08, 0.02);
 }
 
 /** The spinning backfist — a long sweeping rotor of air and slime. */

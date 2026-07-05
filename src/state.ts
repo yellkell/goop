@@ -38,8 +38,10 @@ export const match = {
   startRequested: false,
   verdict: '' as Verdict,
   verdictT: 0,
-  /** 1 when the creature just clobbered you; FightSystem fades the vignette. */
+  /** 1 when the creature just clobbered you; FightSystem fades the red vignette. */
   playerFlash: 0,
+  /** 1 when you just blocked a strike; FightSystem fades a white vignette. */
+  blockFlash: 0,
   /** Set by FistSystem the frame you land a BIG punch; CreatureSystem reads
    *  it (and clears it) to decide whether a hurt goop collapses into a glob. */
   bigHit: false,
@@ -84,6 +86,7 @@ export function resetForRound(): void {
   match.playerHp = COMBAT.playerHealth;
   match.timeLeft = settings.roundSeconds;
   match.playerFlash = 0;
+  match.blockFlash = 0;
   match.bigHit = false;
   match.boardDirty = true;
 }

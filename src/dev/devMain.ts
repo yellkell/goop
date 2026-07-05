@@ -32,6 +32,7 @@ import {
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GelCreature } from '../creature/GelCreature.js';
 import { GooFx } from '../fx/splats.js';
+import { buildFist } from '../systems/FistSystem.js';
 import { match } from '../state.js';
 import { CountdownPlate, WallBoard } from '../ui/hud.js';
 import { MenuPanel } from '../ui/menuPanel.js';
@@ -142,6 +143,7 @@ let shotPunched = false;
 let menuPanel: MenuPanel | null = null;
 let hud: WallBoard | null = null;
 let cdPlate: CountdownPlate | null = null;
+let gloves = false;
 
 function shotDirector(dt: number): boolean {
   shotClock += dt;
@@ -196,6 +198,24 @@ function shotDirector(dt: number): boolean {
       // Freeze the frame mid-strike: telegraph + just over half the strike.
       const midStrike = shot === 'spin' ? 0.75 + 0.2 : 0.7 + 0.15;
       return shotClock > launchAt + midStrike;
+    }
+    case 'glove': {
+      // Both gloves floating, framed close, to check the thumb-on-top.
+      if (!gloves) {
+        gloves = true;
+        const gl = buildFist('left');
+        gl.position.set(-0.16, 1.3, 0);
+        gl.rotation.set(0, 0, 0);
+        scene.add(gl);
+        const gr = buildFist('right');
+        gr.position.set(0.16, 1.3, 0);
+        scene.add(gr);
+      }
+      creature.group.visible = false;
+      // Front-top 3/4 view (knuckles point -Z) so the thumb-on-top shows.
+      camera.position.set(0.35, 1.72, -0.75);
+      controls.target.set(0, 1.28, -0.05);
+      return shotClock > 1.5;
     }
     case 'countdown': {
       // Wall board (big art) + the bare floating glyph between us and it.

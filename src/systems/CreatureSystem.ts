@@ -369,22 +369,29 @@ export class CreatureSystem extends createSystem({}) {
     const diffScale = currentDifficulty().damageScale;
 
     if (blockHand) {
-      // BLOCKED — a slap of chip damage leaks, the rest is stopped dead.
+      // BLOCKED — chip damage leaks, the rest is stopped dead. Big white
+      // spark on the glove, a white screen-edge flash, a firm double buzz in
+      // the blocking hand: unmistakably "I stopped that".
       match.playerHp = Math.max(0, match.playerHp - spec.damage * diffScale * BLOCK.chip);
+      match.blockFlash = 1;
       match.boardDirty = true;
       gooBlock();
-      this.fx.flash(limbWorld, 0xffffff, 0.5); // soft white bloom on the glove
-      pulseHand(this.world.session, blockHand, 0.8, 90);
+      this.fx.flash(limbWorld, 0xffffff, 0.85);
+      this.fx.flash(limbWorld, 0xd8ffe6, 1.15); // wider soft halo
+      pulseHand(this.world.session, blockHand, 1, 70);
+      pulseHand(this.world.session, blockHand, 0.7, 60);
     } else {
-      // CLEAN HIT — full damage, red splat where it landed, both hands jolt.
+      // CLEAN HIT — full damage, a big red splat + goo burst in your face,
+      // the red vignette, and both hands slammed hard.
       match.playerHp = Math.max(0, match.playerHp - spec.damage * diffScale);
       match.playerFlash = 1;
       match.boardDirty = true;
       gooSlam();
-      this.fx.flash(limbWorld, 0xff5a3c, 0.36);
-      this.fx.burst(limbWorld, _v.copy(limbWorld).sub(this.creature.position).normalize(), 10, 3);
-      pulseHand(this.world.session, 'left', 1, 220);
-      pulseHand(this.world.session, 'right', 1, 220);
+      this.fx.flash(limbWorld, 0xff3a1e, 0.75);
+      this.fx.flash(limbWorld, 0xff8050, 1.25); // wider red bloom
+      this.fx.burst(limbWorld, _v.copy(limbWorld).sub(this.creature.position).normalize(), 18, 3.5);
+      pulseHand(this.world.session, 'left', 1, 260);
+      pulseHand(this.world.session, 'right', 1, 260);
     }
     void apexHand;
   }

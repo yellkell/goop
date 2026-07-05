@@ -31,7 +31,7 @@ const MAX_SPLATS = 14;
 const MAX_DROPS = 96;
 const DROP_LIFE = 0.85;
 const MAX_FLASHES = 12;
-const FLASH_LIFE = 0.36;
+const FLASH_LIFE = 0.5;
 
 /** Soft radial dot for impact/block flashes. */
 function flashTexture(): CanvasTexture {

@@ -54,7 +54,7 @@ const H = 620;
 
 export class WallBoard {
   readonly group = new Group();
-  private board = makeCanvasPlane(W, H, 2.6);
+  private board = makeCanvasPlane(W, H, 2.9);
   private clockShown = -1;
 
   constructor() {
@@ -185,15 +185,15 @@ export class WallBoard {
       const msg = ['3', '2', '1', 'FIGHT'][beat];
       const art = countdownArt(msg);
       if (art) {
-        const s = Math.min(210 / art.height, 900 / art.width);
+        const s = Math.min(300 / art.height, 1240 / art.width);
         g.drawImage(art, cx - (art.width * s) / 2, cy - (art.height * s) / 2, art.width * s, art.height * s);
       } else {
-        g.font = '900 170px system-ui, sans-serif';
+        g.font = '900 240px system-ui, sans-serif';
         g.fillStyle = '#f2fff0';
         g.fillText(msg, cx, cy);
       }
     } else if (match.phase === 'roundEnd') {
-      g.font = '900 62px system-ui, sans-serif';
+      g.font = '900 68px system-ui, sans-serif';
       g.fillStyle =
         match.lastRound === 'player' ? '#ffb03a' : match.lastRound === 'creature' ? '#6dff7e' : '#f2fff0';
       g.fillText(
@@ -212,23 +212,23 @@ export class WallBoard {
       const key = match.verdict === 'win' ? 'win' : match.verdict === 'draw' ? 'draw' : 'ko';
       const art = verdictArt(key);
       if (art) {
-        const s = Math.min(200 / art.height, 640 / art.width);
-        g.drawImage(art, cx - (art.width * s) / 2, cy - 55 - (art.height * s) / 2, art.width * s, art.height * s);
+        const s = Math.min(280 / art.height, 1100 / art.width);
+        g.drawImage(art, cx - (art.width * s) / 2, cy - 70 - (art.height * s) / 2, art.width * s, art.height * s);
       } else {
-        g.font = '900 130px system-ui, sans-serif';
+        g.font = '900 190px system-ui, sans-serif';
         g.fillStyle = key === 'ko' ? '#ff7a5c' : '#f2fff0';
-        g.fillText(key.toUpperCase(), cx, cy - 55);
+        g.fillText(key.toUpperCase(), cx, cy - 70);
       }
-      g.font = '700 34px system-ui, sans-serif';
-      g.fillStyle = 'rgba(238, 250, 238, 0.85)';
+      g.font = '700 40px system-ui, sans-serif';
+      g.fillStyle = 'rgba(238, 250, 238, 0.9)';
       g.fillText(
         match.verdict === 'win' ? 'THE GOOP IS DOWN' : match.verdict === 'ko' ? 'THE GOOP TAKES IT' : 'NOBODY TAKES IT',
         cx,
-        cy + 62,
+        cy + 78,
       );
-      g.font = '900 44px system-ui, sans-serif';
+      g.font = '900 52px system-ui, sans-serif';
       g.fillStyle = '#f2fff0';
-      g.fillText(`ROUNDS ${match.playerRounds} – ${match.creatureRounds}`, cx, cy + 118);
+      g.fillText(`ROUNDS ${match.playerRounds} – ${match.creatureRounds}`, cx, cy + 140);
     } else if (match.phase === 'fighting') {
       // Fighting: the strip above already carries round + clock; keep the
       // stage clear so the wall reads calm mid-brawl.
@@ -259,7 +259,7 @@ const CD_H = 512;
  */
 export class CountdownPlate {
   readonly mesh: Mesh;
-  private cd = makeCanvasPlane(CD_W, CD_H, 1.4);
+  private cd = makeCanvasPlane(CD_W, CD_H, 1.7);
   private beatShown = -2;
   /** True once the neon PNG (not the text fallback) was drawn for this beat. */
   private artDrawn = false;
