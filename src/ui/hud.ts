@@ -72,16 +72,7 @@ export class WallBoard {
     }
   }
 
-  private bar(
-    x: number,
-    y: number,
-    w: number,
-    h: number,
-    frac: number,
-    color: string,
-    label: string,
-    value: number,
-  ): void {
+  private bar(x: number, y: number, w: number, h: number, frac: number, color: string, label: string): void {
     const g = this.board.g;
     g.fillStyle = 'rgba(10, 18, 12, 0.9)';
     g.beginPath();
@@ -90,23 +81,22 @@ export class WallBoard {
     g.strokeStyle = 'rgba(140, 255, 150, 0.25)';
     g.lineWidth = 3;
     g.stroke();
-    const fw = Math.max(0, frac) * (w - 10);
+    const fw = Math.max(0, frac) * (w - 12);
     if (fw > 2) {
       const grad = g.createLinearGradient(x, y, x, y + h);
       grad.addColorStop(0, color);
       grad.addColorStop(1, 'rgba(0,0,0,0.35)');
       g.fillStyle = grad;
       g.beginPath();
-      g.roundRect(x + 5, y + 5, fw, h - 10, (h - 10) / 2);
+      g.roundRect(x + 6, y + 6, fw, h - 12, (h - 12) / 2);
       g.fill();
     }
-    g.fillStyle = 'rgba(238, 250, 238, 0.92)';
-    g.font = '700 32px system-ui, sans-serif';
+    // Just the label — no numbers on the bar.
+    g.fillStyle = 'rgba(238, 250, 238, 0.95)';
+    g.font = '800 38px system-ui, sans-serif';
     g.textAlign = 'left';
     g.textBaseline = 'middle';
-    g.fillText(label, x + 20, y + h / 2 + 1);
-    g.textAlign = 'right';
-    g.fillText(String(Math.max(0, Math.ceil(value))), x + w - 20, y + h / 2 + 1);
+    g.fillText(label, x + 26, y + h / 2 + 1);
   }
 
   private draw(): void {
@@ -155,9 +145,9 @@ export class WallBoard {
       }
     }
 
-    // Health bars.
-    this.bar(60, 170, W - 120, 62, match.creatureHp / COMBAT.creatureHealth, 'rgba(74, 222, 96, 0.95)', 'THE GOOP', match.creatureHp);
-    this.bar(60, 252, W - 120, 62, match.playerHp / COMBAT.playerHealth, 'rgba(255, 176, 58, 0.95)', 'YOU', match.playerHp);
+    // Health bars — thick, numberless.
+    this.bar(56, 164, W - 112, 88, match.creatureHp / COMBAT.creatureHealth, 'rgba(74, 222, 96, 0.95)', 'THE GOOP');
+    this.bar(56, 262, W - 112, 88, match.playerHp / COMBAT.playerHealth, 'rgba(255, 176, 58, 0.95)', 'YOU');
 
     // Centre stage.
     const cx = W / 2;
@@ -245,6 +235,8 @@ export class CountdownPlate {
   readonly mesh: Mesh;
   private cd = makeCanvasPlane(CD_W, CD_H, 1.4);
   private beatShown = -2;
+  /** True once the neon PNG (not the text fallback) was drawn for this beat. */
+  private artDrawn = false;
 
   constructor() {
     this.mesh = this.cd.mesh;
@@ -270,7 +262,9 @@ export class CountdownPlate {
     this.mesh.lookAt(playerHead);
 
     const beat = Math.min(3, Math.floor(match.countdownT / COMBAT.countdownBeat));
-    if (beat !== this.beatShown) {
+    // Redraw on a beat change OR until the PNG finally decodes (so it never
+    // stays stuck on the text fallback — that was "the 3 that isn't our png").
+    if (beat !== this.beatShown || !this.artDrawn) {
       this.beatShown = beat;
       this.draw();
     }
@@ -293,6 +287,7 @@ export class CountdownPlate {
       // the glyph big; the canvas stays transparent so it floats on its own.
       const s = Math.min((CD_H * 0.94) / art.height, (CD_W * 0.98) / art.width);
       g.drawImage(art, cx - (art.width * s) / 2, cy - (art.height * s) / 2, art.width * s, art.height * s);
+      this.artDrawn = true;
     } else {
       // Fallback until the PNG decodes: bare glowing text, still no panel.
       g.textAlign = 'center';
@@ -304,6 +299,7 @@ export class CountdownPlate {
       g.fillStyle = green ? '#6dff7e' : '#ffffff';
       g.fillText(msg, cx, cy);
       g.shadowBlur = 0;
+      this.artDrawn = false;
     }
     this.cd.tex.needsUpdate = true;
   }

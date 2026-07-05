@@ -79,6 +79,9 @@ export const COMBAT = {
   creatureHealth: 300,
   /** The creature's straight does this much when it lands on you. */
   creaturePunchDamage: 9,
+  /** Both fighters trickle health back while the round runs (HP per second):
+   *  1 point every ~2s, so staying on defence slowly recovers you. */
+  regenPerSec: 0.5,
   /** Round length before it goes to the cards (TIME verdict). */
   roundSeconds: 99,
   /** 3-2-1-FIGHT beat length. */

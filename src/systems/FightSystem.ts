@@ -135,6 +135,7 @@ export class FightSystem extends createSystem({}) {
 
       case 'fighting': {
         match.timeLeft -= delta;
+        // Win checks use THIS frame's damage (Fist/Creature systems ran first).
         if (match.creatureHp <= 0) {
           this.endRound('player');
         } else if (match.playerHp <= 0) {
@@ -143,6 +144,12 @@ export class FightSystem extends createSystem({}) {
           // To the cards: whoever kept more of themselves takes the round.
           if (Math.abs(match.playerHp - match.creatureHp) < 0.5) this.endRound('draw');
           else this.endRound(match.playerHp > match.creatureHp ? 'player' : 'creature');
+        } else {
+          // Still going — both fighters trickle a little health back. (After
+          // the KO check, so a killing blow is never undone by regen.)
+          const r = COMBAT.regenPerSec * delta;
+          match.creatureHp = Math.min(COMBAT.creatureHealth, match.creatureHp + r);
+          match.playerHp = Math.min(COMBAT.playerHealth, match.playerHp + r);
         }
         break;
       }

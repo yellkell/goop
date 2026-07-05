@@ -13,9 +13,9 @@ export type Phase = 'lobby' | 'countdown' | 'fighting' | 'roundEnd' | 'verdict';
 export type Verdict = '' | 'win' | 'ko' | 'time' | 'draw';
 export type RoundWinner = '' | 'player' | 'creature' | 'draw';
 
-/** A proper contest: best of three rounds. */
-export const MAX_ROUNDS = 3;
-export const ROUNDS_TO_WIN = 2;
+/** A proper contest: best of five rounds (first to three). */
+export const MAX_ROUNDS = 5;
+export const ROUNDS_TO_WIN = 3;
 /** Rest between rounds — the goop pulls itself together, so do you. */
 export const REST_SECONDS = 7;
 
