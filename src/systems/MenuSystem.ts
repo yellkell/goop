@@ -42,7 +42,6 @@ interface Pointer {
 const _origin = new Vector3();
 const _dir = new Vector3();
 const _end = new Vector3();
-const _head = new Vector3();
 
 export class MenuSystem extends createSystem({}) {
   private panel!: MenuPanel;
@@ -51,8 +50,13 @@ export class MenuSystem extends createSystem({}) {
 
   init(): void {
     this.panel = new MenuPanel();
-    // Between you and the creature's corner, off to the right, eye height.
-    this.panel.group.position.set(0.85, 1.45, ARENA.spawn[2] * 0.55);
+    // Between you and the creature's corner, off to the right, eye height —
+    // FIXED furniture: angled once toward your start spot, and it stays put
+    // (it never turns to follow your head).
+    const px = 0.85;
+    const pz = ARENA.spawn[2] * 0.55;
+    this.panel.group.position.set(px, 1.45, pz);
+    this.panel.group.rotation.set(0, Math.atan2(0 - px, 0 - pz), 0);
     this.scene.add(this.panel.group);
     this.pointers.left = this.makePointer();
     this.pointers.right = this.makePointer();
@@ -134,14 +138,7 @@ export class MenuSystem extends createSystem({}) {
       return;
     }
     this.panel.group.visible = true;
-
-    // Face the player (yaw only, like the scoreboard).
-    const headObj = this.playerHeadEntity?.object3D;
-    if (headObj) {
-      headObj.getWorldPosition(_head);
-      const p = this.panel.group.position;
-      this.panel.group.rotation.set(0, Math.atan2(_head.x - p.x, _head.z - p.z), 0);
-    }
+    // The panel is fixed furniture — set once in init(), never follows you.
 
     let hover: MenuAction | null = null;
     for (const hand of HANDS) {

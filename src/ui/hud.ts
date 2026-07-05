@@ -49,12 +49,12 @@ function makeCanvasPlane(
 
 // ------------------------------------------------------------------- wall
 
-const W = 1024;
-const H = 700;
+const W = 1440;
+const H = 620;
 
 export class WallBoard {
   readonly group = new Group();
-  private board = makeCanvasPlane(W, H, 1.6);
+  private board = makeCanvasPlane(W, H, 2.6);
   private clockShown = -1;
 
   constructor() {
@@ -72,8 +72,30 @@ export class WallBoard {
     }
   }
 
-  private bar(x: number, y: number, w: number, h: number, frac: number, color: string, label: string): void {
+  /**
+   * One fighter's health bar with its NAME ABOVE it. Fills are mirrored
+   * fighting-game style: the two bars drain toward the centre of the board
+   * (goop anchored left, you anchored right).
+   */
+  private bar(
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    frac: number,
+    color: string,
+    label: string,
+    anchor: 'left' | 'right',
+  ): void {
     const g = this.board.g;
+    // Name above the bar, aligned to the bar's outer edge.
+    g.fillStyle = 'rgba(238, 250, 238, 0.95)';
+    g.font = '800 40px system-ui, sans-serif';
+    g.textBaseline = 'alphabetic';
+    g.textAlign = anchor;
+    g.fillText(label, anchor === 'left' ? x + 4 : x + w - 4, y - 18);
+
+    // Trough.
     g.fillStyle = 'rgba(10, 18, 12, 0.9)';
     g.beginPath();
     g.roundRect(x, y, w, h, h / 2);
@@ -81,22 +103,19 @@ export class WallBoard {
     g.strokeStyle = 'rgba(140, 255, 150, 0.25)';
     g.lineWidth = 3;
     g.stroke();
-    const fw = Math.max(0, frac) * (w - 12);
+
+    // Fill, drawn from the anchored (outer) edge toward the centre.
+    const fw = Math.max(0, Math.min(1, frac)) * (w - 12);
     if (fw > 2) {
+      const fx = anchor === 'left' ? x + 6 : x + w - 6 - fw;
       const grad = g.createLinearGradient(x, y, x, y + h);
       grad.addColorStop(0, color);
       grad.addColorStop(1, 'rgba(0,0,0,0.35)');
       g.fillStyle = grad;
       g.beginPath();
-      g.roundRect(x + 6, y + 6, fw, h - 12, (h - 12) / 2);
+      g.roundRect(fx, y + 6, fw, h - 12, (h - 12) / 2);
       g.fill();
     }
-    // Just the label — no numbers on the bar.
-    g.fillStyle = 'rgba(238, 250, 238, 0.95)';
-    g.font = '800 38px system-ui, sans-serif';
-    g.textAlign = 'left';
-    g.textBaseline = 'middle';
-    g.fillText(label, x + 26, y + h / 2 + 1);
   }
 
   private draw(): void {
@@ -106,20 +125,22 @@ export class WallBoard {
     // Plate.
     g.fillStyle = 'rgba(8, 14, 10, 0.8)';
     g.beginPath();
-    g.roundRect(8, 8, W - 16, H - 16, 44);
+    g.roundRect(8, 8, W - 16, H - 16, 40);
     g.fill();
     g.strokeStyle = 'rgba(109, 255, 126, 0.5)';
     g.lineWidth = 5;
     g.stroke();
 
-    // Title strip + round state.
+    const cx = W / 2;
+
+    // Title + round state, centred at the top.
     g.textAlign = 'center';
     g.textBaseline = 'top';
-    g.font = '900 64px system-ui, sans-serif';
+    g.font = '900 58px system-ui, sans-serif';
     g.fillStyle = '#6dff7e';
     g.shadowColor = 'rgba(109, 255, 126, 0.5)';
     g.shadowBlur = 20;
-    g.fillText(GAME_TITLE, W / 2, 26);
+    g.fillText(GAME_TITLE, cx, 22);
     g.shadowBlur = 0;
 
     const inMatch = match.phase !== 'lobby';
@@ -128,30 +149,37 @@ export class WallBoard {
       g.textBaseline = 'middle';
       g.fillStyle = 'rgba(238, 250, 238, 0.85)';
       const clock = match.phase === 'fighting' ? ` · ${Math.max(0, Math.ceil(match.timeLeft))}` : '';
-      g.fillText(`ROUND ${Math.min(match.round, MAX_ROUNDS)} OF ${MAX_ROUNDS}${clock}`, W / 2, 128);
-      const pip = (x: number, won: boolean, color: string) => {
+      g.fillText(`ROUND ${Math.min(match.round, MAX_ROUNDS)} OF ${MAX_ROUNDS}${clock}`, cx, 108);
+    }
+
+    // --- SEPARATED health bars, side by side, names above ---
+    const barW = 560;
+    const barH = 84;
+    const barY = 210;
+    // Goop on the left (drains toward centre), you on the right.
+    this.bar(70, barY, barW, barH, match.creatureHp / COMBAT.creatureHealth, 'rgba(74, 222, 96, 0.95)', 'THE GOOP', 'left');
+    this.bar(W - 70 - barW, barY, barW, barH, match.playerHp / COMBAT.playerHealth, 'rgba(255, 176, 58, 0.95)', 'YOU', 'right');
+
+    // Round pips under each bar (goop left, you right).
+    if (inMatch) {
+      const pip = (px: number, py: number, won: boolean, color: string) => {
         g.beginPath();
-        g.arc(x, 128, 13, 0, Math.PI * 2);
+        g.arc(px, py, 12, 0, Math.PI * 2);
         g.fillStyle = won ? color : 'rgba(238, 250, 238, 0.16)';
         g.fill();
         g.strokeStyle = 'rgba(238, 250, 238, 0.4)';
         g.lineWidth = 2;
         g.stroke();
       };
-      // Your pips build from the left, its pips from the right.
+      const pipY = barY + barH + 30;
       for (let i = 0; i < MAX_ROUNDS - 1; i++) {
-        pip(120 + i * 44, i < match.playerRounds, 'rgba(255, 176, 58, 0.95)');
-        pip(W - 120 - i * 44, i < match.creatureRounds, 'rgba(74, 222, 96, 0.95)');
+        pip(84 + i * 40, pipY, i < match.creatureRounds, 'rgba(74, 222, 96, 0.95)');
+        pip(W - 84 - i * 40, pipY, i < match.playerRounds, 'rgba(255, 176, 58, 0.95)');
       }
     }
 
-    // Health bars — thick, numberless.
-    this.bar(56, 164, W - 112, 88, match.creatureHp / COMBAT.creatureHealth, 'rgba(74, 222, 96, 0.95)', 'THE GOOP');
-    this.bar(56, 262, W - 112, 88, match.playerHp / COMBAT.playerHealth, 'rgba(255, 176, 58, 0.95)', 'YOU');
-
-    // Centre stage.
-    const cx = W / 2;
-    const cy = 505;
+    // Centre stage — countdown / round-rest / verdict, in the lower middle.
+    const cy = 468;
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     if (match.phase === 'countdown') {
@@ -159,11 +187,10 @@ export class WallBoard {
       const msg = ['3', '2', '1', 'FIGHT'][beat];
       const art = countdownArt(msg);
       if (art) {
-        // Fill most of the lower board — big and unmissable.
-        const s = Math.min(360 / art.height, 940 / art.width);
+        const s = Math.min(210 / art.height, 900 / art.width);
         g.drawImage(art, cx - (art.width * s) / 2, cy - (art.height * s) / 2, art.width * s, art.height * s);
       } else {
-        g.font = '900 240px system-ui, sans-serif';
+        g.font = '900 170px system-ui, sans-serif';
         g.fillStyle = '#f2fff0';
         g.fillText(msg, cx, cy);
       }
