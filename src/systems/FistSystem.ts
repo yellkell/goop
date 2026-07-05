@@ -55,33 +55,25 @@ export function buildFist(hand: 'left' | 'right'): Group {
     emissiveIntensity: 0.6,
   });
 
-  // The padded fist — a big rounded puff, WIDER than deep (a boxing glove,
-  // not an egg). Barely elongated front-to-back.
-  const mitt = new Mesh(new SphereGeometry(0.1, 22, 18), leather);
-  mitt.scale.set(1.2, 1.14, 1.04);
-  mitt.position.set(0, 0.006, -0.005);
+  // ONE clean rounded glove — the padded fist. Gently rounded, a touch taller
+  // and deeper than wide; no stuck-on lobes or pads.
+  const mitt = new Mesh(new SphereGeometry(0.108, 24, 18), leather);
+  mitt.scale.set(1.02, 1.12, 1.16);
+  mitt.position.set(0, 0.008, -0.015);
   g.add(mitt);
-  // A fuller rounded knuckle face at the front — the striking surface that
-  // makes the silhouette read as a glove rather than a ball.
-  const face = new Mesh(new SphereGeometry(0.072, 18, 14), leather);
-  face.scale.set(1.18, 1.02, 0.72);
-  face.position.set(0, 0.012, -0.08);
-  g.add(face);
-  // Thumb: a rounded pad laid ALONG THE TOP of the mitt (not a hotdog
-  // sticking up), hugging the surface and nosing toward the knuckles.
-  const thumb = new Mesh(new SphereGeometry(0.05, 14, 10), leather);
-  thumb.scale.set(0.95, 0.68, 1.1);
-  thumb.position.set(hand === 'left' ? 0.05 : -0.05, 0.075, -0.03);
-  thumb.rotation.x = -0.35;
-  thumb.rotation.z = hand === 'left' ? 0.3 : -0.3; // sit on the top-inner shoulder
+  // A small thumb, mostly MERGED into the inner side of the fist so it reads
+  // as a rounded bump, not a protrusion.
+  const thumb = new Mesh(new SphereGeometry(0.05, 16, 12), leather);
+  thumb.scale.set(0.85, 0.95, 1.0);
+  thumb.position.set(hand === 'left' ? 0.082 : -0.082, -0.012, -0.045);
   g.add(thumb);
   // Wrist cuff (clearly narrower than the fist) with the team-green band.
-  const cuff = new Mesh(new CylinderGeometry(0.066, 0.076, 0.09, 16), leather);
+  const cuff = new Mesh(new CylinderGeometry(0.062, 0.074, 0.085, 18), leather);
   cuff.rotation.x = Math.PI / 2;
-  cuff.position.set(0, -0.01, 0.115);
+  cuff.position.set(0, -0.015, 0.115);
   g.add(cuff);
-  const band = new Mesh(new TorusGeometry(0.072, 0.012, 10, 20), trim);
-  band.position.set(0, -0.01, 0.155);
+  const band = new Mesh(new TorusGeometry(0.07, 0.012, 10, 22), trim);
+  band.position.set(0, -0.015, 0.152);
   g.add(band);
   return g;
 }
