@@ -21,7 +21,7 @@ import {
   MeshBasicMaterial,
   PlaneGeometry,
   Points,
-  PointsMaterial,
+  ShaderMaterial,
   Sprite,
   SpriteMaterial,
   Vector3,
@@ -90,6 +90,7 @@ export class GooFx {
   private dropPos: Float32Array;
   private dropVel: Float32Array;
   private dropAge: Float32Array;
+  private dropAlpha: Float32Array;
   private dropGeo: BufferGeometry;
   private dropCursor = 0;
 
@@ -122,16 +123,39 @@ export class GooFx {
     this.dropPos = new Float32Array(MAX_DROPS * 3);
     this.dropVel = new Float32Array(MAX_DROPS * 3);
     this.dropAge = new Float32Array(MAX_DROPS).fill(DROP_LIFE + 1);
+    this.dropAlpha = new Float32Array(MAX_DROPS); // 0 = dead → clipped offscreen
     this.dropGeo = new BufferGeometry();
     this.dropGeo.setAttribute('position', new BufferAttribute(this.dropPos, 3));
-    const dropMat = new PointsMaterial({
-      color: 0x6fe07c,
-      size: 0.028,
+    this.dropGeo.setAttribute('aAlpha', new BufferAttribute(this.dropAlpha, 1));
+    // Custom point shader: a dead point (aAlpha <= 0) is pushed outside the
+    // clip volume so it draws NOTHING — no more green specks parked under the
+    // floor. Living points fade with their alpha and attenuate with distance.
+    const dropMat = new ShaderMaterial({
       transparent: true,
-      opacity: 0.9,
       depthWrite: false,
       blending: AdditiveBlending,
-      sizeAttenuation: true,
+      uniforms: { uSize: { value: 14 } },
+      vertexShader: /* glsl */ `
+        attribute float aAlpha;
+        varying float vAlpha;
+        uniform float uSize;
+        void main() {
+          vAlpha = aAlpha;
+          vec4 mv = modelViewMatrix * vec4(position, 1.0);
+          gl_Position = projectionMatrix * mv;
+          gl_PointSize = uSize / max(-mv.z, 0.05);
+          if (aAlpha <= 0.0) gl_Position = vec4(2.0, 2.0, 2.0, 1.0); // clipped
+        }
+      `,
+      fragmentShader: /* glsl */ `
+        varying float vAlpha;
+        void main() {
+          float r = length(gl_PointCoord - 0.5);
+          if (r > 0.5) discard;
+          float a = vAlpha * (1.0 - smoothstep(0.28, 0.5, r));
+          gl_FragColor = vec4(0.44, 0.88, 0.48, a);
+        }
+      `,
     });
     this.drops = new Points(this.dropGeo, dropMat);
     this.drops.frustumCulled = false;
@@ -197,7 +221,9 @@ export class GooFx {
       this.dropVel[o + 1] = Math.abs(dir.y * speed * 0.2) + 0.6 + Math.random() * 1.4;
       this.dropVel[o + 2] = dir.z * speed * 0.4 + (Math.random() - 0.5) * 1.6;
       this.dropAge[j] = 0;
+      this.dropAlpha[j] = 1;
     }
+    (this.dropGeo.getAttribute('aAlpha') as BufferAttribute).needsUpdate = true;
   }
 
   update(dt: number): void {
@@ -225,12 +251,18 @@ export class GooFx {
       this.dropPos[o] += this.dropVel[o] * dt;
       this.dropPos[o + 1] += this.dropVel[o + 1] * dt;
       this.dropPos[o + 2] += this.dropVel[o + 2] * dt;
-      if (this.dropPos[o + 1] < 0.01) {
-        this.dropAge[j] = DROP_LIFE + 1; // died on the floor
-        this.dropPos[o + 1] = -10; // park it out of sight
+      // Fade over life; die (alpha 0 → vertex clipped, draws nothing) on the
+      // floor or when spent. No more parking specks below the world.
+      this.dropAlpha[j] = Math.max(0, 1 - this.dropAge[j] / DROP_LIFE);
+      if (this.dropPos[o + 1] < 0.01 || this.dropAge[j] >= DROP_LIFE) {
+        this.dropAge[j] = DROP_LIFE + 1;
+        this.dropAlpha[j] = 0;
       }
     }
-    if (any) (this.dropGeo.getAttribute('position') as BufferAttribute).needsUpdate = true;
+    if (any) {
+      (this.dropGeo.getAttribute('position') as BufferAttribute).needsUpdate = true;
+      (this.dropGeo.getAttribute('aAlpha') as BufferAttribute).needsUpdate = true;
+    }
 
     for (let i = 0; i < MAX_FLASHES; i++) {
       if (this.flashAge[i] > FLASH_LIFE) continue;
