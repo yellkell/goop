@@ -121,9 +121,11 @@ function blub(freq: number, gain: number, dur: number, delay = 0): void {
 
 // --- the goo itself --------------------------------------------------------
 
-/** Your fist landing in the gel. `intensity` 0..1 scales the meat of it. */
+/** Your fist landing in the gel. `intensity` 0..1 scales the meat of it. A
+ *  crisp SLAP transient sits on the very front so a clean connect cracks. */
 export function squelch(intensity = 0.6): void {
   const i = Math.min(1, Math.max(0, intensity));
+  whooshNoise(0.02, 0.24 + 0.3 * i, 3200, 1100); // the slap crack (bright, instant)
   whooshNoise(0.1 + 0.09 * i, 0.16 + 0.22 * i, 620, 130);
   blub(150 + 60 * Math.random(), 0.14 + 0.18 * i, 0.11 + 0.07 * i);
   const pops = 2 + Math.floor(Math.random() * 2) + Math.round(i * 2);

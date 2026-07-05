@@ -15,7 +15,7 @@
  * reached you — duck and it whiffs through empty air.
  */
 
-import { createSystem, Vector3 } from '@iwsdk/core';
+import { createSystem, Quaternion, Vector3 } from '@iwsdk/core';
 import { gooBlock, gooSlam, gooWhiff } from '../audio/sfx.js';
 import { ARENA, ATTACKS, BLOCK, BRAIN, COMBAT, EXHAUST, type AttackName } from '../config.js';
 import { GelCreature, type Hand } from '../creature/GelCreature.js';
@@ -27,6 +27,12 @@ type Mood = 'wander' | 'fight' | 'staggered' | 'exhausted';
 
 const _head = new Vector3();
 const _v = new Vector3();
+const _v2 = new Vector3();
+const _target = new Vector3();
+const _hq = new Quaternion();
+const _right = new Vector3();
+const _up = new Vector3();
+const _rel = new Vector3();
 
 /**
  * The fight book — every combination it knows. Difficulty gates which
@@ -54,13 +60,30 @@ const COMBOS: AttackName[][] = [
   ['cross', 'roundhouse'],
   ['jab', 'cross', 'hook'],
   ['hook', 'hook', 'roundhouse'],
+  ['spinkick'],
+  ['jab', 'spinkick'],
+];
+
+/** Big infighting flurries — thrown when it presses in to TRADE up close. */
+const PRESS_COMBOS: AttackName[][] = [
+  ['hook', 'hook'],
+  ['cross', 'hook', 'uppercut'],
+  ['uppercut', 'overhand'],
+  ['hook', 'uppercut', 'overhand'],
+  ['overhand', 'hook'],
+  ['cross', 'spinkick'],
+  ['hook', 'roundhouse'],
+  ['uppercut', 'cross', 'hook'],
 ];
 
 const TIER_ARSENAL: AttackName[][] = [
   ['jab', 'cross'], // CHILL
   ['jab', 'cross', 'hook', 'uppercut', 'overhand'], // SCRAP
-  ['jab', 'cross', 'hook', 'uppercut', 'overhand', 'backfist', 'roundhouse'], // RUMBLE
+  ['jab', 'cross', 'hook', 'uppercut', 'overhand', 'backfist', 'roundhouse', 'spinkick'], // RUMBLE
 ];
+
+/** Which strikes are thrown at the body (chest height) rather than the head. */
+const BODY_CAPABLE: ReadonlySet<AttackName> = new Set<AttackName>(['hook', 'cross', 'uppercut', 'roundhouse']);
 
 export class CreatureSystem extends createSystem({}) {
   private fx!: GooFx;
@@ -79,6 +102,8 @@ export class CreatureSystem extends createSystem({}) {
   private sway = 0;
   /** Seconds until it commits to the next combination. */
   private comboRest = 1.2;
+  /** True while the current combo is an in-your-face press/trade. */
+  private pressing = false;
   /** The exhausted collapse fires once per round. */
   private exhaustUsed = false;
 
@@ -198,15 +223,26 @@ export class CreatureSystem extends createSystem({}) {
 
   // ---------------------------------------------------------------- fight
 
+  /** Keep a target inside the roam circle around the spawn corner, so the
+   *  creature never wanders to your sides or backs through a real wall. */
+  private clampToArena(out: Vector3): Vector3 {
+    const dx = out.x - ARENA.spawn[0];
+    const dz = out.z - ARENA.spawn[2];
+    const d = Math.hypot(dx, dz);
+    if (d > ARENA.roamRadius) {
+      out.x = ARENA.spawn[0] + (dx / d) * ARENA.roamRadius;
+      out.z = ARENA.spawn[2] + (dz / d) * ARENA.roamRadius;
+    }
+    return out;
+  }
+
   /** A spot `distance` from your head along the line to the creature, with a
-   *  small lateral sway — then CORRALLED to a circle around its spawn corner
-   *  so it never wanders round to your sides (where you'd swing at a wall). */
+   *  small lateral sway. Used when it deliberately closes to a set range. */
   private engagePoint(out: Vector3, distance: number, lateral: number): Vector3 {
     out.copy(this.creature.position).sub(_head);
     out.y = 0;
     if (out.lengthSq() < 1e-4) out.set(0, 0, -1);
     out.normalize();
-    // Perpendicular (in the floor plane) for the sidestep.
     const px = -out.z;
     const pz = out.x;
     out.multiplyScalar(distance);
@@ -214,17 +250,36 @@ export class CreatureSystem extends createSystem({}) {
     out.z += pz * lateral;
     out.add(_head);
     out.y = 0;
-    // Corral: clamp into the roam circle around the spawn corner.
-    const ax = ARENA.spawn[0];
-    const az = ARENA.spawn[2];
-    const dx = out.x - ax;
-    const dz = out.z - az;
-    const d = Math.hypot(dx, dz);
-    if (d > ARENA.roamRadius) {
-      out.x = ax + (dx / d) * ARENA.roamRadius;
-      out.z = az + (dz / d) * ARENA.roamRadius;
+    return this.clampToArena(out);
+  }
+
+  /** HOLD GROUND and circle: keep the creature's CURRENT gap to you (never
+   *  closer than a floor) and drift sideways — it does NOT retreat when you
+   *  step in, so you can walk in and trade. */
+  private circleAround(out: Vector3, lateral: number): Vector3 {
+    out.copy(this.creature.position).sub(_head);
+    out.y = 0;
+    let gap = out.length();
+    if (gap < 1e-3) {
+      out.set(0, 0, -1);
+      gap = 1;
     }
-    return out;
+    out.normalize();
+    const px = -out.z;
+    const pz = out.x;
+    out.multiplyScalar(Math.max(0.6, gap)); // hold current distance, min 0.6m
+    out.x += px * lateral;
+    out.z += pz * lateral;
+    out.add(_head);
+    out.y = 0;
+    return this.clampToArena(out);
+  }
+
+  /** Head, or (for body-capable strikes) the chest, as the strike target. */
+  private targetFor(name: AttackName): Vector3 {
+    _target.copy(_head);
+    if (BODY_CAPABLE.has(name) && Math.random() < 0.4) _target.y -= 0.5; // to the body
+    return _target;
   }
 
   private updateFight(delta: number): void {
@@ -266,43 +321,55 @@ export class CreatureSystem extends createSystem({}) {
         const committed = c.isPunching || this.comboQueue.length > 0;
 
         if (committed) {
-          // In a combo: LURCH to strike range and keep swinging.
-          c.moveSpeedScale = 2.6;
-          c.moveTo(this.engagePoint(_v, ARENA.strikeDistance, lateral * 0.3));
+          // Mid-combo: close to the combo's distance (a PRESS gets right in
+          // your face to trade; a normal combo stops at strike range).
+          const dist = this.pressing ? ARENA.pressDistance : ARENA.strikeDistance;
+          c.moveSpeedScale = this.pressing ? 3.0 : 2.4;
+          c.moveTo(this.engagePoint(_v, dist, lateral * 0.25));
 
           // Stagger: eat a burst of damage mid-combo and it rocks off it.
           if (this.hpAtCombo - match.creatureHp >= BRAIN.staggerDamage) {
             this.comboQueue = [];
-            this.setMood('staggered', 1.1);
+            this.setMood('staggered', 1.0);
             break;
           }
           if (!c.isPunching) {
             const next = this.comboQueue.shift()!;
             const hand = this.handFor(next);
-            c.throwAttack(next, hand, _head, (limbWorld, apexHand) =>
+            c.throwAttack(next, hand, this.targetFor(next), (limbWorld, apexHand) =>
               this.resolveCreatureHit(next, limbWorld, apexHand),
             );
           }
         } else {
-          // Out of a combo: hold at RANGE, circling, winding down the dash.
-          c.moveSpeedScale = 1.5;
-          c.moveTo(this.engagePoint(_v, ARENA.rangeDistance, lateral));
+          // Between combos: HOLD GROUND and circle. Close in only if you're
+          // out of range — never retreat when you step in, so you can trade.
+          _v2.copy(c.position).sub(_head);
+          _v2.y = 0;
+          const gap = _v2.length();
+          if (gap > ARENA.holdDistance + 0.2) {
+            c.moveSpeedScale = 1.4; // you're far — walk you down
+            c.moveTo(this.engagePoint(_v, ARENA.holdDistance, lateral));
+          } else {
+            c.moveSpeedScale = 0.9; // in range — stand and circle
+            c.moveTo(this.circleAround(_v, lateral));
+          }
           this.comboRest -= delta;
           if (this.comboRest <= 0) {
-            this.comboQueue = this.pickCombo();
+            // ~40% of the time it presses in to trade big shots.
+            this.pressing = settings.difficulty > 0 && Math.random() < 0.4;
+            this.comboQueue = this.pressing ? this.pickPress() : this.pickCombo();
             this.hpAtCombo = match.creatureHp;
-            // Longer gaps = more range time; difficulty tightens them.
-            this.comboRest = (1.4 + Math.random() * 2.0) * diff.roamScale;
+            this.comboRest = (0.9 + Math.random() * 1.5) * diff.roamScale;
           }
         }
         break;
       }
 
       case 'staggered':
-        c.moveSpeedScale = 1.2;
-        c.moveTo(this.engagePoint(_v, ARENA.rangeDistance, lateral));
+        c.moveSpeedScale = 1.0;
+        c.moveTo(this.circleAround(_v, lateral));
         if (this.moodT > this.moodDuration) {
-          this.comboRest = 0.6;
+          this.comboRest = 0.5;
           this.setMood('fight');
         }
         break;
@@ -322,13 +389,28 @@ export class CreatureSystem extends createSystem({}) {
     }
   }
 
+  private arsenal(): AttackName[] {
+    return TIER_ARSENAL[Math.min(TIER_ARSENAL.length - 1, Math.max(0, settings.difficulty))];
+  }
+
   /** Draw a combination the current difficulty knows, capped in length. */
   private pickCombo(): AttackName[] {
     const diff = currentDifficulty();
-    const arsenal = TIER_ARSENAL[Math.min(TIER_ARSENAL.length - 1, Math.max(0, settings.difficulty))];
+    const arsenal = this.arsenal();
     const legal = COMBOS.filter(
       (combo) => combo.length <= diff.comboMax && combo.every((atk) => arsenal.includes(atk)),
     );
+    return [...legal[Math.floor(Math.random() * legal.length)]];
+  }
+
+  /** Draw an infighting flurry (only strikes in the current arsenal). */
+  private pickPress(): AttackName[] {
+    const diff = currentDifficulty();
+    const arsenal = this.arsenal();
+    const legal = PRESS_COMBOS.filter(
+      (combo) => combo.length <= diff.comboMax + 1 && combo.every((atk) => arsenal.includes(atk)),
+    );
+    if (legal.length === 0) return this.pickCombo();
     return [...legal[Math.floor(Math.random() * legal.length)]];
   }
 
@@ -336,7 +418,7 @@ export class CreatureSystem extends createSystem({}) {
    *  from the power side, the rest alternate. */
   private handFor(name: AttackName): Hand {
     if (name === 'jab') return 'left';
-    if (name === 'cross' || name === 'backfist') return 'right';
+    if (name === 'cross' || name === 'backfist' || name === 'spinkick') return 'right';
     const hand = this.nextHand;
     this.nextHand = hand === 'left' ? 'right' : 'left';
     return hand;
@@ -362,6 +444,23 @@ export class CreatureSystem extends createSystem({}) {
       return;
     }
 
+    // Screen-space direction of the impact (x right, y up), from the head's
+    // orientation — so the rim glow leans toward where it landed.
+    const headObj = this.playerHeadEntity?.object3D;
+    let dirX = 0;
+    let dirY = -1;
+    if (headObj) {
+      headObj.getWorldQuaternion(_hq);
+      _right.set(1, 0, 0).applyQuaternion(_hq);
+      _up.set(0, 1, 0).applyQuaternion(_hq);
+      _rel.copy(limbWorld).sub(_v);
+      dirX = _rel.dot(_right);
+      dirY = _rel.dot(_up);
+      const len = Math.hypot(dirX, dirY) || 1;
+      dirX /= len;
+      dirY /= len;
+    }
+
     // Is a glove on the impact point?
     const dL = player.gloves.left.distanceTo(limbWorld);
     const dR = player.gloves.right.distanceTo(limbWorld);
@@ -369,11 +468,13 @@ export class CreatureSystem extends createSystem({}) {
     const diffScale = currentDifficulty().damageScale;
 
     if (blockHand) {
-      // BLOCKED — chip damage leaks, the rest is stopped dead. Big white
-      // spark on the glove, a white screen-edge flash, a firm double buzz in
-      // the blocking hand: unmistakably "I stopped that".
+      // BLOCKED — chip damage leaks, the rest is stopped dead. White spark on
+      // the glove, a WHITE rim glow leaning toward where you blocked, a firm
+      // double buzz in the blocking hand: unmistakably "I stopped that".
       match.playerHp = Math.max(0, match.playerHp - spec.damage * diffScale * BLOCK.chip);
       match.blockFlash = 1;
+      match.blockDirX = dirX;
+      match.blockDirY = dirY;
       match.boardDirty = true;
       gooBlock();
       this.fx.flash(limbWorld, 0xffffff, 0.85);
@@ -381,10 +482,12 @@ export class CreatureSystem extends createSystem({}) {
       pulseHand(this.world.session, blockHand, 1, 70);
       pulseHand(this.world.session, blockHand, 0.7, 60);
     } else {
-      // CLEAN HIT — full damage, a big red splat + goo burst in your face,
-      // the red vignette, and both hands slammed hard.
+      // CLEAN HIT — full damage, a red splat + goo burst at the point, a RED
+      // rim glow from the direction it came, and both hands slammed hard.
       match.playerHp = Math.max(0, match.playerHp - spec.damage * diffScale);
       match.playerFlash = 1;
+      match.hitDirX = dirX;
+      match.hitDirY = dirY;
       match.boardDirty = true;
       gooSlam();
       this.fx.flash(limbWorld, 0xff3a1e, 0.75);

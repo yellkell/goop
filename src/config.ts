@@ -16,11 +16,14 @@ export const ARENA = {
   /** The creature is corralled inside this radius around its spawn corner —
    *  it never circles round to your sides, so you always punch toward the
    *  open space in front of you, not a real wall. */
-  roamRadius: 0.85,
-  /** Out-fighter spacing: it holds at `rangeDistance` and only lurches in to
-   *  `strikeDistance` for a combo, then backs off again. */
-  rangeDistance: 1.7,
-  strikeDistance: 0.92,
+  roamRadius: 0.9,
+  /** Spacing. It CLOSES to `holdDistance` and then holds its ground there,
+   *  circling — it doesn't retreat to keep you out, so you can walk in and
+   *  trade. `strikeDistance` is a normal combo's lurch; `pressDistance` is
+   *  an in-your-face infighting flurry. */
+  holdDistance: 1.15,
+  strikeDistance: 0.95,
+  pressDistance: 0.78,
   /** The wall board: the whole HUD, mounted behind the creature's corner. */
   wall: [0, 1.8, -3.3] as const,
 };
@@ -93,7 +96,15 @@ export const COMBAT = {
  * window (scaled by difficulty tempo); strike time is fixed so a punch
  * always looks like a punch. Damage is before the difficulty multiplier.
  */
-export type AttackName = 'jab' | 'cross' | 'hook' | 'uppercut' | 'overhand' | 'backfist' | 'roundhouse';
+export type AttackName =
+  | 'jab'
+  | 'cross'
+  | 'hook'
+  | 'uppercut'
+  | 'overhand'
+  | 'backfist'
+  | 'roundhouse'
+  | 'spinkick';
 
 export interface AttackSpec {
   telegraph: number;
@@ -112,6 +123,7 @@ export const ATTACKS: Record<AttackName, AttackSpec> = {
   overhand: { telegraph: 0.72, strike: 0.22, recover: 0.6, damage: 13, hitRadius: 0.48 },
   backfist: { telegraph: 0.75, strike: 0.34, recover: 0.6, damage: 14, hitRadius: 0.5 },
   roundhouse: { telegraph: 0.7, strike: 0.26, recover: 0.65, damage: 13, hitRadius: 0.5 },
+  spinkick: { telegraph: 0.82, strike: 0.36, recover: 0.72, damage: 16, hitRadius: 0.55 },
 };
 
 /** Creature AI pacing (seconds unless noted). */

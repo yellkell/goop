@@ -11,13 +11,7 @@
  */
 
 import { createSystem, InputComponent } from '@iwsdk/core';
-import {
-  CanvasTexture,
-  Mesh,
-  MeshBasicMaterial,
-  PlaneGeometry,
-  Vector3,
-} from 'three';
+import { Color, Mesh, PlaneGeometry, ShaderMaterial, Vector2, Vector3 } from 'three';
 import { announce, type Call } from '../audio/announcer.js';
 import { backToLobbyMusic, playVictoryThenLobby, startBattleMusic } from '../audio/music.js';
 import { matchEnd, roundBell, roundEnd, uiClick } from '../audio/sfx.js';
@@ -40,26 +34,52 @@ const VERDICT_SECONDS = 5.5;
 const _head = new Vector3();
 const _cpos = new Vector3();
 
-/** A soft edge-vignette texture in the given rgb — dark→transparent from the
- *  rim inward, so a flash reads as colour creeping in from the screen edges. */
-function vignetteTexture(r: number, g: number, b: number): CanvasTexture {
-  const c = document.createElement('canvas');
-  c.width = c.height = 256;
-  const ctx = c.getContext('2d')!;
-  const grad = ctx.createRadialGradient(128, 128, 50, 128, 128, 138);
-  grad.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0)`);
-  grad.addColorStop(0.7, `rgba(${r}, ${g}, ${b}, 0.5)`);
-  grad.addColorStop(1, `rgba(${r}, ${g}, ${b}, 0.95)`);
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, 256, 256);
-  return new CanvasTexture(c);
+/**
+ * A DIRECTIONAL rim glow — a head-locked full-view quad whose colour creeps
+ * in from the edge of your vision on the side a hit/block came from. `uDir`
+ * is the screen-space direction (x right, y up) toward the impact; the rim
+ * lights up strongest there, with a faint wash all round so it still reads.
+ */
+function rimGlowMaterial(color: number): ShaderMaterial {
+  return new ShaderMaterial({
+    transparent: true,
+    depthTest: false,
+    depthWrite: false,
+    uniforms: {
+      uColor: { value: new Color(color) },
+      uStrength: { value: 0 },
+      uDir: { value: new Vector2(0, -1) },
+    },
+    vertexShader: /* glsl */ `
+      varying vec2 vP;
+      void main() {
+        vP = position.xy / 1.4; // plane is 2.8 wide → ±1 across the view
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      precision mediump float;
+      varying vec2 vP;
+      uniform vec3 uColor;
+      uniform float uStrength;
+      uniform vec2 uDir;
+      void main() {
+        float r = length(vP);
+        float rim = smoothstep(0.5, 1.05, r); // glow only near the edges
+        float dir = dot(normalize(vP + 1e-5), normalize(uDir));
+        float lean = mix(0.12, 1.0, clamp(dir * 0.5 + 0.5, 0.0, 1.0)); // strongest toward uDir
+        float a = rim * lean * uStrength;
+        gl_FragColor = vec4(uColor, a);
+      }
+    `,
+  });
 }
 
 export class FightSystem extends createSystem({}) {
   private board!: WallBoard;
   private countdown!: CountdownPlate;
   private lastBeat = -1;
-  private vignette?: Mesh; // red — you got hit
+  private hitVig?: Mesh; // red — you got hit
   private blockVig?: Mesh; // white — you blocked
 
   init(): void {
@@ -71,11 +91,8 @@ export class FightSystem extends createSystem({}) {
     this.scene.add(this.countdown.mesh);
   }
 
-  private mkVignette(tex: CanvasTexture, z: number): Mesh {
-    const m = new Mesh(
-      new PlaneGeometry(2.8, 2.8),
-      new MeshBasicMaterial({ map: tex, transparent: true, opacity: 0, depthTest: false, depthWrite: false }),
-    );
+  private mkVignette(mat: ShaderMaterial, z: number): Mesh {
+    const m = new Mesh(new PlaneGeometry(2.8, 2.8), mat);
     m.position.set(0, 0, z);
     m.renderOrder = 999;
     m.visible = false;
@@ -83,12 +100,12 @@ export class FightSystem extends createSystem({}) {
   }
 
   private ensureVignette(): void {
-    if (this.vignette) return;
+    if (this.hitVig) return;
     const headObj = this.playerHeadEntity?.object3D;
     if (!headObj) return;
-    this.vignette = this.mkVignette(vignetteTexture(210, 30, 20), -0.6);
-    this.blockVig = this.mkVignette(vignetteTexture(230, 255, 240), -0.62);
-    headObj.add(this.vignette);
+    this.hitVig = this.mkVignette(rimGlowMaterial(0xd21e14), -0.6);
+    this.blockVig = this.mkVignette(rimGlowMaterial(0xf2fff6), -0.62);
+    headObj.add(this.hitVig);
     headObj.add(this.blockVig);
   }
 
@@ -98,14 +115,18 @@ export class FightSystem extends createSystem({}) {
     else _head.set(0, 1.6, 0);
 
     this.ensureVignette();
-    if (this.vignette && this.blockVig) {
-      // Red hit flash fades slowly (lingers so you register the hit).
+    if (this.hitVig && this.blockVig) {
+      // Red hit flash fades slowly (lingers so you register it).
       match.playerFlash = Math.max(0, match.playerFlash - delta * 1.7);
-      (this.vignette.material as MeshBasicMaterial).opacity = match.playerFlash * 0.7;
-      this.vignette.visible = match.playerFlash > 0.01;
+      const hm = this.hitVig.material as ShaderMaterial;
+      hm.uniforms.uStrength.value = match.playerFlash;
+      (hm.uniforms.uDir.value as Vector2).set(match.hitDirX, match.hitDirY);
+      this.hitVig.visible = match.playerFlash > 0.01;
       // White block flash is snappier.
-      match.blockFlash = Math.max(0, match.blockFlash - delta * 3.2);
-      (this.blockVig.material as MeshBasicMaterial).opacity = match.blockFlash * 0.5;
+      match.blockFlash = Math.max(0, match.blockFlash - delta * 3.0);
+      const bm = this.blockVig.material as ShaderMaterial;
+      bm.uniforms.uStrength.value = match.blockFlash;
+      (bm.uniforms.uDir.value as Vector2).set(match.blockDirX, match.blockDirY);
       this.blockVig.visible = match.blockFlash > 0.01;
     }
 

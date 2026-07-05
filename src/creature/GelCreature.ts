@@ -270,13 +270,13 @@ export class GelCreature {
     const shoulder = hand === 'left' ? BOXER_POSE[A.SHOULDER_L] : BOXER_POSE[A.SHOULDER_R];
     _v.set(target.x - shoulder[0], target.y - shoulder[1], target.z - shoulder[2]);
     const reach = _v.length();
-    const maxReach = name === 'roundhouse' ? 1.4 : 1.25;
+    const maxReach = name === 'roundhouse' || name === 'spinkick' ? 1.45 : 1.25;
     if (reach > maxReach) {
       _v.multiplyScalar(maxReach / reach);
       target.set(shoulder[0] + _v.x, shoulder[1] + _v.y, shoulder[2] + _v.z);
     }
     // A kick lands at chest/chin height, not orbit.
-    if (name === 'roundhouse') target.y = Math.min(target.y, 1.45);
+    if (name === 'roundhouse' || name === 'spinkick') target.y = Math.min(target.y, 1.5);
     this.attack = { name, hand, t: 0, target, apexFired: false, whooshFired: false, onApex, onDone };
     sfx.gooCharge(ATTACKS[name].telegraph * this.tempoScale);
     return true;
@@ -337,8 +337,8 @@ export class GelCreature {
     }
 
     // Face the face-point (yaw only, springy) — unless mid-spin: the
-    // backfist owns the body's rotation while it's coiling/whipping.
-    if (this.attack?.name !== 'backfist') {
+    // backfist/spinkick own the body's rotation while coiling/whipping.
+    if (this.attack?.name !== 'backfist' && this.attack?.name !== 'spinkick') {
       _v.copy(this.facePoint).sub(this.group.position);
       const targetYaw = Math.atan2(_v.x, _v.z);
       let dYaw = targetYaw - this.yaw;
@@ -435,7 +435,7 @@ export class GelCreature {
     const R = spec.recover * this.tempoScale;
 
     const left = a.hand === 'left';
-    const kick = a.name === 'roundhouse';
+    const kick = a.name === 'roundhouse' || a.name === 'spinkick';
     const limbI = kick ? (left ? A.KNEE_L : A.KNEE_R) : left ? A.FIST_L : A.FIST_R;
     const elbowI = left ? A.ELBOW_L : A.ELBOW_R;
     const shoulderI = left ? A.SHOULDER_L : A.SHOULDER_R;
@@ -517,6 +517,16 @@ export class GelCreature {
           out.y = 0.3 + (a.target.y - 0.3) * e;
           break;
         }
+        case 'spinkick': {
+          // SPINNING BACK KICK: the leg is held out rigid and the whole body
+          // rotates through it (the extraYaw spin below carries it round to
+          // you), rising from the floor to chest height.
+          const ext = 0.55 + (Math.min(hd, 1.4) - 0.55) * e;
+          out.x = dirX * ext;
+          out.z = dirZ * ext;
+          out.y = 0.28 + (a.target.y - 0.28) * e;
+          break;
+        }
       }
     };
 
@@ -586,6 +596,18 @@ export class GelCreature {
           put(A.CHEST_L, -side * 0.1 * k, 0, 0);
           put(A.CHEST_R, -side * 0.1 * k, 0, 0);
           break;
+        case 'spinkick':
+          // Coil the body the wrong way (like the backfist) AND gather the
+          // leg — the unmistakable spinning-kick wind-up.
+          this.extraYaw = -0.8 * side * k;
+          fx = -side * 0.1 * k;
+          fy = 0.06 * k;
+          fz = -0.16 * k;
+          swell = 1 + 0.5 * k;
+          put(hipI, -side * 0.1 * k, 0.04 * k, -0.1 * k);
+          put(A.CHEST_L, -side * 0.12 * k, 0, 0);
+          put(A.CHEST_R, -side * 0.12 * k, 0, 0);
+          break;
       }
     } else if (a.t < T + S) {
       // ---- strike: pin the limb to the path ----
@@ -594,12 +616,15 @@ export class GelCreature {
       if (!a.whooshFired) {
         a.whooshFired = true;
         if (a.name === 'backfist') sfx.spinWhoosh();
-        else if (a.name === 'roundhouse') sfx.kickWhoosh();
+        else if (a.name === 'roundhouse' || a.name === 'spinkick') sfx.kickWhoosh();
         else sfx.gooWhoosh();
       }
       if (a.name === 'backfist') {
         // The spin itself: coil releases through a full rotation.
         this.extraYaw = side * (-0.9 + (Math.PI * 2 + 0.9) * easeInOut(k));
+      } else if (a.name === 'spinkick') {
+        // Body spins through the leg — a touch under a full turn to face you.
+        this.extraYaw = side * (-0.8 + (Math.PI * 1.9 + 0.8) * easeInOut(k));
       }
       pathAt(k, this._pin);
       fx = this._pin.x - base[0];

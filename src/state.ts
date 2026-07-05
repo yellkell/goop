@@ -42,6 +42,12 @@ export const match = {
   playerFlash: 0,
   /** 1 when you just blocked a strike; FightSystem fades a white vignette. */
   blockFlash: 0,
+  /** Screen-space direction (x right, y up; unit-ish) the last hit / block
+   *  came from — the rim glow leans that way so you know where it landed. */
+  hitDirX: 0,
+  hitDirY: -1,
+  blockDirX: 0,
+  blockDirY: -1,
   /** Set by FistSystem the frame you land a BIG punch; CreatureSystem reads
    *  it (and clears it) to decide whether a hurt goop collapses into a glob. */
   bigHit: false,

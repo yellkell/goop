@@ -112,7 +112,7 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
 let autoSpar = false;
 let autoT = 0;
 
-const MOVES = ['jab', 'cross', 'hook', 'uppercut', 'overhand', 'backfist', 'roundhouse'] as const;
+const MOVES = ['jab', 'cross', 'hook', 'uppercut', 'overhand', 'backfist', 'roundhouse', 'spinkick'] as const;
 
 addEventListener('keydown', (e) => {
   if (e.key === '1') creature.setFormTarget(0);
