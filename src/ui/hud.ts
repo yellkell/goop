@@ -89,11 +89,14 @@ export class WallBoard {
   ): void {
     const g = this.board.g;
     // Name above the bar, aligned to the bar's outer edge.
-    g.fillStyle = 'rgba(238, 250, 238, 0.95)';
+    g.fillStyle = 'rgba(238, 250, 238, 0.98)';
     g.font = '800 40px system-ui, sans-serif';
     g.textBaseline = 'alphabetic';
     g.textAlign = anchor;
+    g.shadowColor = 'rgba(0, 0, 0, 0.75)';
+    g.shadowBlur = 12;
     g.fillText(label, anchor === 'left' ? x + 4 : x + w - 4, y - 18);
+    g.shadowBlur = 0;
 
     // Trough.
     g.fillStyle = 'rgba(10, 18, 12, 0.9)';
@@ -121,36 +124,28 @@ export class WallBoard {
   private draw(): void {
     const g = this.board.g;
     g.clearRect(0, 0, W, H);
-
-    // Plate.
-    g.fillStyle = 'rgba(8, 14, 10, 0.8)';
-    g.beginPath();
-    g.roundRect(8, 8, W - 16, H - 16, 40);
-    g.fill();
-    g.strokeStyle = 'rgba(109, 255, 126, 0.5)';
-    g.lineWidth = 5;
-    g.stroke();
-
+    // No panel — everything floats on transparent canvas. A soft dark glow
+    // under each mark keeps it legible against passthrough.
     const cx = W / 2;
 
     // Title + round state, centred at the top.
     g.textAlign = 'center';
     g.textBaseline = 'top';
+    g.shadowColor = 'rgba(0, 0, 0, 0.75)';
+    g.shadowBlur = 14;
     g.font = '900 58px system-ui, sans-serif';
     g.fillStyle = '#6dff7e';
-    g.shadowColor = 'rgba(109, 255, 126, 0.5)';
-    g.shadowBlur = 20;
     g.fillText(GAME_TITLE, cx, 22);
-    g.shadowBlur = 0;
 
     const inMatch = match.phase !== 'lobby';
     if (inMatch) {
       g.font = '800 34px system-ui, sans-serif';
       g.textBaseline = 'middle';
-      g.fillStyle = 'rgba(238, 250, 238, 0.85)';
+      g.fillStyle = 'rgba(238, 250, 238, 0.9)';
       const clock = match.phase === 'fighting' ? ` · ${Math.max(0, Math.ceil(match.timeLeft))}` : '';
       g.fillText(`ROUND ${Math.min(match.round, MAX_ROUNDS)} OF ${MAX_ROUNDS}${clock}`, cx, 108);
     }
+    g.shadowBlur = 0;
 
     // --- SEPARATED health bars, side by side, names above ---
     const barW = 560;
@@ -179,9 +174,12 @@ export class WallBoard {
     }
 
     // Centre stage — countdown / round-rest / verdict, in the lower middle.
+    // Text carries a soft dark glow so it reads while floating over the room.
     const cy = 468;
     g.textAlign = 'center';
     g.textBaseline = 'middle';
+    g.shadowColor = 'rgba(0, 0, 0, 0.75)';
+    g.shadowBlur = 16;
     if (match.phase === 'countdown') {
       const beat = Math.min(3, Math.floor(match.countdownT / COMBAT.countdownBeat));
       const msg = ['3', '2', '1', 'FIGHT'][beat];
@@ -242,6 +240,7 @@ export class WallBoard {
       g.fillStyle = 'rgba(238, 250, 238, 0.5)';
       g.fillText('start from the menu · A also works', cx, cy + 40);
     }
+    g.shadowBlur = 0;
 
     this.board.tex.needsUpdate = true;
   }
