@@ -55,24 +55,24 @@ function buildFist(hand: 'left' | 'right'): Group {
     emissiveIntensity: 0.6,
   });
 
-  // Main mitt — rounded, slightly taller than wide, knuckles forward.
-  const mitt = new Mesh(new SphereGeometry(0.062, 20, 16), leather);
+  // Main mitt — big and rounded, knuckles forward.
+  const mitt = new Mesh(new SphereGeometry(0.098, 20, 16), leather);
   mitt.scale.set(1.05, 1.0, 1.28);
-  mitt.position.set(0, 0, -0.015);
+  mitt.position.set(0, 0, -0.02);
   g.add(mitt);
-  // Thumb, tucked on the inside.
-  const thumb = new Mesh(new SphereGeometry(0.03, 12, 8), leather);
-  thumb.scale.set(0.9, 0.8, 1.3);
-  thumb.position.set(hand === 'left' ? 0.055 : -0.055, -0.012, -0.02);
-  thumb.rotation.y = hand === 'left' ? 0.5 : -0.5;
+  // Thumb, riding on TOP of the fist pointing up (not tucked inside).
+  const thumb = new Mesh(new SphereGeometry(0.042, 12, 10), leather);
+  thumb.scale.set(0.85, 1.5, 0.85); // elongated upward
+  thumb.position.set(hand === 'left' ? 0.05 : -0.05, 0.08, 0.01);
+  thumb.rotation.z = hand === 'left' ? -0.25 : 0.25; // splay slightly outward
   g.add(thumb);
   // Cuff at the wrist with the team-green lace band.
-  const cuff = new Mesh(new CylinderGeometry(0.048, 0.054, 0.06, 16), leather);
+  const cuff = new Mesh(new CylinderGeometry(0.072, 0.08, 0.085, 16), leather);
   cuff.rotation.x = Math.PI / 2;
-  cuff.position.set(0, -0.004, 0.075);
+  cuff.position.set(0, -0.006, 0.12);
   g.add(cuff);
-  const band = new Mesh(new TorusGeometry(0.052, 0.007, 10, 20), trim);
-  band.position.set(0, -0.004, 0.104);
+  const band = new Mesh(new TorusGeometry(0.078, 0.011, 10, 20), trim);
+  band.position.set(0, -0.006, 0.16);
   g.add(band);
   return g;
 }
@@ -149,6 +149,10 @@ export class FistSystem extends createSystem({}) {
           // It's down and it's a puddle — finish it.
           if (creature.vulnerable) dmg *= EXHAUST.vulnerability;
           match.creatureHp = Math.max(0, match.creatureHp - dmg);
+          // A BIG punch (a torn lump, or a hard clean connect) is what can
+          // knock a already-hurt goop out of its shape — CreatureSystem reads
+          // this the same frame.
+          if (res.lump || res.strength > 0.65) match.bigHit = true;
           match.boardDirty = true;
         }
       } else if (speed < PUNCH.hitSpeed && d < 0.02) {

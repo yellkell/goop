@@ -13,8 +13,10 @@ export const GAME_TITLE = 'GOOP';
 export const ARENA = {
   /** Creature spawn, metres in front of you (negative Z is "ahead"). */
   spawn: [0, 0, -1.9] as const,
-  /** The creature roams inside this radius around its spawn point. */
-  roamRadius: 1.1,
+  /** The creature is corralled inside this radius around its spawn corner —
+   *  it never circles round to your sides, so you always punch toward the
+   *  open space in front of you, not a real wall. */
+  roamRadius: 0.85,
   /** Out-fighter spacing: it holds at `rangeDistance` and only lurches in to
    *  `strikeDistance` for a combo, then backs off again. */
   rangeDistance: 1.7,
@@ -23,12 +25,13 @@ export const ARENA = {
   wall: [0, 1.8, -3.3] as const,
 };
 
-/** Your defence. Raise a glove onto the spot his fist lands and it's blocked. */
+/** Your defence. Raise EITHER glove near the spot his fist lands and it's
+ *  blocked — a generous radius so a hand up in the way is enough. */
 export const BLOCK = {
   /** A glove within this of the strike's impact point stops it. */
-  radius: 0.26,
+  radius: 0.38,
   /** Chip damage that still leaks through a block (fraction of the hit). */
-  chip: 0.12,
+  chip: 0.1,
 };
 
 /** The creature's body plan. */
@@ -126,13 +129,14 @@ export const BRAIN = {
 };
 
 /**
- * The finisher window. It fights on its feet the whole round; only when it
- * is REALLY hurt does it lose its shape — collapsing into an exhausted glob
- * that takes double damage. Dive on it.
+ * The finisher window. It fights on its feet the whole round; it only loses
+ * its shape when it's hurt (under `threshold` HP) AND you crack it with a
+ * BIG punch — then it collapses into an exhausted glob that takes double
+ * damage. Dive on it.
  */
 export const EXHAUST = {
-  /** HP fraction that triggers the collapse (once per round). */
-  threshold: 0.3,
+  /** It can only be knocked into a glob once it's below this HP fraction. */
+  threshold: 0.2,
   /** Seconds it lies there vulnerable before pulling itself together. */
   duration: 6,
   /** Damage multiplier while it's down. */

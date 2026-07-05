@@ -199,7 +199,8 @@ export class CreatureSystem extends createSystem({}) {
   // ---------------------------------------------------------------- fight
 
   /** A spot `distance` from your head along the line to the creature, with a
-   *  lateral sway so it circles rather than standing on a rail. */
+   *  small lateral sway — then CORRALLED to a circle around its spawn corner
+   *  so it never wanders round to your sides (where you'd swing at a wall). */
   private engagePoint(out: Vector3, distance: number, lateral: number): Vector3 {
     out.copy(this.creature.position).sub(_head);
     out.y = 0;
@@ -213,6 +214,16 @@ export class CreatureSystem extends createSystem({}) {
     out.z += pz * lateral;
     out.add(_head);
     out.y = 0;
+    // Corral: clamp into the roam circle around the spawn corner.
+    const ax = ARENA.spawn[0];
+    const az = ARENA.spawn[2];
+    const dx = out.x - ax;
+    const dz = out.z - az;
+    const d = Math.hypot(dx, dz);
+    if (d > ARENA.roamRadius) {
+      out.x = ax + (dx / d) * ARENA.roamRadius;
+      out.z = az + (dz / d) * ARENA.roamRadius;
+    }
     return out;
   }
 
@@ -222,23 +233,28 @@ export class CreatureSystem extends createSystem({}) {
     c.tempoScale = diff.tempoScale;
     this.sway += delta;
 
-    // REALLY hurt? It loses its shape — once per round it collapses into an
-    // exhausted glob and lies there taking double damage. The finisher.
+    // Hurt AND cracked by a big punch this frame? It loses its shape —
+    // collapses into an exhausted glob and lies there taking double damage.
+    // The finisher: it only globs when it's under half health and you land a
+    // real haymaker (a torn lump or a hard connect — see FistSystem).
     if (
       this.mood !== 'exhausted' &&
       !this.exhaustUsed &&
       match.creatureHp > 0 &&
-      match.creatureHp <= COMBAT.creatureHealth * EXHAUST.threshold
+      match.creatureHp <= COMBAT.creatureHealth * EXHAUST.threshold &&
+      match.bigHit
     ) {
       this.exhaustUsed = true;
+      match.bigHit = false;
       this.comboQueue = [];
       c.setFormTarget(0);
       c.vulnerable = true;
       this.setMood('exhausted', EXHAUST.duration);
       return;
     }
+    match.bigHit = false; // stale big-hit signal doesn't linger to next frame
 
-    const lateral = Math.sin(this.sway * 0.7) * 0.35;
+    const lateral = Math.sin(this.sway * 0.7) * 0.18;
 
     switch (this.mood) {
       case 'wander': // entering the fight from the lobby
@@ -357,7 +373,7 @@ export class CreatureSystem extends createSystem({}) {
       match.playerHp = Math.max(0, match.playerHp - spec.damage * diffScale * BLOCK.chip);
       match.boardDirty = true;
       gooBlock();
-      this.fx.flash(limbWorld, 0xbfffca, 0.3); // white-green on the glove
+      this.fx.flash(limbWorld, 0xffffff, 0.5); // soft white bloom on the glove
       pulseHand(this.world.session, blockHand, 0.8, 90);
     } else {
       // CLEAN HIT — full damage, red splat where it landed, both hands jolt.
