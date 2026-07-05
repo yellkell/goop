@@ -23,6 +23,7 @@ import { backToLobbyMusic, playVictoryThenLobby, startBattleMusic } from '../aud
 import { matchEnd, roundBell, roundEnd, uiClick } from '../audio/sfx.js';
 import { ARENA, COMBAT } from '../config.js';
 import {
+  getCreature,
   match,
   MAX_ROUNDS,
   resetForMatch,
@@ -31,12 +32,13 @@ import {
   ROUNDS_TO_WIN,
   type RoundWinner,
 } from '../state.js';
-import { WallBoard } from '../ui/hud.js';
+import { CountdownPlate, WallBoard } from '../ui/hud.js';
 
 const BEATS: Call[] = ['3', '2', '1', 'fight'];
 const VERDICT_SECONDS = 5.5;
 
 const _head = new Vector3();
+const _cpos = new Vector3();
 
 function vignetteTexture(): CanvasTexture {
   const c = document.createElement('canvas');
@@ -53,6 +55,7 @@ function vignetteTexture(): CanvasTexture {
 
 export class FightSystem extends createSystem({}) {
   private board!: WallBoard;
+  private countdown!: CountdownPlate;
   private lastBeat = -1;
   private vignette?: Mesh;
 
@@ -60,6 +63,9 @@ export class FightSystem extends createSystem({}) {
     this.board = new WallBoard();
     this.board.group.position.set(ARENA.wall[0], ARENA.wall[1], ARENA.wall[2]);
     this.scene.add(this.board.group);
+
+    this.countdown = new CountdownPlate();
+    this.scene.add(this.countdown.mesh);
   }
 
   private ensureVignette(): void {
@@ -165,6 +171,11 @@ export class FightSystem extends createSystem({}) {
     }
 
     this.board.update();
+
+    const creature = getCreature();
+    _cpos.copy(creature ? creature.position : _head).setY(0);
+    if (!creature) _cpos.set(_head.x, 0, _head.z - 1.5);
+    this.countdown.update(_head, _cpos);
   }
 
   /** A round is settled: score it, then rest or — if the cards are in —

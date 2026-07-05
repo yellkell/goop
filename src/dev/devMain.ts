@@ -33,7 +33,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GelCreature } from '../creature/GelCreature.js';
 import { GooFx } from '../fx/splats.js';
 import { match } from '../state.js';
-import { WallBoard } from '../ui/hud.js';
+import { CountdownPlate, WallBoard } from '../ui/hud.js';
 import { MenuPanel } from '../ui/menuPanel.js';
 
 declare global {
@@ -141,6 +141,7 @@ let shotClock = 0;
 let shotPunched = false;
 let menuPanel: MenuPanel | null = null;
 let hud: WallBoard | null = null;
+let cdPlate: CountdownPlate | null = null;
 
 function shotDirector(dt: number): boolean {
   shotClock += dt;
@@ -195,6 +196,26 @@ function shotDirector(dt: number): boolean {
       // Freeze the frame mid-strike: telegraph + just over half the strike.
       const midStrike = shot === 'spin' ? 0.75 + 0.2 : 0.7 + 0.15;
       return shotClock > launchAt + midStrike;
+    }
+    case 'countdown': {
+      // Wall board (big art) + the bare floating glyph between us and it.
+      if (!hud) {
+        hud = new WallBoard();
+        hud.group.position.set(0, 1.8, -2.2);
+        scene.add(hud.group);
+      }
+      if (!cdPlate) {
+        cdPlate = new CountdownPlate();
+        scene.add(cdPlate.mesh);
+      }
+      match.phase = 'countdown';
+      match.countdownT = 0.35; // shows "3"
+      match.boardDirty = true;
+      creature.setFormTarget(1);
+      camera.position.set(0.5, 1.55, 2.7);
+      controls.target.set(0, 1.35, -0.4);
+      cdPlate.update(camera.position, creature.group.position);
+      return shotClock > 2.5;
     }
     case 'hud': {
       // Mid-fight framing: boxer on its new legs, wall board behind it.
@@ -264,6 +285,7 @@ function frame(now: number): void {
   playerHead.copy(camera.position);
   creature.update(dt, playerHead);
   hud?.update();
+  cdPlate?.update(playerHead, creature.group.position);
   fx.update(dt);
   controls.update();
   renderer.render(scene, camera);

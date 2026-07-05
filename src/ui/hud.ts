@@ -21,6 +21,7 @@ import {
   MeshBasicMaterial,
   PlaneGeometry,
   SRGBColorSpace,
+  Vector3,
 } from 'three';
 import { COMBAT, GAME_TITLE } from '../config.js';
 import { match, MAX_ROUNDS } from '../state.js';
@@ -160,7 +161,7 @@ export class WallBoard {
 
     // Centre stage.
     const cx = W / 2;
-    const cy = 490;
+    const cy = 505;
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     if (match.phase === 'countdown') {
@@ -168,10 +169,11 @@ export class WallBoard {
       const msg = ['3', '2', '1', 'FIGHT'][beat];
       const art = countdownArt(msg);
       if (art) {
-        const s = Math.min(280 / art.height, 640 / art.width);
+        // Fill most of the lower board — big and unmissable.
+        const s = Math.min(360 / art.height, 940 / art.width);
         g.drawImage(art, cx - (art.width * s) / 2, cy - (art.height * s) / 2, art.width * s, art.height * s);
       } else {
-        g.font = '900 170px system-ui, sans-serif';
+        g.font = '900 240px system-ui, sans-serif';
         g.fillStyle = '#f2fff0';
         g.fillText(msg, cx, cy);
       }
@@ -225,5 +227,84 @@ export class WallBoard {
     }
 
     this.board.tex.needsUpdate = true;
+  }
+}
+
+// -------------------------------------------------------------- countdown
+
+const CD_W = 640;
+const CD_H = 512;
+
+/**
+ * The big 3 / 2 / 1 / FIGHT, floating BARE in the air between you and the
+ * goop during the countdown — just the glowing glyph, no panel, no frame.
+ * Billboards to face you, draws over everything (no depth test) so it's
+ * always readable, pops on each beat, and vanishes when the fight starts.
+ */
+export class CountdownPlate {
+  readonly mesh: Mesh;
+  private cd = makeCanvasPlane(CD_W, CD_H, 1.4);
+  private beatShown = -2;
+
+  constructor() {
+    this.mesh = this.cd.mesh;
+    (this.mesh.material as MeshBasicMaterial).depthTest = false;
+    this.mesh.renderOrder = 30;
+    this.mesh.visible = false;
+    this.draw();
+  }
+
+  update(playerHead: Vector3, creaturePos: Vector3): void {
+    const on = match.phase === 'countdown';
+    this.mesh.visible = on;
+    if (!on) {
+      this.beatShown = -2;
+      return;
+    }
+    // Hang it in the space between you and the goop, at eye height.
+    this.mesh.position.set(
+      playerHead.x + (creaturePos.x - playerHead.x) * 0.5,
+      1.5,
+      playerHead.z + (creaturePos.z - playerHead.z) * 0.5,
+    );
+    this.mesh.lookAt(playerHead);
+
+    const beat = Math.min(3, Math.floor(match.countdownT / COMBAT.countdownBeat));
+    if (beat !== this.beatShown) {
+      this.beatShown = beat;
+      this.draw();
+    }
+    // A punchy pop at the top of each beat that settles quickly.
+    const localT = match.countdownT - beat * COMBAT.countdownBeat;
+    const pop = 1 + 0.35 * Math.max(0, 1 - localT / 0.28) ** 2;
+    this.mesh.scale.set(pop, pop, pop);
+  }
+
+  private draw(): void {
+    const g = this.cd.g;
+    g.clearRect(0, 0, CD_W, CD_H);
+    const beat = Math.max(0, Math.min(3, this.beatShown));
+    const msg = ['3', '2', '1', 'FIGHT'][beat];
+    const cx = CD_W / 2;
+    const cy = CD_H / 2;
+    const art = countdownArt(msg);
+    if (art) {
+      // The harvested plates are already transparent neon glyphs — just draw
+      // the glyph big; the canvas stays transparent so it floats on its own.
+      const s = Math.min((CD_H * 0.94) / art.height, (CD_W * 0.98) / art.width);
+      g.drawImage(art, cx - (art.width * s) / 2, cy - (art.height * s) / 2, art.width * s, art.height * s);
+    } else {
+      // Fallback until the PNG decodes: bare glowing text, still no panel.
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      const green = msg === 'FIGHT';
+      g.font = `900 ${green ? 210 : 400}px system-ui, sans-serif`;
+      g.shadowColor = green ? 'rgba(109,255,126,0.9)' : 'rgba(180,255,190,0.85)';
+      g.shadowBlur = 40;
+      g.fillStyle = green ? '#6dff7e' : '#ffffff';
+      g.fillText(msg, cx, cy);
+      g.shadowBlur = 0;
+    }
+    this.cd.tex.needsUpdate = true;
   }
 }
