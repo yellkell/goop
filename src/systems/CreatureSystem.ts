@@ -62,6 +62,9 @@ const COMBOS: AttackName[][] = [
   ['hook', 'hook', 'roundhouse'],
   ['spinkick'],
   ['jab', 'spinkick'],
+  ['clap'],
+  ['jab', 'clap'],
+  ['jab', 'jab', 'clap'],
 ];
 
 /** Big infighting flurries — thrown when it presses in to TRADE up close. */
@@ -74,12 +77,14 @@ const PRESS_COMBOS: AttackName[][] = [
   ['cross', 'spinkick'],
   ['hook', 'roundhouse'],
   ['uppercut', 'cross', 'hook'],
+  ['jab', 'clap'],
+  ['hook', 'hook', 'clap'],
 ];
 
 const TIER_ARSENAL: AttackName[][] = [
   ['jab', 'cross'], // CHILL
   ['jab', 'cross', 'hook', 'uppercut', 'overhand'], // SCRAP
-  ['jab', 'cross', 'hook', 'uppercut', 'overhand', 'backfist', 'roundhouse', 'spinkick'], // RUMBLE
+  ['jab', 'cross', 'hook', 'uppercut', 'overhand', 'backfist', 'roundhouse', 'spinkick', 'clap'], // RUMBLE
 ];
 
 /** Which strikes are thrown at the body (chest height) rather than the head. */
@@ -422,7 +427,7 @@ export class CreatureSystem extends createSystem({}) {
    *  from the power side, the rest alternate. */
   private handFor(name: AttackName): Hand {
     if (name === 'jab') return 'left';
-    if (name === 'cross' || name === 'backfist' || name === 'spinkick') return 'right';
+    if (name === 'cross' || name === 'backfist' || name === 'spinkick' || name === 'clap') return 'right';
     const hand = this.nextHand;
     this.nextHand = hand === 'left' ? 'right' : 'left';
     return hand;

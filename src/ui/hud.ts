@@ -26,6 +26,7 @@ import {
 import { COMBAT, GAME_TITLE } from '../config.js';
 import { match, MAX_ROUNDS } from '../state.js';
 import { countdownArt } from './countdownArt.js';
+import { drawTitle, onTitleReady, titleImage } from './titleArt.js';
 import { verdictArt } from './verdictArt.js';
 
 function makeCanvasPlane(
@@ -60,6 +61,9 @@ export class WallBoard {
   constructor() {
     this.group.add(this.board.mesh);
     this.draw();
+    // The wordmark banner and the creature's name plate stream in async —
+    // redraw once the PNG decodes so they aren't stuck on the text fallback.
+    onTitleReady(() => this.draw());
   }
 
   /** Redraw when the match says so, or when the clock ticks. */
@@ -88,14 +92,23 @@ export class WallBoard {
     anchor: 'left' | 'right',
   ): void {
     const g = this.board.g;
-    // Name above the bar, aligned to the bar's outer edge.
-    g.fillStyle = 'rgba(238, 250, 238, 0.98)';
-    g.font = '800 40px system-ui, sans-serif';
-    g.textBaseline = 'alphabetic';
-    g.textAlign = anchor;
+    // Name above the bar, aligned to the bar's outer edge. The goop's name is
+    // its slime wordmark banner; YOU stays as text.
     g.shadowColor = 'rgba(0, 0, 0, 0.75)';
     g.shadowBlur = 12;
-    g.fillText(label, anchor === 'left' ? x + 4 : x + w - 4, y - 18);
+    const art = label === 'THE GOOP' ? titleImage() : null;
+    if (art) {
+      const bh = 52;
+      const bw = bh * (art.width / art.height);
+      const bx = anchor === 'left' ? x + 2 : x + w - 2 - bw;
+      g.drawImage(art, bx, y - 10 - bh, bw, bh);
+    } else {
+      g.fillStyle = 'rgba(238, 250, 238, 0.98)';
+      g.font = '800 40px system-ui, sans-serif';
+      g.textBaseline = 'alphabetic';
+      g.textAlign = anchor;
+      g.fillText(label, anchor === 'left' ? x + 4 : x + w - 4, y - 18);
+    }
     g.shadowBlur = 0;
 
     // Trough.
@@ -128,14 +141,18 @@ export class WallBoard {
     // under each mark keeps it legible against passthrough.
     const cx = W / 2;
 
-    // Title + round state, centred at the top.
+    // Title + round state, centred at the top. The dripping-slime wordmark
+    // banner replaces the plain green text (text is the fallback until it
+    // decodes).
     g.textAlign = 'center';
     g.textBaseline = 'top';
     g.shadowColor = 'rgba(0, 0, 0, 0.75)';
     g.shadowBlur = 14;
-    g.font = '900 58px system-ui, sans-serif';
-    g.fillStyle = '#6dff7e';
-    g.fillText(GAME_TITLE, cx, 22);
+    if (!drawTitle(g, cx, 8, 520, 96)) {
+      g.font = '900 58px system-ui, sans-serif';
+      g.fillStyle = '#6dff7e';
+      g.fillText(GAME_TITLE, cx, 22);
+    }
 
     const inMatch = match.phase !== 'lobby';
     if (inMatch) {
@@ -205,9 +222,6 @@ export class WallBoard {
         cx,
         cy - 25,
       );
-      g.font = '700 34px system-ui, sans-serif';
-      g.fillStyle = 'rgba(238, 250, 238, 0.7)';
-      g.fillText('breathe — it certainly isn’t', cx, cy + 50);
     } else if (match.phase === 'verdict' && match.verdict) {
       const key = match.verdict === 'win' ? 'win' : match.verdict === 'draw' ? 'draw' : 'ko';
       const art = verdictArt(key);
@@ -232,13 +246,6 @@ export class WallBoard {
     } else if (match.phase === 'fighting') {
       // Fighting: the strip above already carries round + clock; keep the
       // stage clear so the wall reads calm mid-brawl.
-    } else {
-      g.font = '800 46px system-ui, sans-serif';
-      g.fillStyle = 'rgba(238, 250, 238, 0.85)';
-      g.fillText('WARM UP ON THE GOOP', cx, cy - 20);
-      g.font = '600 30px system-ui, sans-serif';
-      g.fillStyle = 'rgba(238, 250, 238, 0.5)';
-      g.fillText('start from the menu · A also works', cx, cy + 40);
     }
     g.shadowBlur = 0;
 

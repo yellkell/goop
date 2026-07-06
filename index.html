@@ -31,13 +31,16 @@
         inset: 0;
         z-index: 1000;
         display: grid;
-        align-items: center;
+        place-items: center;
         padding: clamp(24px, 7vw, 96px);
         box-sizing: border-box;
         color: #eef7ea;
+        /* Fully opaque so the web screen shows ONLY the wordmark and the
+           button — nothing of the 3D scene bleeds through until you're in VR. */
         background:
-          linear-gradient(90deg, rgba(3, 7, 4, 0.94) 0%, rgba(3, 7, 4, 0.72) 48%, rgba(3, 7, 4, 0.24) 100%),
-          linear-gradient(180deg, rgba(74, 222, 96, 0.16) 0%, rgba(74, 222, 96, 0) 44%);
+          radial-gradient(ellipse at 50% 42%, rgba(74, 222, 96, 0.16) 0%, rgba(74, 222, 96, 0) 46%),
+          radial-gradient(ellipse at 50% 46%, #0d1c0e 0%, #060a06 72%),
+          #060a06;
         transition:
           opacity 220ms ease,
           visibility 220ms ease;
@@ -64,32 +67,16 @@
       .landing__content {
         position: relative;
         z-index: 1;
-        max-width: 640px;
+        margin: 0 auto;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 46px;
       }
-      .landing__title {
-        margin: 0 0 30px;
-        color: #6dff7e;
-        font-size: clamp(3.6rem, 10vw, 8.5rem);
-        font-weight: 800;
-        line-height: 0.9;
-        letter-spacing: 0.02em;
-        text-transform: uppercase;
-        text-shadow: 0 0 42px rgba(96, 255, 120, 0.35);
-      }
-      .landing__subtitle {
-        margin: -16px 0 34px;
-        color: rgba(238, 247, 234, 0.82);
-        font-size: clamp(1.1rem, 2.6vw, 1.9rem);
-        font-weight: 800;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-      }
-      .landing__blurb {
-        margin: 0 0 40px;
-        color: rgba(238, 247, 234, 0.62);
-        font-size: clamp(0.98rem, 1.7vw, 1.15rem);
-        line-height: 1.55;
-        max-width: 480px;
+      .landing__logo {
+        width: min(78vw, 620px);
+        height: auto;
+        filter: drop-shadow(0 0 46px rgba(96, 255, 120, 0.35));
       }
       .enter-vr {
         width: min(100%, 300px);
@@ -116,12 +103,6 @@
         opacity: 0.45;
         cursor: default;
       }
-      .landing__hint {
-        margin: 18px 0 0;
-        color: rgba(238, 247, 234, 0.45);
-        font-size: 0.85rem;
-        letter-spacing: 0.04em;
-      }
       body.app-entered .landing {
         opacity: 0;
         visibility: hidden;
@@ -133,15 +114,8 @@
     <div id="scene-container"></div>
     <div class="landing">
       <div class="landing__content">
-        <h1 class="landing__title">Goop</h1>
-        <p class="landing__subtitle">It reforms. You re-punch.</p>
-        <p class="landing__blurb">
-          A man-sized blob of living gel oozes into your room, pulls itself into a boxer's
-          shape and starts swinging. Knock lumps out of it, watch them crawl back home, and
-          put the whole puddle down before the bell.
-        </p>
-        <button id="enter-vr" class="enter-vr" type="button">Enter the Ring</button>
-        <p class="landing__hint">Quest 3 / 3S &middot; passthrough &middot; controllers in hand</p>
+        <img class="landing__logo" id="landing-logo" alt="GOOP" />
+        <button id="enter-vr" class="enter-vr" type="button">Enter VR</button>
       </div>
     </div>
     <script type="module" src="/src/main.ts"></script>

@@ -18,6 +18,7 @@ import {
 } from 'three';
 import { isMusicMuted } from '../audio/music.js';
 import { currentDifficulty, settings } from '../state.js';
+import { drawTitle, onTitleReady } from './titleArt.js';
 
 const W = 1024;
 const H = 820;
@@ -61,6 +62,8 @@ export class MenuPanel {
     );
     this.group.add(this.mesh);
     this.draw();
+    // Redraw once the wordmark banner decodes (it replaces the title text).
+    onTitleReady(() => this.draw());
   }
 
   /** Which button sits under a mesh UV, or null. */
@@ -112,18 +115,21 @@ export class MenuPanel {
     g.lineWidth = 5;
     g.stroke();
 
-    // Title.
+    // Title — the dripping-slime wordmark banner (text fallback until it
+    // decodes).
     g.textAlign = 'center';
     g.textBaseline = 'top';
-    g.font = '900 96px system-ui, sans-serif';
-    g.fillStyle = '#6dff7e';
-    g.shadowColor = 'rgba(109, 255, 126, 0.55)';
+    g.shadowColor = 'rgba(109, 255, 126, 0.4)';
     g.shadowBlur = 26;
-    g.fillText('GOOP', W / 2, 44);
+    if (!drawTitle(g, W / 2, 20, 560, 150)) {
+      g.font = '900 96px system-ui, sans-serif';
+      g.fillStyle = '#6dff7e';
+      g.fillText('GOOP', W / 2, 44);
+    }
     g.shadowBlur = 0;
     g.font = '700 34px system-ui, sans-serif';
     g.fillStyle = 'rgba(238, 250, 238, 0.6)';
-    g.fillText('IT REFORMS. YOU RE-PUNCH.', W / 2, 156);
+    g.fillText('IT REFORMS. YOU RE-PUNCH.', W / 2, 184);
 
     for (const b of this.buttons) {
       const hot = this.hovered === b.action;
@@ -168,12 +174,6 @@ export class MenuPanel {
         g.fillText(big, b.x + b.w / 2, b.y + b.h - 30);
       }
     }
-
-    // Footer hint.
-    g.font = '600 26px system-ui, sans-serif';
-    g.fillStyle = 'rgba(238, 250, 238, 0.4)';
-    g.textBaseline = 'alphabetic';
-    g.fillText('point + trigger · warm up on the goop meanwhile · A also starts', W / 2, H - 40);
 
     this.tex.needsUpdate = true;
   }

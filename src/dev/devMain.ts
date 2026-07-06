@@ -112,7 +112,7 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
 let autoSpar = false;
 let autoT = 0;
 
-const MOVES = ['jab', 'cross', 'hook', 'uppercut', 'overhand', 'backfist', 'roundhouse', 'spinkick'] as const;
+const MOVES = ['jab', 'cross', 'hook', 'uppercut', 'overhand', 'backfist', 'roundhouse', 'spinkick', 'clap'] as const;
 
 addEventListener('keydown', (e) => {
   if (e.key === '1') creature.setFormTarget(0);
@@ -221,6 +221,19 @@ function shotDirector(dt: number): boolean {
       // Freeze the frame mid-strike: telegraph + just over half the strike.
       const midStrike = shot === 'spin' ? 0.75 + 0.2 : 0.7 + 0.15;
       return shotClock > launchAt + midStrike;
+    }
+    case 'clap': {
+      // The two-handed Bear-Hugger clap — framed head-on so both arms read.
+      creature.setFormTarget(1);
+      camera.position.set(0, 1.35, 2.4);
+      controls.target.set(0, 1.3, 0);
+      const launchAt = 1.6;
+      if (!shotPunched && shotClock >= launchAt) {
+        shotPunched = true;
+        creature.throwAttack('clap', 'right', playerHead);
+      }
+      // Freeze at the top of the wind-up: both arms reared up and out wide.
+      return shotClock > launchAt + 0.92;
     }
     case 'glove': {
       // Both gloves floating, framed close, to check the thumb-on-top.

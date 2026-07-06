@@ -106,7 +106,8 @@ export type AttackName =
   | 'overhand'
   | 'backfist'
   | 'roundhouse'
-  | 'spinkick';
+  | 'spinkick'
+  | 'clap';
 
 export interface AttackSpec {
   telegraph: number;
@@ -129,6 +130,10 @@ export const ATTACKS: Record<AttackName, AttackSpec> = {
   backfist: { telegraph: 0.9, strike: 0.34, recover: 0.6, damage: 15, hitRadius: 0.5 },
   roundhouse: { telegraph: 0.86, strike: 0.26, recover: 0.65, damage: 14, hitRadius: 0.5 },
   spinkick: { telegraph: 0.98, strike: 0.36, recover: 0.72, damage: 17, hitRadius: 0.55 },
+  // The Bear Hugger: both gel arms rear up and out wide, then swing together
+  // and CLAP in the middle where your head is. A long, huge tell — duck under
+  // it or eat a big one. Wide hit box (it's coming from both sides at once).
+  clap: { telegraph: 1.0, strike: 0.22, recover: 0.62, damage: 16, hitRadius: 0.52 },
 };
 
 /** Creature AI pacing (seconds unless noted). */

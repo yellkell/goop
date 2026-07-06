@@ -525,6 +525,113 @@ export class GelCreature {
       o[i * 3 + 2] += z;
     };
 
+    // ---- CLAP: the two-handed Bear-Hugger slap ----
+    // Unlike every other move this is BOTH arms at once — they rear up and
+    // out wide, then swing together and smack in the middle where your head
+    // is. Handled entirely here (own telegraph/strike/recover), then return.
+    if (a.name === 'clap') {
+      const hd2 = Math.max(Math.hypot(a.target.x, a.target.z), 1e-4);
+      const reach = Math.min(hd2, 0.95);
+      const mX = (a.target.x / hd2) * reach; // meet point: centred in front,
+      const mY = a.target.y; //                at your head height,
+      const mZ = (a.target.z / hd2) * reach; //  where the clap lands.
+      const lb = BOXER_POSE[A.FIST_L];
+      const rb = BOXER_POSE[A.FIST_R];
+      // Wound-up wide-open pose — arms reared up and thrown out to the sides.
+      const wlx = -0.52;
+      const wrx = 0.52;
+      const wy = 1.66;
+      const wz = 0.1;
+
+      let lx = lb[0];
+      let ly = lb[1];
+      let lz = lb[2];
+      let rx = rb[0];
+      let ry = rb[1];
+      let rz = rb[2];
+      let sw = 1;
+      let mid = 1;
+
+      if (a.t < T) {
+        const k = easeOutCubic(a.t / T);
+        this.telegraph = Math.min(1, this.telegraph + dt * 3.5);
+        this.sim.blendScale = 1 + 0.4 * k;
+        lx = lb[0] + (wlx - lb[0]) * k;
+        ly = lb[1] + (wy - lb[1]) * k;
+        lz = lb[2] + (wz - lb[2]) * k;
+        rx = rb[0] + (wrx - rb[0]) * k;
+        ry = rb[1] + (wy - rb[1]) * k;
+        rz = rb[2] + (wz - rb[2]) * k;
+        sw = 1 + 0.4 * k;
+        mid = 1 + 0.35 * k;
+        put(A.CHEST_L, -0.05 * k, 0.02 * k, -0.05 * k);
+        put(A.CHEST_R, 0.05 * k, 0.02 * k, -0.05 * k);
+      } else if (a.t < T + S) {
+        const k = easeOutCubic((a.t - T) / S);
+        this.telegraph = Math.max(0, this.telegraph - dt * 10);
+        if (!a.whooshFired) {
+          a.whooshFired = true;
+          sfx.gooWhoosh();
+        }
+        lx = wlx + (mX - wlx) * k;
+        ly = wy + (mY - wy) * k;
+        lz = wz + (mZ - wz) * k;
+        rx = wrx + (mX - wrx) * k;
+        ry = wy + (mY - wy) * k;
+        rz = wz + (mZ - wz) * k;
+        sw = 1.5;
+        mid = 1.5;
+        this.sim.blendScale = 1.4;
+        // Pin the right hand to its slam path so the clap lands on the beat;
+        // the left chases into the same point and they smack together.
+        this.sim.pinIndex = A.FIST_R;
+        this.sim.pinPos.x = rx;
+        this.sim.pinPos.y = ry;
+        this.sim.pinPos.z = rz;
+        if (!a.apexFired && k > 0.86) {
+          a.apexFired = true;
+          sfx.gooSlam();
+          _v3.set(mX, mY, mZ);
+          this.group.updateMatrixWorld();
+          this.group.localToWorld(_v3);
+          a.onApex?.(_v3, a.hand);
+        }
+      } else if (a.t < T + S + R) {
+        const k = 1 - easeOutCubic((a.t - T - S) / R);
+        lx = lb[0] + (mX - lb[0]) * k;
+        ly = lb[1] + (mY - lb[1]) * k;
+        lz = lb[2] + (mZ - lb[2]) * k;
+        rx = rb[0] + (mX - rb[0]) * k;
+        ry = rb[1] + (mY - rb[1]) * k;
+        rz = rb[2] + (mZ - rb[2]) * k;
+        sw = 1 + 0.45 * k;
+        mid = 1 + 0.4 * k;
+        this.sim.blendScale = 1 + 0.35 * k;
+      } else {
+        const done = a.onDone;
+        this.attack = null;
+        this.extraYaw = 0;
+        done?.();
+        return;
+      }
+
+      const placeArm = (fistI: number, elbowI: number, shoulderI: number, X: number, Y: number, Z: number): void => {
+        const fb = BOXER_POSE[fistI];
+        put(fistI, X - fb[0], Y - fb[1], Z - fb[2]);
+        const eb = BOXER_POSE[elbowI];
+        const shb = BOXER_POSE[shoulderI];
+        o[elbowI * 3] += shb[0] + (X - shb[0]) * 0.6 - eb[0];
+        o[elbowI * 3 + 1] += shb[1] + (Y - shb[1]) * 0.6 - eb[1];
+        o[elbowI * 3 + 2] += shb[2] + (Z - shb[2]) * 0.6 - eb[2];
+        this.sim.radiusScale[fistI] = sw;
+        this.sim.radiusScale[elbowI] = mid;
+      };
+      placeArm(A.FIST_L, A.ELBOW_L, A.SHOULDER_L, lx, ly, lz);
+      placeArm(A.FIST_R, A.ELBOW_R, A.SHOULDER_R, rx, ry, rz);
+      put(A.BELLY, 0, 0, 0.04);
+      return;
+    }
+
     /** The strike path — where the striking blob is at strike-phase k. */
     const pathAt = (k: number, out: { x: number; y: number; z: number }): void => {
       const e = easeOutCubic(k);

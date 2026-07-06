@@ -14,6 +14,7 @@
 
 import { launchXR, SessionMode, World } from '@iwsdk/core';
 import { DirectionalLight, HemisphereLight } from 'three';
+import titleUrl from './assets/ui/goop-title.png?url';
 import { preloadAnnouncer } from './audio/announcer.js';
 import { startLobbyMusic } from './audio/music.js';
 import { ensureAudio } from './audio/sfx.js';
@@ -24,6 +25,8 @@ import { MenuSystem } from './systems/MenuSystem.js';
 
 const container = document.getElementById('scene-container') as HTMLDivElement;
 const enterButton = document.getElementById('enter-vr') as HTMLButtonElement | null;
+const landingLogo = document.getElementById('landing-logo') as HTMLImageElement | null;
+if (landingLogo) landingLogo.src = titleUrl;
 
 enterButton?.setAttribute('disabled', '');
 
