@@ -184,6 +184,29 @@ function shotDirector(dt: number): boolean {
       camera.position.set(1.2, 1.05, 1.9);
       controls.target.set(0, 0.25, 0);
       return shotClock > 2.5;
+    case 'puddle': {
+      // Knock a few lumps off, then frame the FLOOR to see them as flat
+      // puddles crawling back to the creature.
+      creature.setFormTarget(0);
+      camera.position.set(1.4, 0.75, 1.7);
+      controls.target.set(0, 0.1, -0.1);
+      if (!shotPunched && shotClock >= 0.8) {
+        shotPunched = true;
+        const swing = (from: Vector3, dir: Vector3, speed: number) => {
+          for (let t = 0; t < 3; t += 0.02) {
+            _p.copy(from).addScaledVector(dir, t);
+            if (creature.fieldAtWorld(_p) < 0.01) {
+              creature.receivePunchWorld(_p, dir, speed);
+              return;
+            }
+          }
+        };
+        swing(new Vector3(0.5, 0.6, 1.4), _dir.set(-0.5, 0.05, -1).normalize().clone(), 5.0);
+        swing(new Vector3(-0.45, 0.5, 1.4), new Vector3(0.5, 0.05, -1).normalize(), 4.8);
+        swing(new Vector3(0.15, 0.7, 1.4), new Vector3(0.1, 0.1, -1).normalize(), 4.6);
+      }
+      return shotClock > 2.0; // just after they land and spread flat
+    }
     case 'spin':
     case 'kick': {
       // Catch the showpiece attacks mid-strike.

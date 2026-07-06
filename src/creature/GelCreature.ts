@@ -81,6 +81,32 @@ function shadowTexture(): CanvasTexture {
   return new CanvasTexture(c);
 }
 
+/** A wet green blob for the floor puddles — a bright glossy centre fading to
+ *  a darker rim, plus a couple of satellite dabs so it isn't a clean circle. */
+function puddleTexture(): CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const g = c.getContext('2d')!;
+  const grad = g.createRadialGradient(64, 60, 4, 64, 64, 60);
+  grad.addColorStop(0, 'rgba(120, 240, 140, 0.95)');
+  grad.addColorStop(0.5, 'rgba(52, 190, 84, 0.8)');
+  grad.addColorStop(1, 'rgba(24, 120, 46, 0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 128, 128);
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2 + 0.6;
+    const rr = 34 + (i % 2) * 12;
+    const x = 64 + Math.cos(a) * rr;
+    const y = 64 + Math.sin(a) * rr;
+    const dab = g.createRadialGradient(x, y, 1, x, y, 14);
+    dab.addColorStop(0, 'rgba(70, 210, 96, 0.55)');
+    dab.addColorStop(1, 'rgba(70, 210, 96, 0)');
+    g.fillStyle = dab;
+    g.fillRect(0, 0, 128, 128);
+  }
+  return new CanvasTexture(c);
+}
+
 export class GelCreature {
   readonly group = new Group();
   readonly sim = new GoopSim();
@@ -88,6 +114,8 @@ export class GelCreature {
   private gel: GelUniforms;
   private gelMesh: Mesh;
   private shadow: Mesh;
+  /** Flat floor-decal pool for the grounded lump puddles (local space). */
+  private puddles: Mesh[] = [];
 
   private eyeL: Group;
   private eyeR: Group;
@@ -142,6 +170,22 @@ export class GelCreature {
     this.shadow.position.y = 0.003;
     this.shadow.renderOrder = 0;
     this.group.add(this.shadow);
+
+    // Floor-puddle decals — flat wet-green blobs for grounded lumps.
+    const puddleTex = puddleTexture();
+    const puddleGeo = new PlaneGeometry(1, 1);
+    for (let i = 0; i < CREATURE.maxLumps; i++) {
+      const m = new Mesh(
+        puddleGeo,
+        new MeshBasicMaterial({ map: puddleTex, transparent: true, depthWrite: false, opacity: 0.92 }),
+      );
+      m.rotation.x = -Math.PI / 2;
+      m.position.y = 0.006 + i * 0.0011; // stack slightly so they don't z-fight
+      m.renderOrder = 1;
+      m.visible = false;
+      this.group.add(m);
+      this.puddles.push(m);
+    }
 
     const mkEye = (): Group => {
       const g = new Group();
@@ -296,7 +340,8 @@ export class GelCreature {
     _v2.copy(dir).applyQuaternion(_q);
     const res = this.sim.punchAt(_v, _v2, speed);
     if (res.hit) {
-      this.fx.burst(point, dir, 8 + Math.round(res.strength * 16), speed);
+      // Fewer droplets — the deformation carries the impact now.
+      this.fx.burst(point, dir, 2 + Math.round(res.strength * 5), speed);
       if (res.lump) sfx.tear();
     }
     return res;
@@ -398,6 +443,23 @@ export class GelCreature {
     this.shadow.position.x = _v.x;
     this.shadow.position.z = _v.z;
     (this.shadow.material as MeshBasicMaterial).opacity = 0.5 + this.koVal * 0.2;
+
+    // Grounded-lump puddles: flat decals on the floor (local space).
+    const pc = this.sim.packedPuddleCount;
+    const pd = this.sim.packedPuddles;
+    for (let i = 0; i < this.puddles.length; i++) {
+      const m = this.puddles[i];
+      if (i < pc) {
+        const o = i * 3;
+        const r = pd[o + 2];
+        m.position.x = pd[o];
+        m.position.z = pd[o + 1];
+        m.scale.set(r * 2.8, r * 2.8, 1); // wide and thin, like a spilt puddle
+        m.visible = true;
+      } else {
+        m.visible = false;
+      }
+    }
 
     // Distance LOD: past ~3.5 m the full step budget is invisible — shed it.
     const camDist = this.group.position.distanceTo(playerHeadWorld);

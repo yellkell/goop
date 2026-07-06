@@ -60,10 +60,11 @@ export const PUNCH = {
   hitSpeed: 1.3,
   /** Fist speed that knocks a lump clean out of the body. */
   lumpSpeed: 2.5,
-  /** Impulse scale from fist velocity into nearby blobs. */
-  impulse: 0.55,
+  /** Impulse scale from fist velocity into nearby blobs — how hard a punch
+   *  physically shoves the gel. */
+  impulse: 1.05,
   /** Radius around the contact point that feels the punch. */
-  splashRadius: 0.5,
+  splashRadius: 0.62,
   /** Seconds a dent crater lingers before the gel flows back in. */
   dentLife: 0.5,
   /** Per-hand cooldown between scoring hits. */
