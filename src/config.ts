@@ -61,12 +61,14 @@ export const PUNCH = {
   /** Fist speed that knocks a lump clean out of the body. */
   lumpSpeed: 2.5,
   /** Impulse scale from fist velocity into nearby blobs — how hard a punch
-   *  physically shoves the gel. */
-  impulse: 1.05,
-  /** Radius around the contact point that feels the punch. */
-  splashRadius: 0.62,
-  /** Seconds a dent crater lingers before the gel flows back in. */
-  dentLife: 0.5,
+   *  physically shoves the gel. Cranked up so a hit visibly ripples the body. */
+  impulse: 1.5,
+  /** Radius around the contact point that feels the punch — wide so the shove
+   *  travels out across the surface as a ripple, not just a local poke. */
+  splashRadius: 0.72,
+  /** Seconds a dent crater lingers before the gel flows back in — long enough
+   *  to read the impact wobble out. */
+  dentLife: 0.62,
   /** Per-hand cooldown between scoring hits. */
   cooldown: 0.2,
   /** Damage per scoring hit (scaled up with fist speed). */
@@ -185,7 +187,8 @@ export const GEL_LOOK = {
   telegraphColor: 0xffb03a,
   /** Raymarch step cap (the single biggest perf knob on Quest). */
   maxSteps: 22,
-  /** Surface wobble amplitude at rest / when agitated. */
+  /** Surface wobble amplitude at rest / when agitated. The agitated figure is
+   *  turned up so a fresh punch sets the whole surface roiling. */
   wobble: 0.010,
-  wobbleAgitated: 0.028,
+  wobbleAgitated: 0.044,
 };

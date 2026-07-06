@@ -54,9 +54,6 @@ interface Lump extends Blob {
   /** Core blob index this lump will crawl back into. */
   home: number;
   hasSplatted: boolean;
-  /** Once it hits the floor it becomes a flat PUDDLE (rendered as a floor
-   *  decal, not a 3D metaball) that crawls back and gets sucked up. */
-  grounded: boolean;
 }
 
 interface Dent {
@@ -136,11 +133,6 @@ export class GoopSim {
   packedCount = 0;
   packedDentCount = 0;
 
-  /** Grounded lumps as flat FLOOR PUDDLES [x, z, r] — rendered as decals by
-   *  GelCreature, not as 3D metaballs. */
-  readonly packedPuddles = new Float32Array(CREATURE.maxLumps * 3);
-  packedPuddleCount = 0;
-
   private time = 0;
   private dripTimer = 2.5;
 
@@ -212,7 +204,6 @@ export class GoopSim {
       d = smin(d, Math.sqrt(dx * dx + dy * dy + dz * dz) - b.r, k);
     }
     for (const l of this.lumps) {
-      if (l.grounded) continue; // grounded lumps are floor decals, not field
       const dx = p.x - l.x;
       const dy = p.y - l.y;
       const dz = p.z - l.z;
@@ -272,7 +263,7 @@ export class GoopSim {
       maxZ = Math.max(maxZ, b.z + b.r);
     };
     for (const b of this.core) scan(b);
-    for (const l of this.lumps) if (!l.grounded) scan(l);
+    for (const l of this.lumps) scan(l);
     for (const d of this.drips) scan(d);
     const margin = CREATURE.blend * 0.8 + 0.05;
     outCenter.set((minX + maxX) / 2, (minY + maxY) / 2, (minZ + maxZ) / 2);
@@ -311,18 +302,20 @@ export class GoopSim {
       b.pz -= dir.z * boost;
     }
 
-    // Carve the crater.
+    // Carve the crater — a big, deep dent so the punch visibly caves the
+    // surface in before the gel flows back with a wobble.
     if (this.dents.length >= MAX_DENTS) this.dents.shift();
     this.dents.push({
-      x: point.x + dir.x * 0.06,
-      y: point.y + dir.y * 0.06,
-      z: point.z + dir.z * 0.06,
-      rMax: 0.1 + 0.09 * strength,
+      x: point.x + dir.x * 0.08,
+      y: point.y + dir.y * 0.08,
+      z: point.z + dir.z * 0.08,
+      rMax: 0.14 + 0.13 * strength,
       age: 0,
       life: PUNCH.dentLife,
     });
 
-    this.agitation = Math.min(1, this.agitation + 0.35 + strength * 0.4);
+    // Set the whole surface roiling — the ripple you feel after a solid hit.
+    this.agitation = Math.min(1, this.agitation + 0.55 + strength * 0.5);
 
     // Hard enough? Tear a lump out.
     let tore = false;
@@ -351,7 +344,7 @@ export class GoopSim {
         x: lx, y: ly, z: lz,
         px: lx - vx * 0.016, py: ly - vy * 0.016, pz: lz - vz * 0.016,
         r: r * 0.4, rTarget: r, scale: 1, seed: Math.random() * 100,
-        state: 'flying', timer: 0, home: nearest, hasSplatted: false, grounded: false,
+        state: 'flying', timer: 0, home: nearest, hasSplatted: false,
       });
     }
 
@@ -400,7 +393,7 @@ export class GoopSim {
       x, y, z, px: x, py: y + 0.002, pz: z, // barely moving, gravity does the rest
       r: 0.01, rTarget: 0.035 + Math.random() * 0.02, scale: 1,
       seed: Math.random() * 100,
-      state: 'flying', timer: 0, home: 0, hasSplatted: false, grounded: false,
+      state: 'flying', timer: 0, home: 0, hasSplatted: false,
     });
   }
 
@@ -500,53 +493,46 @@ export class GoopSim {
         l.y += vy - 9.8 * h * h;
         l.z += vz;
         if (l.y < FLOOR_Y + l.r * 0.5) {
+          l.y = FLOOR_Y + l.r * 0.5;
           const speed = Math.hypot(vx, vy, vz) / Math.max(h, 1e-4);
           if (!l.hasSplatted) {
             l.hasSplatted = true;
+            l.rTarget *= 1.18; // splats spread a bit
             this.events.onSplat?.(_v.set(l.x, l.y, l.z), l.r, speed > 2);
           }
-          // It hits the deck and SPLATS FLAT — from here it's a floor puddle
-          // (rendered as a decal, not a 3D ball) that spreads and then heads
-          // home along the ground.
-          l.grounded = true;
-          l.rTarget *= 1.7; // spread wide and thin
-          l.y = FLOOR_Y;
-          l.px = l.x + vx * 0.2;
+          l.px = l.x + vx * 0.25; // mostly dead horizontal bounce
           l.py = l.y;
-          l.pz = l.z + vz * 0.2;
-          if (speed < 0.8) {
+          l.pz = l.z + vz * 0.25;
+          if (speed < 0.6) {
             l.state = 'resting';
             l.timer = 0;
           }
         }
       } else if (l.state === 'resting') {
-        // Spread on the floor and quiver, then set off toward the body.
-        l.x += vx * 0.4;
-        l.y = FLOOR_Y;
-        l.z += vz * 0.4;
-        if (l.timer > 0.5 + (l.seed % 1) * 0.7) {
+        // Quiver in place, then decide to head home.
+        l.x += vx * 0.5 + Math.sin(this.time * 14 + l.seed) * 0.0006;
+        l.y = FLOOR_Y + l.r * 0.5 + Math.abs(Math.sin(this.time * 9 + l.seed)) * 0.004;
+        l.z += vz * 0.5;
+        if (l.timer > 0.7 + (l.seed % 1) * 0.9) {
           l.state = 'returning';
           l.timer = 0;
         }
       } else {
-        // Crawl along the FLOOR back toward the body's base, then get sucked
-        // UP as it arrives (shrinks into the creature).
-        const dx = -l.x; // base is the creature's local origin (0, ·, 0)
-        const dz = -l.z;
-        const dist = Math.hypot(dx, dz);
-        const pull = Math.min(2.6, 0.9 + l.timer * 1.6) * h * 30;
-        const step = Math.min(dist, pull * Math.max(0.15, Math.min(1, dist)));
-        if (dist > 1e-4) {
-          l.x += (dx / dist) * step;
-          l.z += (dz / dist) * step;
-        }
-        l.y = FLOOR_Y;
-        // Sucked up: shrink hard over the last stretch.
-        if (dist < 0.32) l.rTarget = Math.max(0.01, l.rTarget - h * 0.6);
-        if (dist < 0.13 || l.r < 0.02) {
-          const home = this.core[l.home];
+        // Crawl back to its home blob, accelerating as it gets close.
+        const home = this.core[l.home];
+        const dx = home.x - l.x;
+        const dy = home.y - l.y;
+        const dz = home.z - l.z;
+        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        const pull = Math.min(3.2, 1.2 + l.timer * 1.8) * h;
+        l.x += vx * 0.9 + (dx / (dist + 1e-4)) * pull * dist * 0.5 * h * 30;
+        l.y += vy * 0.9 + (dy / (dist + 1e-4)) * pull * dist * 0.5 * h * 30;
+        l.z += vz * 0.9 + (dz / (dist + 1e-4)) * pull * dist * 0.5 * h * 30;
+        if (l.y < FLOOR_Y + l.r * 0.45) l.y = FLOOR_Y + l.r * 0.45;
+        if (dist < home.r * 0.6) {
+          // Merged. The absorbing blob swells with the returned volume.
           home.scale = Math.min(1.18, home.scale + l.r * 1.2);
-          this.events.onAbsorb?.(_v.set(l.x, FLOOR_Y, l.z), l.r);
+          this.events.onAbsorb?.(_v.set(l.x, l.y, l.z), l.r);
           this.lumps.splice(li, 1);
         }
       }
@@ -632,22 +618,7 @@ export class GoopSim {
       n++;
     };
     for (const b of this.core) put(b);
-    // Flying lumps are 3D metaballs; grounded ones become flat floor puddles.
-    let pc = 0;
-    for (const l of this.lumps) {
-      if (l.grounded) {
-        if (pc < CREATURE.maxLumps) {
-          const o = pc * 3;
-          this.packedPuddles[o] = l.x;
-          this.packedPuddles[o + 1] = l.z;
-          this.packedPuddles[o + 2] = Math.max(0.02, l.r);
-          pc++;
-        }
-      } else {
-        put(l);
-      }
-    }
-    this.packedPuddleCount = pc;
+    for (const l of this.lumps) put(l);
     for (const d of this.drips) put(d);
     this.packedCount = n;
 
