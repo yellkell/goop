@@ -157,6 +157,11 @@ export const BRAIN = {
 export const EXHAUST = {
   /** It can only be knocked into a glob once it's below this HP fraction. */
   threshold: 0.2,
+  /** Even then, a qualifying big hit only collapses it SOME of the time —
+   *  this is the per-hit chance it actually loses its shape. Below this it
+   *  just shrugs the haymaker off and keeps fighting, so the finish isn't a
+   *  guaranteed thing the moment you get it low. */
+  collapseChance: 0.4,
   /** Seconds it lies there vulnerable before pulling itself together. */
   duration: 6,
   /** Damage multiplier while it's down. */

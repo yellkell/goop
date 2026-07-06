@@ -288,16 +288,19 @@ export class CreatureSystem extends createSystem({}) {
     c.tempoScale = diff.tempoScale;
     this.sway += delta;
 
-    // Hurt AND cracked by a big punch this frame? It loses its shape —
-    // collapses into an exhausted glob and lies there taking double damage.
-    // The finisher: it only globs when it's under half health and you land a
-    // real haymaker (a torn lump or a hard connect — see FistSystem).
+    // Hurt AND cracked by a big punch this frame? It MIGHT lose its shape —
+    // collapse into an exhausted glob and lie there taking double damage.
+    // The finisher: it only globs when it's under threshold health and you
+    // land a real haymaker (a torn lump or a hard connect — see FistSystem),
+    // and even then only on a lucky roll, so getting it low doesn't force an
+    // instant puddle every time — sometimes it just eats the shot.
     if (
       this.mood !== 'exhausted' &&
       !this.exhaustUsed &&
       match.creatureHp > 0 &&
       match.creatureHp <= COMBAT.creatureHealth * EXHAUST.threshold &&
-      match.bigHit
+      match.bigHit &&
+      Math.random() < EXHAUST.collapseChance
     ) {
       this.exhaustUsed = true;
       match.bigHit = false;
