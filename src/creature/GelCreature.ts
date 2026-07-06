@@ -541,6 +541,11 @@ export class GelCreature {
       // ---- telegraph: each attack's own readable silhouette ----
       const k = easeOutCubic(a.t / T);
       this.telegraph = Math.min(1, this.telegraph + dt * 3.5);
+      // Fatten the whole body's fuse as the arm lifts, and swell the mid
+      // joint, so the raised fist stays connected by a thick neck (no
+      // see-through arc under the hand).
+      this.sim.blendScale = 1 + 0.35 * k;
+      midSwell = 1 + 0.35 * k;
       switch (a.name) {
         case 'jab':
           fx = -ax * 0.14 * k;

@@ -47,33 +47,29 @@ const _rayQ = new Quaternion();
  */
 export function buildFist(hand: 'left' | 'right'): Group {
   const g = new Group();
-  const leather = new MeshStandardMaterial({ color: 0x1c3a24, roughness: 0.42, metalness: 0.05 });
-  const trim = new MeshStandardMaterial({
-    color: 0x39d353,
-    roughness: 0.35,
-    emissive: 0x1d7a2f,
-    emissiveIntensity: 0.6,
-  });
+  // Classic RED boxing leather with a pale lace band.
+  const leather = new MeshStandardMaterial({ color: 0xc42026, roughness: 0.45, metalness: 0.04 });
+  const trim = new MeshStandardMaterial({ color: 0xf2ece0, roughness: 0.5, metalness: 0.02 });
 
-  // ONE clean rounded glove — the padded fist. Gently rounded, a touch taller
-  // and deeper than wide; no stuck-on lobes or pads.
-  const mitt = new Mesh(new SphereGeometry(0.108, 24, 18), leather);
-  mitt.scale.set(1.02, 1.12, 1.16);
-  mitt.position.set(0, 0.008, -0.015);
+  // ONE clean rounded glove — the padded fist. A little smaller than before,
+  // gently rounded; no stuck-on lobes.
+  const mitt = new Mesh(new SphereGeometry(0.092, 24, 18), leather);
+  mitt.scale.set(1.02, 1.1, 1.14);
+  mitt.position.set(0, 0.006, -0.012);
   g.add(mitt);
-  // A small thumb, mostly MERGED into the inner side of the fist so it reads
-  // as a rounded bump, not a protrusion.
-  const thumb = new Mesh(new SphereGeometry(0.05, 16, 12), leather);
-  thumb.scale.set(0.85, 0.95, 1.0);
-  thumb.position.set(hand === 'left' ? 0.082 : -0.082, -0.012, -0.045);
+  // Thumb ON TOP — a small rounded nub sitting on the top-front of the fist,
+  // toward the inner side. Merged enough to read as a thumb, not a hotdog.
+  const thumb = new Mesh(new SphereGeometry(0.04, 16, 12), leather);
+  thumb.scale.set(0.95, 0.85, 1.05);
+  thumb.position.set(hand === 'left' ? 0.03 : -0.03, 0.058, -0.05);
   g.add(thumb);
-  // Wrist cuff (clearly narrower than the fist) with the team-green band.
-  const cuff = new Mesh(new CylinderGeometry(0.062, 0.074, 0.085, 18), leather);
+  // Wrist cuff (clearly narrower than the fist) with the pale lace band.
+  const cuff = new Mesh(new CylinderGeometry(0.055, 0.066, 0.08, 18), leather);
   cuff.rotation.x = Math.PI / 2;
-  cuff.position.set(0, -0.015, 0.115);
+  cuff.position.set(0, -0.012, 0.1);
   g.add(cuff);
-  const band = new Mesh(new TorusGeometry(0.07, 0.012, 10, 22), trim);
-  band.position.set(0, -0.015, 0.152);
+  const band = new Mesh(new TorusGeometry(0.062, 0.011, 10, 22), trim);
+  band.position.set(0, -0.012, 0.132);
   g.add(band);
   return g;
 }

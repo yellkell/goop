@@ -188,8 +188,9 @@ const FRAG = /* glsl */ `
     // Step-budget mercy: a ray that spent its steps GRAZING the surface
     // (thin necks under an extended fist, clefts in a crouched body) is on
     // the gel for all visual purposes — shading it kills the see-through
-    // holes that a hard discard punches through thin features.
-    if (!hit && d < 0.045 && t <= tEnd) hit = true;
+    // holes that a hard discard punches through thin features. Generous
+    // threshold so the arc under a raised fist stays solid.
+    if (!hit && d < 0.09 && t <= tEnd) hit = true;
     if (!hit) discard;
 
     vec3 n;

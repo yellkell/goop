@@ -83,8 +83,9 @@ export const COMBAT = {
   /** The creature's straight does this much when it lands on you. */
   creaturePunchDamage: 9,
   /** Both fighters trickle health back while the round runs (HP per second):
-   *  1 point every ~2s, so staying on defence slowly recovers you. */
-  regenPerSec: 0.5,
+   *  ~1 point every 3s, so defence recovers you slowly — but not enough to
+   *  turtle your way through. */
+  regenPerSec: 0.35,
   /** Round length before it goes to the cards (TIME verdict). */
   roundSeconds: 99,
   /** 3-2-1-FIGHT beat length. */
@@ -115,15 +116,17 @@ export interface AttackSpec {
   hitRadius: number;
 }
 
+// Longer telegraphs than before — you get a clear beat to read and dodge or
+// block each one — but the damage is up too, so eating one really stings.
 export const ATTACKS: Record<AttackName, AttackSpec> = {
-  jab: { telegraph: 0.38, strike: 0.13, recover: 0.35, damage: 5, hitRadius: 0.42 },
-  cross: { telegraph: 0.62, strike: 0.17, recover: 0.55, damage: 9, hitRadius: 0.45 },
-  hook: { telegraph: 0.55, strike: 0.2, recover: 0.5, damage: 11, hitRadius: 0.45 },
-  uppercut: { telegraph: 0.6, strike: 0.18, recover: 0.55, damage: 12, hitRadius: 0.45 },
-  overhand: { telegraph: 0.72, strike: 0.22, recover: 0.6, damage: 13, hitRadius: 0.48 },
-  backfist: { telegraph: 0.75, strike: 0.34, recover: 0.6, damage: 14, hitRadius: 0.5 },
-  roundhouse: { telegraph: 0.7, strike: 0.26, recover: 0.65, damage: 13, hitRadius: 0.5 },
-  spinkick: { telegraph: 0.82, strike: 0.36, recover: 0.72, damage: 16, hitRadius: 0.55 },
+  jab: { telegraph: 0.5, strike: 0.13, recover: 0.35, damage: 7, hitRadius: 0.42 },
+  cross: { telegraph: 0.74, strike: 0.17, recover: 0.55, damage: 13, hitRadius: 0.45 },
+  hook: { telegraph: 0.7, strike: 0.2, recover: 0.5, damage: 15, hitRadius: 0.45 },
+  uppercut: { telegraph: 0.74, strike: 0.18, recover: 0.55, damage: 16, hitRadius: 0.45 },
+  overhand: { telegraph: 0.88, strike: 0.22, recover: 0.6, damage: 18, hitRadius: 0.48 },
+  backfist: { telegraph: 0.9, strike: 0.34, recover: 0.6, damage: 19, hitRadius: 0.5 },
+  roundhouse: { telegraph: 0.86, strike: 0.26, recover: 0.65, damage: 18, hitRadius: 0.5 },
+  spinkick: { telegraph: 0.98, strike: 0.36, recover: 0.72, damage: 22, hitRadius: 0.55 },
 };
 
 /** Creature AI pacing (seconds unless noted). */

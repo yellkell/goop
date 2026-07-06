@@ -355,11 +355,12 @@ export class CreatureSystem extends createSystem({}) {
           }
           this.comboRest -= delta;
           if (this.comboRest <= 0) {
-            // ~40% of the time it presses in to trade big shots.
-            this.pressing = settings.difficulty > 0 && Math.random() < 0.4;
+            // Presses in to trade over half the time; shorter gaps between
+            // combos than before — it keeps the pressure on.
+            this.pressing = settings.difficulty > 0 && Math.random() < 0.55;
             this.comboQueue = this.pressing ? this.pickPress() : this.pickCombo();
             this.hpAtCombo = match.creatureHp;
-            this.comboRest = (0.9 + Math.random() * 1.5) * diff.roamScale;
+            this.comboRest = (0.5 + Math.random() * 1.0) * diff.roamScale;
           }
         }
         break;
@@ -477,10 +478,9 @@ export class CreatureSystem extends createSystem({}) {
       match.blockDirY = dirY;
       match.boardDirty = true;
       gooBlock();
-      this.fx.flash(limbWorld, 0xffffff, 0.85);
-      this.fx.flash(limbWorld, 0xd8ffe6, 1.15); // wider soft halo
-      pulseHand(this.world.session, blockHand, 1, 70);
-      pulseHand(this.world.session, blockHand, 0.7, 60);
+      this.fx.flash(limbWorld, 0xeaf6ee, 0.32); // just a small spark, not a bloom
+      // One big meaty sustained buzz in the blocking hand — you FEEL the block.
+      pulseHand(this.world.session, blockHand, 1, 260);
     } else {
       // CLEAN HIT — full damage, a red splat + goo burst at the point, a RED
       // rim glow from the direction it came, and both hands slammed hard.
