@@ -13,7 +13,7 @@
 import { createSystem, InputComponent } from '@iwsdk/core';
 import { Color, Mesh, PlaneGeometry, ShaderMaterial, Vector2, Vector3 } from 'three';
 import { announce, type Call } from '../audio/announcer.js';
-import { backToLobbyMusic, playVictoryThenLobby, startBattleMusic } from '../audio/music.js';
+import { backToLobbyMusic, cancelMusicHandoff, playVictoryThenLobby, startBattleMusic } from '../audio/music.js';
 import { matchEnd, roundBell, roundEnd, uiClick } from '../audio/sfx.js';
 import { ARENA, COMBAT } from '../config.js';
 import {
@@ -136,6 +136,7 @@ export class FightSystem extends createSystem({}) {
         if (match.startRequested || aPressed) {
           if (aPressed) uiClick();
           match.startRequested = false;
+          cancelMusicHandoff(); // a stale victory→lobby timer must not fire mid-bout
           resetForMatch();
           match.phase = 'countdown';
           match.countdownT = 0;

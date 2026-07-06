@@ -117,16 +117,17 @@ export interface AttackSpec {
 }
 
 // Longer telegraphs than before — you get a clear beat to read and dodge or
-// block each one — but the damage is up too, so eating one really stings.
+// block each one — with a modest damage bump so eating one still stings
+// (the difficulty comes mostly from the pressure, not huge per-hit numbers).
 export const ATTACKS: Record<AttackName, AttackSpec> = {
-  jab: { telegraph: 0.5, strike: 0.13, recover: 0.35, damage: 7, hitRadius: 0.42 },
-  cross: { telegraph: 0.74, strike: 0.17, recover: 0.55, damage: 13, hitRadius: 0.45 },
-  hook: { telegraph: 0.7, strike: 0.2, recover: 0.5, damage: 15, hitRadius: 0.45 },
-  uppercut: { telegraph: 0.74, strike: 0.18, recover: 0.55, damage: 16, hitRadius: 0.45 },
-  overhand: { telegraph: 0.88, strike: 0.22, recover: 0.6, damage: 18, hitRadius: 0.48 },
-  backfist: { telegraph: 0.9, strike: 0.34, recover: 0.6, damage: 19, hitRadius: 0.5 },
-  roundhouse: { telegraph: 0.86, strike: 0.26, recover: 0.65, damage: 18, hitRadius: 0.5 },
-  spinkick: { telegraph: 0.98, strike: 0.36, recover: 0.72, damage: 22, hitRadius: 0.55 },
+  jab: { telegraph: 0.5, strike: 0.13, recover: 0.35, damage: 6, hitRadius: 0.42 },
+  cross: { telegraph: 0.74, strike: 0.17, recover: 0.55, damage: 10, hitRadius: 0.45 },
+  hook: { telegraph: 0.7, strike: 0.2, recover: 0.5, damage: 12, hitRadius: 0.45 },
+  uppercut: { telegraph: 0.74, strike: 0.18, recover: 0.55, damage: 13, hitRadius: 0.45 },
+  overhand: { telegraph: 0.88, strike: 0.22, recover: 0.6, damage: 14, hitRadius: 0.48 },
+  backfist: { telegraph: 0.9, strike: 0.34, recover: 0.6, damage: 15, hitRadius: 0.5 },
+  roundhouse: { telegraph: 0.86, strike: 0.26, recover: 0.65, damage: 14, hitRadius: 0.5 },
+  spinkick: { telegraph: 0.98, strike: 0.36, recover: 0.72, damage: 17, hitRadius: 0.55 },
 };
 
 /** Creature AI pacing (seconds unless noted). */

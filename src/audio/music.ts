@@ -25,6 +25,20 @@ let battle: HTMLAudioElement | null = null;
 let victory: HTMLAudioElement | null = null;
 let handoffTimer = 0;
 
+/** Hard invariant: pause every track except the one we're about to play, so
+ *  lobby / battle / victory can NEVER stack on top of each other. */
+function soloExcept(keep: 'lobby' | 'battle' | 'victory' | 'none'): void {
+  if (keep !== 'lobby') lobby?.pause();
+  if (keep !== 'battle') battle?.pause();
+  if (keep !== 'victory') victory?.pause();
+}
+
+/** Cancel a pending victory→lobby handoff (call when a new bout starts so a
+ *  stale timer can't bring the lobby track up over a countdown/fight). */
+export function cancelMusicHandoff(): void {
+  clearTimeout(handoffTimer);
+}
+
 export function isMusicMuted(): boolean {
   try {
     return localStorage.getItem(MUTE_KEY) === '1';
@@ -53,7 +67,7 @@ export function toggleMusicMuted(): boolean {
 /** Lobby loop. Safe to call repeatedly; call once from the entry gesture. */
 export function startLobbyMusic(): void {
   clearTimeout(handoffTimer);
-  battle?.pause();
+  soloExcept('lobby'); // stop battle AND the victory sting
   if (isMusicMuted()) return;
   if (!lobby) {
     lobby = new Audio(lobbyUrl);
@@ -66,15 +80,14 @@ export function startLobbyMusic(): void {
   }
 }
 
-/** A bout begins: fade the lobby out fast, loop a random battle track.
- *  No-ops if a battle track is already rolling, so the score carries
- *  straight through the rest periods of a multi-round contest. */
+/** A bout begins: cut the lobby/sting, loop a random battle track. No-ops the
+ *  track choice if one's already rolling, so the score carries straight
+ *  through the rest periods of a multi-round contest. */
 export function startBattleMusic(): void {
   clearTimeout(handoffTimer);
-  lobby?.pause();
-  victory?.pause();
+  soloExcept('battle'); // stop lobby AND the victory sting
   if (isMusicMuted() || battleUrls.length === 0) return;
-  if (battle && !battle.paused) return;
+  if (battle && !battle.paused) return; // already scoring this match
   const url = battleUrls[Math.floor(Math.random() * battleUrls.length)];
   if (!battle) {
     battle = new Audio();
@@ -86,10 +99,10 @@ export function startBattleMusic(): void {
   void battle.play().catch(() => {});
 }
 
-/** Bout over: kill the battle track, ring the sting, then lobby after a beat. */
+/** Match over (win): kill everything else, ring the sting, then lobby. */
 export function playVictoryThenLobby(): void {
-  battle?.pause();
   clearTimeout(handoffTimer);
+  soloExcept('victory'); // stop lobby AND battle
   if (isMusicMuted()) return;
   if (!victory) victory = new Audio(victoryUrl);
   victory.volume = VICTORY_VOLUME;
@@ -98,9 +111,9 @@ export function playVictoryThenLobby(): void {
   handoffTimer = window.setTimeout(() => startLobbyMusic(), 8000);
 }
 
-/** Bout over without ceremony (loss/draw): straight back to the lobby. */
+/** Match over (loss/draw): silence, then straight back to the lobby. */
 export function backToLobbyMusic(): void {
-  battle?.pause();
   clearTimeout(handoffTimer);
+  soloExcept('none'); // stop everything
   handoffTimer = window.setTimeout(() => startLobbyMusic(), 1400);
 }
