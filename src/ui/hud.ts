@@ -243,16 +243,10 @@ export class WallBoard {
         g.fillStyle = key === 'ko' ? '#ff7a5c' : '#f2fff0';
         g.fillText(key.toUpperCase(), cx, cy - 70);
       }
-      g.font = '700 40px system-ui, sans-serif';
-      g.fillStyle = 'rgba(238, 250, 238, 0.9)';
-      g.fillText(
-        match.verdict === 'win' ? 'THE GOOP IS DOWN' : match.verdict === 'ko' ? 'THE GOOP TAKES IT' : 'NOBODY TAKES IT',
-        cx,
-        cy + 78,
-      );
+      // Just the verdict art and the score — no flavour copy.
       g.font = '900 52px system-ui, sans-serif';
       g.fillStyle = '#f2fff0';
-      g.fillText(`ROUNDS ${match.playerRounds} – ${match.creatureRounds}`, cx, cy + 140);
+      g.fillText(`${match.playerRounds} – ${match.creatureRounds}`, cx, cy + 110);
     } else if (match.phase === 'fighting') {
       // Fighting: the strip above already carries round + clock; keep the
       // stage clear so the wall reads calm mid-brawl.

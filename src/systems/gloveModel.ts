@@ -74,7 +74,7 @@ export function buildGlove(hand: 'left' | 'right'): Group {
   tilt.position.copy(OFFSET);
   g.add(tilt);
   const roll = new Group();
-  roll.rotation.z = hand === 'left' ? THUMB_ROLL : -THUMB_ROLL;
+  roll.rotation.z = hand === 'left' ? -THUMB_ROLL : THUMB_ROLL;
   tilt.add(roll);
   const base = new Group();
   base.rotation.y = BASE_YAW;
@@ -84,8 +84,9 @@ export function buildGlove(hand: 'left' | 'right'): Group {
     const model = t.clone(true);
     // Mirror the thumb to the correct side for the other hand — across the
     // glove's WIDTH (model Z), not its length: an X-mirror is the same as a
-    // proper left glove yawed 180°, which is why it faced backward.
-    if (hand === 'left') model.scale.z *= -1;
+    // proper left glove yawed 180°, which is why it faced backward. The RAW
+    // model turned out to be the left glove, so the RIGHT hand mirrors.
+    if (hand === 'right') model.scale.z *= -1;
     base.add(model);
   };
   if (template) place(template);

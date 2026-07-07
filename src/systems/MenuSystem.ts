@@ -50,13 +50,11 @@ export class MenuSystem extends createSystem({}) {
 
   init(): void {
     this.panel = new MenuPanel();
-    // Between you and the creature's corner, off to the right, eye height —
-    // FIXED furniture: angled once toward your start spot, and it stays put
-    // (it never turns to follow your head).
-    const px = 0.85;
-    const pz = ARENA.spawn[2] * 0.55;
-    this.panel.group.position.set(px, 1.45, pz);
-    this.panel.group.rotation.set(0, Math.atan2(0 - px, 0 - pz), 0);
+    // Dead CENTRE between you and the creature's corner, eye height — FIXED
+    // furniture: squarely facing your start spot, and it stays put (it never
+    // turns to follow your head).
+    this.panel.group.position.set(0, 1.5, ARENA.spawn[2] * 0.6);
+    this.panel.group.rotation.set(0, 0, 0);
     this.scene.add(this.panel.group);
     this.pointers.left = this.makePointer();
     this.pointers.right = this.makePointer();
