@@ -115,6 +115,13 @@ export class GoopSim {
   readonly offsets: Float32Array = new Float32Array(ANCHOR_COUNT * 3);
   /** Extra per-anchor radius scale (the striking fist swells). */
   readonly radiusScale: Float32Array = new Float32Array(ANCHOR_COUNT).fill(1);
+  /** FIGHTING-STYLE silhouette layer (HARD mode): slow-eased per-anchor
+   *  deltas that re-pour the boxer stance into a crouch / lanky range
+   *  stance / shell etc. Applied scaled by form, so the glob, the KO puddle
+   *  and mid-morph shapes are untouched. GelCreature eases these toward the
+   *  active style's pose each frame. */
+  readonly styleOffsets: Float32Array = new Float32Array(ANCHOR_COUNT * 3);
+  readonly styleRadius: Float32Array = new Float32Array(ANCHOR_COUNT).fill(1);
 
   /**
    * Kinematic pin: while >= 0, that core blob is slammed to pinPos every
@@ -174,6 +181,13 @@ export class GoopSim {
 
     // Breathing: the whole mass swells ~3% on a slow cycle.
     r *= 1 + 0.03 * Math.sin(t * 1.1 + s * 0.5);
+
+    // Fighting-style silhouette — only once it's formed up (form-scaled).
+    const sf = f * (1 - this.ko);
+    x += this.styleOffsets[i * 3] * sf;
+    y += this.styleOffsets[i * 3 + 1] * sf;
+    z += this.styleOffsets[i * 3 + 2] * sf;
+    r *= 1 + (this.styleRadius[i] - 1) * sf;
 
     x += this.offsets[i * 3];
     y += this.offsets[i * 3 + 1];

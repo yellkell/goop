@@ -19,6 +19,7 @@ import { createSystem, Quaternion, Vector3 } from '@iwsdk/core';
 import { gooBlock, gooSlam, gooWhiff } from '../audio/sfx.js';
 import { ARENA, ATTACKS, BLOCK, BRAIN, COMBAT, EXHAUST, type AttackName } from '../config.js';
 import { GelCreature, type Hand } from '../creature/GelCreature.js';
+import { shuffledStyles, type FightStyle } from '../creature/styles.js';
 import { GooFx } from '../fx/splats.js';
 import { pulseHand } from '../input/haptics.js';
 import { currentDifficulty, getCreature, match, player, setCreature, settings } from '../state.js';
@@ -82,9 +83,9 @@ const PRESS_COMBOS: AttackName[][] = [
 ];
 
 const TIER_ARSENAL: AttackName[][] = [
-  ['jab', 'cross'], // CHILL
-  ['jab', 'cross', 'hook', 'uppercut', 'overhand'], // SCRAP
-  ['jab', 'cross', 'hook', 'uppercut', 'overhand', 'backfist', 'roundhouse', 'spinkick', 'clap'], // RUMBLE
+  ['jab', 'cross'], // EASY
+  ['jab', 'cross', 'hook', 'uppercut', 'overhand', 'backfist', 'roundhouse', 'spinkick', 'clap'], // MEDIUM
+  ['jab', 'cross', 'hook', 'uppercut', 'overhand', 'backfist', 'roundhouse', 'spinkick', 'clap'], // HARD
 ];
 
 /** Which strikes are thrown at the body (chest height) rather than the head. */
@@ -111,6 +112,15 @@ export class CreatureSystem extends createSystem({}) {
   private pressing = false;
   /** The exhausted collapse fires once per round. */
   private exhaustUsed = false;
+
+  /** HARD mode's secret style rotation: a deck shuffled per match, one style
+   *  dealt per round. Never announced — the stance is the tell. */
+  private style: FightStyle | null = null;
+  private styleDeck: FightStyle[] = [];
+  private styleRound = -1;
+  /** Recent damage taken (decaying) — the rope-a-dope's counter trigger. */
+  private recentDmg = 0;
+  private lastHp = COMBAT.creatureHealth;
 
   init(): void {
     this.fx = new GooFx();
@@ -161,6 +171,9 @@ export class CreatureSystem extends createSystem({}) {
         this.comboQueue = [];
         this.koApplied = false;
         this.exhaustUsed = false;
+        this.assignRoundStyle();
+        this.lastHp = match.creatureHp;
+        this.recentDmg = 0;
         break;
       case 'fighting':
         this.updateFight(delta);
@@ -204,6 +217,12 @@ export class CreatureSystem extends createSystem({}) {
     const c = this.creature;
     c.setKo(false);
     c.setFormTarget(0);
+    // Back to a clean slate between matches: neutral stance, fresh deck.
+    if (this.style) {
+      this.style = null;
+      this.styleRound = -1;
+      c.setFightStyle(null);
+    }
     if (this.mood !== 'wander') this.setMood('wander', 0);
 
     // A new ooze-destination every few seconds, inside the roam circle —
@@ -283,15 +302,24 @@ export class CreatureSystem extends createSystem({}) {
   /** Head, or (for body-capable strikes) the chest, as the strike target. */
   private targetFor(name: AttackName): Vector3 {
     _target.copy(_head);
-    if (BODY_CAPABLE.has(name) && Math.random() < 0.4) _target.y -= 0.5; // to the body
+    const bodyRate = this.style?.bodyRate ?? 0.4;
+    if (BODY_CAPABLE.has(name) && Math.random() < bodyRate) _target.y -= 0.5; // to the body
     return _target;
   }
 
   private updateFight(delta: number): void {
     const c = this.creature;
     const diff = currentDifficulty();
-    c.tempoScale = diff.tempoScale;
+    const st = this.style;
+    c.tempoScale = diff.tempoScale * (st?.tempoMul ?? 1);
     this.sway += delta;
+
+    // Damage bookkeeping for the rope-a-dope's counter sense: how much has
+    // it eaten in the last couple of seconds?
+    const taken = this.lastHp - match.creatureHp;
+    this.lastHp = match.creatureHp;
+    if (taken > 0) this.recentDmg += taken;
+    this.recentDmg = Math.max(0, this.recentDmg - delta * 14);
 
     // Hurt AND cracked by a big punch this frame? It MIGHT lose its shape —
     // collapse into an exhausted glob and lie there taking double damage.
@@ -327,16 +355,20 @@ export class CreatureSystem extends createSystem({}) {
       case 'fight': {
         c.setFormTarget(1);
         const committed = c.isPunching || this.comboQueue.length > 0;
+        const moveMul = st?.moveMul ?? 1;
 
         if (committed) {
           // Mid-combo: close to the combo's distance (a PRESS gets right in
           // your face to trade; a normal combo stops at strike range).
-          const dist = this.pressing ? ARENA.pressDistance : ARENA.strikeDistance;
-          c.moveSpeedScale = this.pressing ? 3.0 : 2.4;
+          const dist = this.pressing
+            ? ARENA.pressDistance * (st?.pressScale ?? 1)
+            : ARENA.strikeDistance * (st?.strikeScale ?? 1);
+          c.moveSpeedScale = (this.pressing ? 3.0 : 2.4) * moveMul;
           c.moveTo(this.engagePoint(_v, dist, lateral * 0.25));
 
-          // Stagger: eat a burst of damage mid-combo and it rocks off it.
-          if (this.hpAtCombo - match.creatureHp >= BRAIN.staggerDamage) {
+          // Stagger: eat a burst of damage mid-combo and it rocks off it —
+          // unless it's fighting a style that walks through fire.
+          if (this.hpAtCombo - match.creatureHp >= BRAIN.staggerDamage * (st?.staggerScale ?? 1)) {
             this.comboQueue = [];
             this.setMood('staggered', 1.0);
             break;
@@ -349,26 +381,38 @@ export class CreatureSystem extends createSystem({}) {
             );
           }
         } else {
+          // ROPE-A-DOPE: it shells up and waits — but empty your tank on it
+          // and the moment you overstay, the counter burst comes back sharp.
+          if (st?.counterpuncher && this.recentDmg > 16) {
+            this.recentDmg = 0;
+            this.pressing = true;
+            this.comboQueue = this.pickPress();
+            this.hpAtCombo = match.creatureHp;
+            break;
+          }
+
           // Between combos: HOLD GROUND and circle. Close in only if you're
           // out of range — never retreat when you step in, so you can trade.
+          const hold = ARENA.holdDistance * (st?.holdScale ?? 1);
           _v2.copy(c.position).sub(_head);
           _v2.y = 0;
           const gap = _v2.length();
-          if (gap > ARENA.holdDistance + 0.2) {
-            c.moveSpeedScale = 1.4; // you're far — walk you down
-            c.moveTo(this.engagePoint(_v, ARENA.holdDistance, lateral));
+          if (gap > hold + 0.2) {
+            c.moveSpeedScale = 1.4 * moveMul; // you're far — walk you down
+            c.moveTo(this.engagePoint(_v, hold, lateral));
           } else {
-            c.moveSpeedScale = 0.9; // in range — stand and circle
+            c.moveSpeedScale = 0.9 * moveMul; // in range — stand and circle
             c.moveTo(this.circleAround(_v, lateral));
           }
           this.comboRest -= delta;
           if (this.comboRest <= 0) {
-            // Presses in to trade over half the time; shorter gaps between
-            // combos than before — it keeps the pressure on.
-            this.pressing = settings.difficulty > 0 && Math.random() < 0.55;
+            // Presses in to trade at a style-driven rate; shorter gaps
+            // between combos than before — it keeps the pressure on.
+            this.pressing =
+              settings.difficulty > 0 && Math.random() < (st ? st.pressChance : 0.55);
             this.comboQueue = this.pressing ? this.pickPress() : this.pickCombo();
             this.hpAtCombo = match.creatureHp;
-            this.comboRest = (0.5 + Math.random() * 1.0) * diff.roamScale;
+            this.comboRest = (0.5 + Math.random() * 1.0) * diff.roamScale * (st?.restScale ?? 1);
           }
         }
         break;
@@ -398,25 +442,46 @@ export class CreatureSystem extends createSystem({}) {
     }
   }
 
+  /** HARD only: deal this round's fighting style off the match's shuffled
+   *  deck (a full bo5 shows all five). EASY/MEDIUM stay neutral. */
+  private assignRoundStyle(): void {
+    if (!currentDifficulty().styled) {
+      if (this.style) {
+        this.style = null;
+        this.creature.setFightStyle(null);
+      }
+      return;
+    }
+    if (this.styleRound === match.round) return; // already dealt this round
+    this.styleRound = match.round;
+    if (match.round === 1 || this.styleDeck.length === 0) this.styleDeck = shuffledStyles();
+    this.style = this.styleDeck[(match.round - 1) % this.styleDeck.length];
+    this.creature.setFightStyle(this.style.pose);
+  }
+
   private arsenal(): AttackName[] {
     return TIER_ARSENAL[Math.min(TIER_ARSENAL.length - 1, Math.max(0, settings.difficulty))];
   }
 
-  /** Draw a combination the current difficulty knows, capped in length. */
+  /** Draw a combination — from the active STYLE's book when it has one,
+   *  else the shared book — capped by difficulty length. */
   private pickCombo(): AttackName[] {
     const diff = currentDifficulty();
     const arsenal = this.arsenal();
-    const legal = COMBOS.filter(
+    const book = this.style?.combos ?? COMBOS;
+    const legal = book.filter(
       (combo) => combo.length <= diff.comboMax && combo.every((atk) => arsenal.includes(atk)),
     );
+    if (legal.length === 0) return [arsenal[0]];
     return [...legal[Math.floor(Math.random() * legal.length)]];
   }
 
-  /** Draw an infighting flurry (only strikes in the current arsenal). */
+  /** Draw an infighting flurry (style book first, arsenal-legal). */
   private pickPress(): AttackName[] {
     const diff = currentDifficulty();
     const arsenal = this.arsenal();
-    const legal = PRESS_COMBOS.filter(
+    const book = this.style?.press ?? PRESS_COMBOS;
+    const legal = book.filter(
       (combo) => combo.length <= diff.comboMax + 1 && combo.every((atk) => arsenal.includes(atk)),
     );
     if (legal.length === 0) return this.pickCombo();

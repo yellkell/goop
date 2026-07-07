@@ -30,7 +30,8 @@ import { ATTACKS, CREATURE, type AttackName } from '../config.js';
 import * as sfx from '../audio/sfx.js';
 import type { GooFx } from '../fx/splats.js';
 import { createGelMaterial, type GelUniforms } from './gelMaterial.js';
-import { A, BOXER_POSE } from './poses.js';
+import { A, ANCHOR_COUNT, BOXER_POSE } from './poses.js';
+import type { StylePoseDelta } from './styles.js';
 import { GoopSim, type PunchResult } from './sim.js';
 
 export type Hand = 'left' | 'right';
@@ -124,6 +125,10 @@ export class GelCreature {
   private playerLocal = new Vector3(0, 1.6, 2);
   private time = 0;
 
+  /** Fighting-style silhouette targets (sim eases toward these). */
+  private styleO = new Float32Array(ANCHOR_COUNT * 3);
+  private styleR = new Float32Array(ANCHOR_COUNT).fill(1);
+
   constructor(private fx: GooFx) {
     this.group.name = 'the-goop';
 
@@ -190,6 +195,24 @@ export class GelCreature {
     this.formTarget = f;
     if (f === 1) sfx.gooRise();
     else sfx.gooSink();
+  }
+
+  /**
+   * Adopt a FIGHTING STYLE's silhouette (HARD mode) — or null for the
+   * neutral stance. The body oozes into the new shape over ~1.5 s; nothing
+   * is announced, the re-poured stance IS the tell.
+   */
+  setFightStyle(pose: ReadonlyArray<StylePoseDelta> | null): void {
+    this.styleO.fill(0);
+    this.styleR.fill(1);
+    if (pose) {
+      for (const [i, dx, dy, dz, rs] of pose) {
+        this.styleO[i * 3] = dx;
+        this.styleO[i * 3 + 1] = dy;
+        this.styleO[i * 3 + 2] = dz;
+        this.styleR[i] = rs;
+      }
+    }
   }
 
   /** Knock it out (or stand it back up for the rematch). */
@@ -368,6 +391,17 @@ export class GelCreature {
     this.group.updateMatrixWorld();
     this.playerLocal.copy(playerHeadWorld);
     this.group.worldToLocal(this.playerLocal);
+
+    // --- fighting-style silhouette: ooze toward the active stance ---
+    // Slow ease (~1.5 s) so a round-start style change reads as the gel
+    // visibly re-pouring itself into a new fighter — that IS the tell.
+    const sk = Math.min(1, dt * 1.6);
+    for (let i = 0; i < this.styleO.length; i++) {
+      this.sim.styleOffsets[i] += (this.styleO[i] - this.sim.styleOffsets[i]) * sk;
+    }
+    for (let i = 0; i < this.styleR.length; i++) {
+      this.sim.styleRadius[i] += (this.styleR[i] - this.sim.styleRadius[i]) * sk;
+    }
 
     // --- attack timeline ---
     this.updateAttack(dt);

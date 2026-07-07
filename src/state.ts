@@ -65,12 +65,18 @@ export interface Difficulty {
   /** Scales its punch damage. */
   damageScale: number;
   comboMax: number;
+  /** HARD only: it fights with a secret STYLE that rotates every round —
+   *  see creature/styles.ts. The shape of its stance is the only tell. */
+  styled?: boolean;
 }
 
 export const DIFFICULTIES: Difficulty[] = [
   { name: 'EASY', roamScale: 1.45, tempoScale: 1.35, damageScale: 0.6, comboMax: 2 },
-  { name: 'MEDIUM', roamScale: 1.0, tempoScale: 1.0, damageScale: 1.0, comboMax: 3 },
-  { name: 'HARD', roamScale: 0.65, tempoScale: 0.75, damageScale: 1.5, comboMax: 4 },
+  // MEDIUM is the old hard setting — already a serious scrap.
+  { name: 'MEDIUM', roamScale: 0.65, tempoScale: 0.75, damageScale: 1.5, comboMax: 4 },
+  // HARD is the stylist: same raw engine slightly hotter, but the real jump
+  // is that it FIGHTS DIFFERENT every round and never tells you how.
+  { name: 'HARD', roamScale: 0.6, tempoScale: 0.72, damageScale: 1.6, comboMax: 4, styled: true },
 ];
 
 export const ROUND_CHOICES = [60, 120, 180];
