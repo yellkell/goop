@@ -270,7 +270,9 @@ export class GelCreature {
     const shoulder = hand === 'left' ? BOXER_POSE[A.SHOULDER_L] : BOXER_POSE[A.SHOULDER_R];
     _v.set(target.x - shoulder[0], target.y - shoulder[1], target.z - shoulder[2]);
     const reach = _v.length();
-    const maxReach = name === 'roundhouse' || name === 'spinkick' ? 1.45 : 1.25;
+    // Kicks stretch furthest; the clap gets long arms too — both gel limbs
+    // swing round from wide, so it closes distance a normal punch can't.
+    const maxReach = name === 'roundhouse' || name === 'spinkick' || name === 'clap' ? 1.45 : 1.25;
     if (reach > maxReach) {
       _v.multiplyScalar(maxReach / reach);
       target.set(shoulder[0] + _v.x, shoulder[1] + _v.y, shoulder[2] + _v.z);
@@ -470,7 +472,7 @@ export class GelCreature {
     // is. Handled entirely here (own telegraph/strike/recover), then return.
     if (a.name === 'clap') {
       const hd2 = Math.max(Math.hypot(a.target.x, a.target.z), 1e-4);
-      const reach = Math.min(hd2, 0.95);
+      const reach = Math.min(hd2, 1.35); // long arms — the clap closes real distance
       const mX = (a.target.x / hd2) * reach; // meet point: centred in front,
       const mY = a.target.y; //                at your head height,
       const mZ = (a.target.z / hd2) * reach; //  where the clap lands.

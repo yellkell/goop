@@ -75,6 +75,10 @@ export const PUNCH = {
   damage: 3.2,
   /** Extra damage when a lump is knocked out. */
   lumpBonus: 2.5,
+  /** Damage multiplier for connecting on the HEAD (within headRadius of the
+   *  head blob) — go upstairs for a little extra. */
+  headBonus: 1.25,
+  headRadius: 0.3,
 };
 
 /** The bout. */

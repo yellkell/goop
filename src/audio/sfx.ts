@@ -179,15 +179,18 @@ function blub(freq: number, gain: number, dur: number, delay = 0): void {
  *  that squelches down in pitch, and a sub you feel. No bubble confetti. */
 export function squelch(intensity = 0.6): void {
   const i = Math.min(1, Math.max(0, intensity));
-  noiseHit(0.03 + 0.02 * i, 0.3 + 0.24 * i, 6200, 1500, 0.7); // crisp wet slap crack
-  noiseHit(0.12 + 0.08 * i, 0.26 + 0.3 * i, 1150 + 250 * Math.random(), 150, 2.4); // squelchy body
-  blub(150 + 55 * Math.random(), 0.12 + 0.14 * i, 0.1 + 0.06 * i, 0.006); // the wet LIQUIFY glug
-  tone({ freq: 82, to: 40, type: 'sine', dur: 0.12 + 0.06 * i, gain: 0.16 + 0.2 * i }); // felt sub
-  // A short spray of gloopy bubbles for the liquify tail — a couple, not a
-  // whole cluttered fistful.
-  const pops = 1 + Math.round(i * 2);
+  // Softer slap — duller and quieter than before so a connect isn't jarring;
+  // the WATER carries the impact instead of the crack.
+  noiseHit(0.035 + 0.02 * i, 0.16 + 0.12 * i, 3400, 1000, 0.7);
+  noiseHit(0.13 + 0.08 * i, 0.24 + 0.26 * i, 1000 + 220 * Math.random(), 140, 2.4); // squelchy body
+  // The WATERY splash: a high-Q glug sweeping down (that hollow water-jug
+  // note) plus a soft spray of droplets behind it.
+  noiseHit(0.2 + 0.08 * i, 0.16 + 0.12 * i, 750 + 150 * Math.random(), 110, 5.5, 0.012);
+  blub(140 + 50 * Math.random(), 0.12 + 0.13 * i, 0.11 + 0.06 * i, 0.008); // liquify glug
+  tone({ freq: 80, to: 40, type: 'sine', dur: 0.12 + 0.06 * i, gain: 0.14 + 0.16 * i }); // felt sub
+  const pops = 2 + Math.round(i * 2);
   for (let p = 0; p < pops; p++) {
-    bubble(320 + Math.random() * 460, 0.03 + 0.03 * i, 0.02 + Math.random() * 0.1);
+    bubble(380 + Math.random() * 520, 0.025 + 0.025 * i, 0.03 + Math.random() * 0.14);
   }
 }
 
@@ -266,10 +269,11 @@ export function gooWhoosh(): void {
  *  heavy hit: deep gut sub, a big resonant wet body, a slap crack on the
  *  front — no bubble spray cluttering the impact. */
 export function gooSlam(): void {
-  tone({ freq: 85, to: 22, type: 'sine', dur: 0.5, gain: 0.5 }); // deep gut sub, felt
-  noiseHit(0.2, 0.42, 2200, 110, 1.5); // the big wet body caving in
-  noiseHit(0.05, 0.36, 7200, 1700, 0.6); // slap crack on the very front
-  tone({ freq: 140, to: 44, type: 'sine', dur: 0.22, gain: 0.24, delay: 0.005 }); // low thud
+  tone({ freq: 85, to: 22, type: 'sine', dur: 0.5, gain: 0.46 }); // deep gut sub, felt
+  noiseHit(0.22, 0.4, 1900, 100, 1.5); // the big wet body caving in
+  noiseHit(0.06, 0.2, 4200, 1300, 0.7); // duller front slap — weight, not sting
+  noiseHit(0.24, 0.16, 640, 100, 5.0, 0.015); // watery glug under the impact
+  tone({ freq: 140, to: 44, type: 'sine', dur: 0.22, gain: 0.22, delay: 0.005 }); // low thud
 }
 
 /** Its punch whiffing past your ear. */
@@ -280,8 +284,8 @@ export function gooWhiff(): void {
 /** You blocking its strike on your gloves — a firm, bright leather SLAP,
  *  clearly distinct from the deep wet slam of taking one clean. */
 export function gooBlock(): void {
-  noiseHit(0.05, 0.42, 5200, 950, 0.9); // sharp bright leather slap
-  noiseHit(0.09, 0.26, 1700, 520, 3.0); // tight leathery mid body
+  noiseHit(0.05, 0.3, 3600, 800, 0.9); // firm leather slap, less piercing
+  noiseHit(0.09, 0.24, 1500, 480, 3.0); // tight leathery mid body
   tone({ freq: 150, to: 82, type: 'sine', dur: 0.1, gain: 0.2 }); // small felt thud
 }
 

@@ -173,7 +173,7 @@ export class WallBoard {
     const barY = 210;
     // Goop on the left (drains toward centre), you on the right.
     this.bar(70, barY, barW, barH, match.creatureHp / COMBAT.creatureHealth, 'rgba(74, 222, 96, 0.95)', 'THE GOOP', 'left');
-    this.bar(W - 70 - barW, barY, barW, barH, match.playerHp / COMBAT.playerHealth, 'rgba(255, 176, 58, 0.95)', 'YOU', 'right');
+    this.bar(W - 70 - barW, barY, barW, barH, match.playerHp / COMBAT.playerHealth, 'rgba(255, 62, 48, 0.95)', 'YOU', 'right');
 
     // Round pips under each bar (goop left, you right).
     if (inMatch) {
@@ -189,7 +189,7 @@ export class WallBoard {
       const pipY = barY + barH + 30;
       for (let i = 0; i < MAX_ROUNDS - 1; i++) {
         pip(84 + i * 40, pipY, i < match.creatureRounds, 'rgba(74, 222, 96, 0.95)');
-        pip(W - 84 - i * 40, pipY, i < match.playerRounds, 'rgba(255, 176, 58, 0.95)');
+        pip(W - 84 - i * 40, pipY, i < match.playerRounds, 'rgba(255, 62, 48, 0.95)');
       }
     }
 
@@ -215,7 +215,7 @@ export class WallBoard {
     } else if (match.phase === 'roundEnd') {
       g.font = '900 68px system-ui, sans-serif';
       g.fillStyle =
-        match.lastRound === 'player' ? '#ffb03a' : match.lastRound === 'creature' ? '#6dff7e' : '#f2fff0';
+        match.lastRound === 'player' ? '#ff5546' : match.lastRound === 'creature' ? '#6dff7e' : '#f2fff0';
       g.fillText(
         match.lastRound === 'player'
           ? `YOU TAKE ROUND ${match.round}`

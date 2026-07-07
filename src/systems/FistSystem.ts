@@ -28,6 +28,7 @@ type Hand = (typeof HANDS)[number];
 
 const _pos = new Vector3();
 const _dir = new Vector3();
+const _head = new Vector3();
 const _gripQ = new Quaternion();
 const _rayQ = new Quaternion();
 
@@ -108,6 +109,8 @@ export class FistSystem extends createSystem({}) {
 
         if (match.phase === 'fighting') {
           let dmg = PUNCH.damage * (0.6 + res.strength) + (res.lump ? PUNCH.lumpBonus : 0);
+          // Going upstairs pays: connecting on the head lands a bit harder.
+          if (_pos.distanceTo(creature.headWorld(_head)) < PUNCH.headRadius) dmg *= PUNCH.headBonus;
           // It's down and it's a puddle — finish it.
           if (creature.vulnerable) dmg *= EXHAUST.vulnerability;
           match.creatureHp = Math.max(0, match.creatureHp - dmg);
