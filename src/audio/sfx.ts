@@ -108,6 +108,59 @@ function whooshNoise(dur: number, gain: number, fromHz: number, toHz: number, de
   src.start(t0);
 }
 
+/** Soft-saturation curve (tanh) — rounds transients into a crunchy, organic
+ *  edge instead of the clean click of a raw oscillator. Built once. */
+const SHAPE = (() => {
+  const n = 512;
+  const curve = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const x = (i / (n - 1)) * 2 - 1;
+    curve[i] = Math.tanh(x * 2.2);
+  }
+  return curve;
+})();
+
+/**
+ * The wet-impact primitive: a burst of noise driven through a RESONANT
+ * low-pass whose cutoff sweeps downward, then lightly saturated. That sweep
+ * is what makes it read as a wet "thwuck" of gel rather than a synth beep —
+ * one cohesive body instead of a pile of little tones. `q` controls how
+ * vocal/squelchy it is; higher = more of a resonant "bloop".
+ */
+function noiseHit(
+  dur: number,
+  gain: number,
+  cutFrom: number,
+  cutTo: number,
+  q = 0.7,
+  delay = 0,
+): void {
+  const c = ready();
+  if (!c) return;
+  const t0 = c.currentTime + delay;
+  const frames = Math.floor(c.sampleRate * dur);
+  const buf = c.createBuffer(1, frames, c.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < frames; i++) {
+    const p = i / frames;
+    data[i] = (Math.random() * 2 - 1) * (1 - p) ** 1.5; // fast, natural decay
+  }
+  const src = c.createBufferSource();
+  src.buffer = buf;
+  const lp = c.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.Q.value = q;
+  lp.frequency.setValueAtTime(cutFrom, t0);
+  lp.frequency.exponentialRampToValueAtTime(Math.max(60, cutTo), t0 + dur * 0.75);
+  const sh = c.createWaveShaper();
+  sh.curve = SHAPE;
+  sh.oversample = '2x';
+  const g = c.createGain();
+  g.gain.value = gain;
+  src.connect(lp).connect(sh).connect(g).connect(c._master!);
+  src.start(t0);
+}
+
 /** One rising bubble 'blip' — the atom of goo. */
 function bubble(freq: number, gain = 0.08, delay = 0, dur = 0.07): void {
   tone({ freq, to: freq * 1.45, type: 'sine', dur, gain, delay });
@@ -121,18 +174,15 @@ function blub(freq: number, gain: number, dur: number, delay = 0): void {
 
 // --- the goo itself --------------------------------------------------------
 
-/** Your fist landing in the gel. `intensity` 0..1 scales the meat of it. A
- *  crisp SLAP transient sits on the very front so a clean connect cracks. */
+/** Your fist landing in the gel. `intensity` 0..1 scales the meat of it. One
+ *  cohesive wet THWUCK — a bright slap crack on the front, a resonant gel body
+ *  that squelches down in pitch, and a sub you feel. No bubble confetti. */
 export function squelch(intensity = 0.6): void {
   const i = Math.min(1, Math.max(0, intensity));
-  whooshNoise(0.02, 0.24 + 0.3 * i, 3200, 1100); // the slap crack (bright, instant)
-  whooshNoise(0.1 + 0.09 * i, 0.16 + 0.22 * i, 620, 130);
-  blub(150 + 60 * Math.random(), 0.14 + 0.18 * i, 0.11 + 0.07 * i);
-  const pops = 2 + Math.floor(Math.random() * 2) + Math.round(i * 2);
-  for (let p = 0; p < pops; p++) {
-    bubble(280 + Math.random() * 620, 0.03 + 0.05 * i, 0.02 + Math.random() * 0.13);
-  }
-  if (i > 0.7) tone({ freq: 70, to: 34, type: 'sine', dur: 0.18, gain: 0.22 }); // sub thump
+  noiseHit(0.03 + 0.02 * i, 0.3 + 0.24 * i, 6200, 1500, 0.7); // crisp wet slap crack
+  noiseHit(0.12 + 0.08 * i, 0.26 + 0.3 * i, 1150 + 250 * Math.random(), 150, 2.4); // squelchy body
+  tone({ freq: 82, to: 40, type: 'sine', dur: 0.12 + 0.06 * i, gain: 0.16 + 0.2 * i }); // felt sub
+  if (i > 0.65) bubble(300 + Math.random() * 240, 0.035, 0.03, 0.05); // a single wet fleck
 }
 
 /** A lump tearing clean OFF the body — squelch plus a stretchy rip. */
@@ -206,13 +256,14 @@ export function gooWhoosh(): void {
   tone({ freq: 150, to: 55, type: 'triangle', dur: 0.16, gain: 0.14 });
 }
 
-/** Its punch landing on YOU — a wet sledgehammer you feel in your teeth. */
+/** Its punch landing on YOU — a wet sledgehammer you feel in your teeth. One
+ *  heavy hit: deep gut sub, a big resonant wet body, a slap crack on the
+ *  front — no bubble spray cluttering the impact. */
 export function gooSlam(): void {
-  tone({ freq: 90, to: 24, type: 'sine', dur: 0.5, gain: 0.5 }); // deep gut sub
-  tone({ freq: 150, to: 40, type: 'triangle', dur: 0.3, gain: 0.3 });
-  whooshNoise(0.18, 0.34, 500, 70);
-  squelch(1);
-  blub(110, 0.2, 0.2, 0.01); // a dull body thud under the splat
+  tone({ freq: 85, to: 22, type: 'sine', dur: 0.5, gain: 0.5 }); // deep gut sub, felt
+  noiseHit(0.2, 0.42, 2200, 110, 1.5); // the big wet body caving in
+  noiseHit(0.05, 0.36, 7200, 1700, 0.6); // slap crack on the very front
+  tone({ freq: 140, to: 44, type: 'sine', dur: 0.22, gain: 0.24, delay: 0.005 }); // low thud
 }
 
 /** Its punch whiffing past your ear. */
@@ -223,10 +274,9 @@ export function gooWhiff(): void {
 /** You blocking its strike on your gloves — a firm, bright leather SLAP,
  *  clearly distinct from the deep wet slam of taking one clean. */
 export function gooBlock(): void {
-  whooshNoise(0.07, 0.34, 900, 260); // sharp slap attack
-  tone({ freq: 300, to: 150, type: 'triangle', dur: 0.09, gain: 0.28 });
-  tone({ freq: 170, to: 90, type: 'sine', dur: 0.12, gain: 0.24 }); // leather body
-  bubble(520, 0.08, 0.02);
+  noiseHit(0.05, 0.42, 5200, 950, 0.9); // sharp bright leather slap
+  noiseHit(0.09, 0.26, 1700, 520, 3.0); // tight leathery mid body
+  tone({ freq: 150, to: 82, type: 'sine', dur: 0.1, gain: 0.2 }); // small felt thud
 }
 
 /** The spinning backfist — a long sweeping rotor of air and slime. */
@@ -254,10 +304,10 @@ export function koSplat(): void {
   }
 }
 
-/** You taking a hit — wet thud with a rattle of bubbles. */
+/** You taking a hit — the wet impact plus a deep body thud. */
 export function hitTaken(): void {
   squelch(1);
-  tone({ freq: 105, to: 36, type: 'sawtooth', dur: 0.28, gain: 0.26 });
+  tone({ freq: 92, to: 34, type: 'sine', dur: 0.26, gain: 0.26 }); // felt body, not a buzz
 }
 
 /** UI: a soft wet click. */
