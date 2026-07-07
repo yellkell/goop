@@ -121,20 +121,24 @@ export class WallBoard {
     g.lineWidth = 3;
     g.stroke();
 
-    // Fill, drawn from the anchored (outer) edge toward the centre.
+    // Fill, drawn from the anchored (outer) edge toward the centre. Rather
+    // than give the fill its own rounded corners (which stop matching the
+    // trough once the bar is short), CLIP to the trough's inner pill and
+    // fill a plain rect — the fill's ends then follow the trough's curve
+    // exactly at every health level.
     const fw = Math.max(0, Math.min(1, frac)) * (w - 12);
     if (fw > 2) {
       const fx = anchor === 'left' ? x + 6 : x + w - 6 - fw;
       const grad = g.createLinearGradient(x, y, x, y + h);
       grad.addColorStop(0, color);
       grad.addColorStop(1, 'rgba(0,0,0,0.35)');
-      g.fillStyle = grad;
-      // Clamp the corner radius to half the fill width so a nearly-empty bar
-      // stays a rounded sliver instead of snapping to square corners.
-      const rad = Math.min((h - 12) / 2, fw / 2);
+      g.save();
       g.beginPath();
-      g.roundRect(fx, y + 6, fw, h - 12, rad);
-      g.fill();
+      g.roundRect(x + 6, y + 6, w - 12, h - 12, (h - 12) / 2);
+      g.clip();
+      g.fillStyle = grad;
+      g.fillRect(fx, y + 6, fw, h - 12);
+      g.restore();
     }
   }
 
