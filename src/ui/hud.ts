@@ -103,7 +103,8 @@ export class WallBoard {
       const bx = anchor === 'left' ? x + 2 : x + w - 2 - bw;
       g.drawImage(art, bx, y - 10 - bh, bw, bh);
     } else {
-      g.fillStyle = 'rgba(238, 250, 238, 0.98)';
+      // The name wears its fighter's colour (YOU in red, matching the bar).
+      g.fillStyle = color;
       g.font = '800 40px system-ui, sans-serif';
       g.textBaseline = 'alphabetic';
       g.textAlign = anchor;
@@ -158,13 +159,6 @@ export class WallBoard {
     }
 
     const inMatch = match.phase !== 'lobby';
-    if (inMatch) {
-      g.font = '800 34px system-ui, sans-serif';
-      g.textBaseline = 'middle';
-      g.fillStyle = 'rgba(238, 250, 238, 0.9)';
-      const clock = match.phase === 'fighting' ? ` · ${Math.max(0, Math.ceil(match.timeLeft))}` : '';
-      g.fillText(`ROUND ${Math.min(match.round, MAX_ROUNDS)} OF ${MAX_ROUNDS}${clock}`, cx, 108);
-    }
     g.shadowBlur = 0;
 
     // --- SEPARATED health bars, side by side, names above ---
@@ -174,6 +168,19 @@ export class WallBoard {
     // Goop on the left (drains toward centre), you on the right.
     this.bar(70, barY, barW, barH, match.creatureHp / COMBAT.creatureHealth, 'rgba(74, 222, 96, 0.95)', 'THE GOOP', 'left');
     this.bar(W - 70 - barW, barY, barW, barH, match.playerHp / COMBAT.playerHealth, 'rgba(255, 62, 48, 0.95)', 'YOU', 'right');
+
+    // The round TIMER, big and bare, in the gap between the two bars — no
+    // "ROUND X OF Y" strip (the pips below already tell the score).
+    if (inMatch) {
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.shadowColor = 'rgba(0, 0, 0, 0.75)';
+      g.shadowBlur = 14;
+      g.font = '900 72px system-ui, sans-serif';
+      g.fillStyle = 'rgba(242, 255, 240, 0.95)';
+      g.fillText(String(Math.max(0, Math.ceil(match.timeLeft))), cx, barY + barH / 2);
+      g.shadowBlur = 0;
+    }
 
     // Round pips under each bar (goop left, you right).
     if (inMatch) {
