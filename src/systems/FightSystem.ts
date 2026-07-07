@@ -213,6 +213,9 @@ export class FightSystem extends createSystem({}) {
       }
     }
 
+    // The wall board is match furniture — it only exists once FIGHT is
+    // pressed; the lobby is just you, the goop and the menu.
+    this.board.group.visible = match.phase !== 'lobby';
     this.board.update();
 
     const creature = getCreature();
