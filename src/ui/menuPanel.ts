@@ -127,9 +127,6 @@ export class MenuPanel {
       g.fillText('GOOP', W / 2, 44);
     }
     g.shadowBlur = 0;
-    g.font = '700 34px system-ui, sans-serif';
-    g.fillStyle = 'rgba(238, 250, 238, 0.6)';
-    g.fillText('IT REFORMS. YOU RE-PUNCH.', W / 2, 184);
 
     for (const b of this.buttons) {
       const hot = this.hovered === b.action;

@@ -68,9 +68,9 @@ export interface Difficulty {
 }
 
 export const DIFFICULTIES: Difficulty[] = [
-  { name: 'CHILL', roamScale: 1.45, tempoScale: 1.35, damageScale: 0.6, comboMax: 2 },
-  { name: 'SCRAP', roamScale: 1.0, tempoScale: 1.0, damageScale: 1.0, comboMax: 3 },
-  { name: 'RUMBLE', roamScale: 0.65, tempoScale: 0.75, damageScale: 1.5, comboMax: 4 },
+  { name: 'EASY', roamScale: 1.45, tempoScale: 1.35, damageScale: 0.6, comboMax: 2 },
+  { name: 'MEDIUM', roamScale: 1.0, tempoScale: 1.0, damageScale: 1.0, comboMax: 3 },
+  { name: 'HARD', roamScale: 0.65, tempoScale: 0.75, damageScale: 1.5, comboMax: 4 },
 ];
 
 export const ROUND_CHOICES = [99, 60, 30];

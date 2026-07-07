@@ -47,30 +47,38 @@ const _rayQ = new Quaternion();
  */
 export function buildFist(hand: 'left' | 'right'): Group {
   const g = new Group();
+  // The outer group gets the per-frame ray aim (its quaternion is overwritten
+  // every update), so any baked-in tilt lives on this inner group: a small
+  // downward pitch so the knuckles sit on a natural punching line instead of
+  // pointing slightly high.
+  const inner = new Group();
+  inner.rotation.x = -0.14;
+  g.add(inner);
+
   // Classic RED boxing leather with a pale lace band.
   const leather = new MeshStandardMaterial({ color: 0xc42026, roughness: 0.45, metalness: 0.04 });
   const trim = new MeshStandardMaterial({ color: 0xf2ece0, roughness: 0.5, metalness: 0.02 });
 
-  // ONE clean rounded glove — the padded fist. A little smaller than before,
-  // gently rounded; no stuck-on lobes.
-  const mitt = new Mesh(new SphereGeometry(0.092, 24, 18), leather);
-  mitt.scale.set(1.02, 1.1, 1.14);
-  mitt.position.set(0, 0.006, -0.012);
-  g.add(mitt);
-  // Thumb ON TOP — a small rounded nub sitting on the top-front of the fist,
-  // toward the inner side. Merged enough to read as a thumb, not a hotdog.
-  const thumb = new Mesh(new SphereGeometry(0.04, 16, 12), leather);
-  thumb.scale.set(0.95, 0.85, 1.05);
-  thumb.position.set(hand === 'left' ? 0.03 : -0.03, 0.058, -0.05);
-  g.add(thumb);
-  // Wrist cuff (clearly narrower than the fist) with the pale lace band.
-  const cuff = new Mesh(new CylinderGeometry(0.055, 0.066, 0.08, 18), leather);
+  // ONE clean rounded glove — the padded fist.
+  const mitt = new Mesh(new SphereGeometry(0.095, 24, 18), leather);
+  mitt.scale.set(1.04, 1.12, 1.16);
+  mitt.position.set(0, 0.004, -0.012);
+  inner.add(mitt);
+  // Thumb ON TOP — a chunky rounded thumb wrapped over the top-inner front of
+  // the fist, poking forward so it clearly reads as a thumb.
+  const thumb = new Mesh(new SphereGeometry(0.052, 16, 12), leather);
+  thumb.scale.set(1.0, 0.92, 1.3);
+  thumb.position.set(hand === 'left' ? 0.046 : -0.046, 0.052, -0.052);
+  inner.add(thumb);
+  // Wrist cuff — sits UP around the wrist (not beneath or inside it) and wraps
+  // wider than it is deep, so it reads as a cuff rather than a peg into the arm.
+  const cuff = new Mesh(new CylinderGeometry(0.062, 0.073, 0.072, 20), leather);
   cuff.rotation.x = Math.PI / 2;
-  cuff.position.set(0, -0.012, 0.1);
-  g.add(cuff);
-  const band = new Mesh(new TorusGeometry(0.062, 0.011, 10, 22), trim);
-  band.position.set(0, -0.012, 0.132);
-  g.add(band);
+  cuff.position.set(0, 0.008, 0.082);
+  inner.add(cuff);
+  const band = new Mesh(new TorusGeometry(0.07, 0.012, 10, 24), trim);
+  band.position.set(0, 0.008, 0.11);
+  inner.add(band);
   return g;
 }
 
@@ -97,7 +105,7 @@ export class FistSystem extends createSystem({}) {
       if (!fist) {
         fist = buildFist(hand);
         fist.name = `goop-fist-${hand}`;
-        fist.position.set(0, -0.015, 0.02); // sit ON the fist, not the palm
+        fist.position.set(0, -0.008, 0.02); // sit ON the fist, not the palm
         grip.add(fist);
         this.fists[hand] = fist;
       }
