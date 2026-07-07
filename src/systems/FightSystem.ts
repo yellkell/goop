@@ -173,9 +173,13 @@ export class FightSystem extends createSystem({}) {
         } else if (match.playerHp <= 0) {
           this.endRound('creature');
         } else if (match.timeLeft <= 0) {
-          // To the cards: whoever kept more of themselves takes the round.
-          if (Math.abs(match.playerHp - match.creatureHp) < 0.5) this.endRound('draw');
-          else this.endRound(match.playerHp > match.creatureHp ? 'player' : 'creature');
+          // To the cards: whoever has more of their HEALTH BAR left takes the
+          // round — compared as a fraction of each fighter's own max, so the
+          // goop's huge HP pool doesn't hand it every decision.
+          const pFrac = match.playerHp / COMBAT.playerHealth;
+          const cFrac = match.creatureHp / COMBAT.creatureHealth;
+          if (Math.abs(pFrac - cFrac) < 0.005) this.endRound('draw');
+          else this.endRound(pFrac > cFrac ? 'player' : 'creature');
         } else {
           // Still going — both fighters trickle a little health back. (After
           // the KO check, so a killing blow is never undone by regen.)

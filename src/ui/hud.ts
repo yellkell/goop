@@ -128,8 +128,11 @@ export class WallBoard {
       grad.addColorStop(0, color);
       grad.addColorStop(1, 'rgba(0,0,0,0.35)');
       g.fillStyle = grad;
+      // Clamp the corner radius to half the fill width so a nearly-empty bar
+      // stays a rounded sliver instead of snapping to square corners.
+      const rad = Math.min((h - 12) / 2, fw / 2);
       g.beginPath();
-      g.roundRect(fx, y + 6, fw, h - 12, (h - 12) / 2);
+      g.roundRect(fx, y + 6, fw, h - 12, rad);
       g.fill();
     }
   }

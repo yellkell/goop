@@ -181,8 +181,14 @@ export function squelch(intensity = 0.6): void {
   const i = Math.min(1, Math.max(0, intensity));
   noiseHit(0.03 + 0.02 * i, 0.3 + 0.24 * i, 6200, 1500, 0.7); // crisp wet slap crack
   noiseHit(0.12 + 0.08 * i, 0.26 + 0.3 * i, 1150 + 250 * Math.random(), 150, 2.4); // squelchy body
+  blub(150 + 55 * Math.random(), 0.12 + 0.14 * i, 0.1 + 0.06 * i, 0.006); // the wet LIQUIFY glug
   tone({ freq: 82, to: 40, type: 'sine', dur: 0.12 + 0.06 * i, gain: 0.16 + 0.2 * i }); // felt sub
-  if (i > 0.65) bubble(300 + Math.random() * 240, 0.035, 0.03, 0.05); // a single wet fleck
+  // A short spray of gloopy bubbles for the liquify tail — a couple, not a
+  // whole cluttered fistful.
+  const pops = 1 + Math.round(i * 2);
+  for (let p = 0; p < pops; p++) {
+    bubble(320 + Math.random() * 460, 0.03 + 0.03 * i, 0.02 + Math.random() * 0.1);
+  }
 }
 
 /** A lump tearing clean OFF the body — squelch plus a stretchy rip. */

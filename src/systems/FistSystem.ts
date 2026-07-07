@@ -64,11 +64,12 @@ export function buildFist(hand: 'left' | 'right'): Group {
   mitt.scale.set(1.04, 1.12, 1.16);
   mitt.position.set(0, 0.004, -0.012);
   inner.add(mitt);
-  // Thumb ON TOP — a chunky rounded thumb wrapped over the top-inner front of
-  // the fist, poking forward so it clearly reads as a thumb.
+  // Thumb ON TOP — a chunky thumb ridge along the top-inner side, set BACK
+  // toward the wrist and stretched front-to-back so the whole thumb (not just
+  // its tip) sits inside it.
   const thumb = new Mesh(new SphereGeometry(0.052, 16, 12), leather);
-  thumb.scale.set(1.0, 0.92, 1.3);
-  thumb.position.set(hand === 'left' ? 0.046 : -0.046, 0.052, -0.052);
+  thumb.scale.set(0.95, 0.9, 1.7);
+  thumb.position.set(hand === 'left' ? 0.046 : -0.046, 0.05, 0.006);
   inner.add(thumb);
   // Wrist cuff — sits UP around the wrist (not beneath or inside it) and wraps
   // wider than it is deep, so it reads as a cuff rather than a peg into the arm.
