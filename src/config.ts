@@ -94,7 +94,7 @@ export const COMBAT = {
    *  turtle your way through. */
   regenPerSec: 0.35,
   /** Round length before it goes to the cards (TIME verdict). */
-  roundSeconds: 99,
+  roundSeconds: 60,
   /** 3-2-1-FIGHT beat length. */
   countdownBeat: 1.0,
 };

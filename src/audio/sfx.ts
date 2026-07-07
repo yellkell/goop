@@ -179,18 +179,31 @@ function blub(freq: number, gain: number, dur: number, delay = 0): void {
  *  that squelches down in pitch, and a sub you feel. No bubble confetti. */
 export function squelch(intensity = 0.6): void {
   const i = Math.min(1, Math.max(0, intensity));
-  // Softer slap — duller and quieter than before so a connect isn't jarring;
-  // the WATER carries the impact instead of the crack.
-  noiseHit(0.035 + 0.02 * i, 0.16 + 0.12 * i, 3400, 1000, 0.7);
-  noiseHit(0.13 + 0.08 * i, 0.24 + 0.26 * i, 1000 + 220 * Math.random(), 140, 2.4); // squelchy body
-  // The WATERY splash: a high-Q glug sweeping down (that hollow water-jug
-  // note) plus a soft spray of droplets behind it.
-  noiseHit(0.2 + 0.08 * i, 0.16 + 0.12 * i, 750 + 150 * Math.random(), 110, 5.5, 0.012);
-  blub(140 + 50 * Math.random(), 0.12 + 0.13 * i, 0.11 + 0.06 * i, 0.008); // liquify glug
+  // Soft dull slap on the front — the fist arriving, not the star of the show.
+  noiseHit(0.035 + 0.02 * i, 0.14 + 0.1 * i, 3000, 900, 0.7);
+  // The GROSS part: three overlapping high-resonance squish sweeps, each with
+  // a random cutoff and a slightly different start — mud-and-gore foley. The
+  // stagger and detune is what makes it read as actual matter squeezing
+  // through fingers instead of one clean synth swoop.
+  for (let k = 0; k < 3; k++) {
+    noiseHit(
+      0.09 + Math.random() * 0.06,
+      0.13 + 0.11 * i,
+      800 + Math.random() * 900,
+      80 + Math.random() * 130,
+      6 + Math.random() * 3,
+      k * 0.02 + Math.random() * 0.012,
+    );
+  }
+  // Fat wet body under the squish.
+  noiseHit(0.14 + 0.08 * i, 0.2 + 0.2 * i, 950 + 200 * Math.random(), 130, 2.4);
+  // The sucking tail — goo pulling back off your glove (upward high-Q sweep).
+  noiseHit(0.14 + 0.06 * i, 0.09 + 0.08 * i, 240, 1100 + Math.random() * 500, 4.5, 0.05 + 0.02 * i);
+  blub(135 + 50 * Math.random(), 0.12 + 0.13 * i, 0.11 + 0.06 * i, 0.008); // liquify glug
   tone({ freq: 80, to: 40, type: 'sine', dur: 0.12 + 0.06 * i, gain: 0.14 + 0.16 * i }); // felt sub
   const pops = 2 + Math.round(i * 2);
   for (let p = 0; p < pops; p++) {
-    bubble(380 + Math.random() * 520, 0.025 + 0.025 * i, 0.03 + Math.random() * 0.14);
+    bubble(360 + Math.random() * 520, 0.022 + 0.024 * i, 0.04 + Math.random() * 0.15);
   }
 }
 

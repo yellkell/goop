@@ -73,7 +73,7 @@ export const DIFFICULTIES: Difficulty[] = [
   { name: 'HARD', roamScale: 0.65, tempoScale: 0.75, damageScale: 1.5, comboMax: 4 },
 ];
 
-export const ROUND_CHOICES = [99, 60, 30];
+export const ROUND_CHOICES = [60, 120, 180];
 
 /** Pre-bout options, set from the lobby menu panel. */
 export const settings = {

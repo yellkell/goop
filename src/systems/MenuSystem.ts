@@ -7,7 +7,7 @@
  * with a highlight and blips; trigger clicks run the action:
  *
  *   FIGHT       arm the bout (FightSystem consumes match.startRequested)
- *   ROUND       cycle 99s / 60s / 30s
+ *   ROUND       cycle 60s / 120s / 180s
  *   MUSIC       toggle the lobby/battle music (persisted)
  *   DIFFICULTY  CHILL / SCRAP / RUMBLE — creature pacing + punch damage
  */
