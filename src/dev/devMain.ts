@@ -248,10 +248,10 @@ function shotDirector(dt: number): boolean {
         scene.add(gr);
       }
       creature.group.visible = false;
-      // Front-top 3/4 view (knuckles point -Z) so the thumb-on-top shows.
-      camera.position.set(0.35, 1.72, -0.75);
-      controls.target.set(0, 1.28, -0.05);
-      return shotClock > 1.5;
+      // Front-top 3/4 view (knuckles point -Z). Wait for the GLB to stream in.
+      camera.position.set(0.5, 1.75, -1.0);
+      controls.target.set(0, 1.3, -0.02);
+      return shotClock > 2.8;
     }
     case 'countdown': {
       // Wall board (big art) + the bare floating glyph between us and it.

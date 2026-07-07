@@ -16,20 +16,12 @@
  */
 
 import { createSystem } from '@iwsdk/core';
-import {
-  CylinderGeometry,
-  Group,
-  Mesh,
-  MeshStandardMaterial,
-  Quaternion,
-  SphereGeometry,
-  TorusGeometry,
-  Vector3,
-} from 'three';
+import { Group, Quaternion, Vector3 } from 'three';
 import { squelch, wobble } from '../audio/sfx.js';
 import { EXHAUST, PUNCH } from '../config.js';
 import { pulseHand } from '../input/haptics.js';
 import { getCreature, match, player } from '../state.js';
+import { buildGlove } from './gloveModel.js';
 
 const HANDS = ['left', 'right'] as const;
 type Hand = (typeof HANDS)[number];
@@ -40,47 +32,11 @@ const _gripQ = new Quaternion();
 const _rayQ = new Quaternion();
 
 /**
- * A proper compact boxing glove, built along its punch axis: knuckles at
- * -Z, cuff wrapping the wrist at +Z. Aimed down the controller's POINTING
- * ray each frame (not the tilted grip pose — that left the old fists
- * skew-whiff against the forearm).
+ * The player's glove — the uploaded GLB model, normalised, made a bit shiny,
+ * and aimed down the controller's POINTING ray each frame (see gloveModel).
  */
 export function buildFist(hand: 'left' | 'right'): Group {
-  const g = new Group();
-  // The outer group gets the per-frame ray aim (its quaternion is overwritten
-  // every update), so any baked-in tilt lives on this inner group: a small
-  // downward pitch so the knuckles sit on a natural punching line instead of
-  // pointing slightly high.
-  const inner = new Group();
-  inner.rotation.x = -0.14;
-  g.add(inner);
-
-  // Classic RED boxing leather with a pale lace band.
-  const leather = new MeshStandardMaterial({ color: 0xc42026, roughness: 0.45, metalness: 0.04 });
-  const trim = new MeshStandardMaterial({ color: 0xf2ece0, roughness: 0.5, metalness: 0.02 });
-
-  // ONE clean rounded glove — the padded fist.
-  const mitt = new Mesh(new SphereGeometry(0.095, 24, 18), leather);
-  mitt.scale.set(1.04, 1.12, 1.16);
-  mitt.position.set(0, 0.004, -0.012);
-  inner.add(mitt);
-  // Thumb ON TOP — a chunky thumb ridge along the top-inner side, set BACK
-  // toward the wrist and stretched front-to-back so the whole thumb (not just
-  // its tip) sits inside it.
-  const thumb = new Mesh(new SphereGeometry(0.052, 16, 12), leather);
-  thumb.scale.set(0.95, 0.9, 1.7);
-  thumb.position.set(hand === 'left' ? 0.046 : -0.046, 0.05, 0.006);
-  inner.add(thumb);
-  // Wrist cuff — sits UP around the wrist (not beneath or inside it) and wraps
-  // wider than it is deep, so it reads as a cuff rather than a peg into the arm.
-  const cuff = new Mesh(new CylinderGeometry(0.062, 0.073, 0.072, 20), leather);
-  cuff.rotation.x = Math.PI / 2;
-  cuff.position.set(0, 0.008, 0.082);
-  inner.add(cuff);
-  const band = new Mesh(new TorusGeometry(0.07, 0.012, 10, 24), trim);
-  band.position.set(0, 0.008, 0.11);
-  inner.add(band);
-  return g;
+  return buildGlove(hand);
 }
 
 export class FistSystem extends createSystem({}) {
